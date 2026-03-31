@@ -165,10 +165,14 @@ export default function ProductFormPage() {
               name="alertEmail"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Alert Email (Optional)</FormLabel>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Low Stock Alert Email</FormLabel>
                   <FormControl>
                     <Input type="email" placeholder="manager@warehouse.com" className="h-14 text-lg border-2 shadow-sm" {...field} />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    When stock drops below the minimum, an email is sent here:<br />
+                    <span className="font-mono">LOW STOCK! [item] - you have [n] left</span>
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

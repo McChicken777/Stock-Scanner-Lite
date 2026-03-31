@@ -24,34 +24,19 @@ export async function sendLowStockAlert(params: {
   }
 
   try {
+    const subject = `LOW STOCK! ${params.productName} - you have ${params.totalStock} left`;
+    const body = `LOW STOCK! ${params.productName} - you have ${params.totalStock} left\n\nMinimum required: ${params.bufferStock}\nCategory: ${params.category}\n\nPlease restock as soon as possible.`;
+
     await transporter.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: params.alertEmail,
-      subject: `Low Stock Alert: ${params.productName}`,
-      text: `
-Low Stock Alert
-
-Product: ${params.productName}
-Category: ${params.category}
-Current Stock: ${params.totalStock}
-Buffer (Minimum Required): ${params.bufferStock}
-
-The total stock of "${params.productName}" has fallen below the minimum buffer level.
-Please restock as soon as possible.
-
-This alert was sent automatically by the Warehouse Stock Management system.
-      `.trim(),
+      subject,
+      text: body,
       html: `
-<h2>Low Stock Alert</h2>
-<table cellpadding="8" cellspacing="0" border="1" style="border-collapse:collapse;">
-  <tr><th>Product</th><td>${params.productName}</td></tr>
-  <tr><th>Category</th><td>${params.category}</td></tr>
-  <tr><th>Current Stock</th><td style="color:red;font-weight:bold;">${params.totalStock}</td></tr>
-  <tr><th>Minimum Buffer</th><td>${params.bufferStock}</td></tr>
-</table>
-<p>The total stock has fallen below the minimum buffer level. Please restock as soon as possible.</p>
-<p><em>Sent automatically by the Warehouse Stock Management system.</em></p>
-      `,
+<p style="font-size:18px;font-weight:bold;color:#c0392b;">LOW STOCK! ${params.productName} - you have ${params.totalStock} left</p>
+<p>Minimum required: <strong>${params.bufferStock}</strong><br/>Category: ${params.category}</p>
+<p>Please restock as soon as possible.</p>
+      `.trim(),
     });
     logger.info({ productName: params.productName, to: params.alertEmail }, "Low stock alert sent");
     return true;
