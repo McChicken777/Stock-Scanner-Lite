@@ -1,7 +1,57 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, ScanLine, Package2, History, MapPin, Activity } from "lucide-react";
+import { LayoutDashboard, ScanLine, Package2, History, MapPin, ShieldCheck, HardHat, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/auth";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+function UserMenu() {
+  const { user, logout } = useAuth();
+  if (!user) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm text-[10px] font-bold uppercase tracking-wider hover:bg-muted transition-colors">
+          {user.role === "admin" ? (
+            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <HardHat className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          {user.username}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel className="font-normal">
+          <p className="font-semibold">{user.username}</p>
+          <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {user.role === "admin" && (
+          <Link href="/admin/users">
+            <DropdownMenuItem className="cursor-pointer">
+              <ShieldCheck className="mr-2 h-4 w-4" /> Manage Users
+            </DropdownMenuItem>
+          </Link>
+        )}
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive cursor-pointer"
+          onClick={logout}
+        >
+          <LogOut className="mr-2 h-4 w-4" /> Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function BottomNav() {
   const [location] = useLocation();
@@ -28,7 +78,6 @@ export function BottomNav() {
         
         {navItems.map((item) => {
           if (item.href === "/scan") {
-            // Placeholder for the scan button space
             return <div key={item.href} className="flex-1 pointer-events-none" />;
           }
 
@@ -61,8 +110,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-background pb-16">
       <main className="w-full max-w-md mx-auto bg-background min-h-[100dvh] border-x border-border/50 relative">
-        {/* Connection status indicator */}
-        <div className="absolute top-2 right-2 z-50 pointer-events-none">
+        {/* Top-right indicators */}
+        <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
+          <UserMenu />
           <div className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm text-[10px] font-bold uppercase tracking-wider",
             isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"

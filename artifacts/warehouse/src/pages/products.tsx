@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ProductLocationsDialog } from "@/components/product-locations-dialog";
+import { useAuth } from "@/contexts/auth";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,8 @@ export default function ProductsPage() {
   const { data: products, isLoading } = useListProducts();
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [search, setSearch] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [showLocationsDialog, setShowLocationsDialog] = useState(false);
@@ -45,11 +48,13 @@ export default function ProductsPage() {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between px-1 pt-2">
         <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-        <Link href="/products/new">
-          <Button size="sm" className="font-bold">
-            <Plus className="h-4 w-4 mr-1" /> New
-          </Button>
-        </Link>
+        {isAdmin && (
+          <Link href="/products/new">
+            <Button size="sm" className="font-bold">
+              <Plus className="h-4 w-4 mr-1" /> New
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="relative">
@@ -121,36 +126,40 @@ export default function ProductsPage() {
                       <MapPin className="h-4 w-4 mr-1" /> Locations
                     </Button>
 
-                    <Link href={`/products/${product.id}/edit`}>
-                      <Button variant="outline" size="icon" className="h-10 w-10">
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                    
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="icon" className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Product?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will permanently delete {product.name} and remove it from all locations. This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
-                          <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
-                          <AlertDialogAction 
-                            onClick={() => handleDelete(product.id)}
-                            className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    {isAdmin && (
+                      <>
+                        <Link href={`/products/${product.id}/edit`}>
+                          <Button variant="outline" size="icon" className="h-10 w-10">
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="icon" className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete {product.name} and remove it from all locations. This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
+                              <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
+                              <AlertDialogAction 
+                                onClick={() => handleDelete(product.id)}
+                                className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

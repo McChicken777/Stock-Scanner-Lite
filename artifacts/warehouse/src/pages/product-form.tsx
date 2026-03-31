@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth";
 
 const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -28,6 +29,8 @@ export default function ProductFormPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   const { data: product, isLoading: isProductLoading } = useGetProduct(productId, {
     query: { enabled: isEdit, queryKey: [`/api/products/${productId}`] }
@@ -91,6 +94,15 @@ export default function ProductFormPage() {
   };
 
   const isPending = createProduct.isPending || updateProduct.isPending;
+
+  if (!isAdmin) {
+    return (
+      <div className="p-6 text-center text-muted-foreground mt-20">
+        <p className="font-semibold">Access restricted</p>
+        <p className="text-sm mt-1">Only admins can manage products.</p>
+      </div>
+    );
+  }
 
   if (isEdit && isProductLoading) {
     return (

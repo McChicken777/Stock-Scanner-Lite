@@ -42,10 +42,14 @@ artifacts-monorepo/
 A mobile-first warehouse stock management system with QR code scanning.
 
 ### Features
+- **Authentication**: Session-based login with bcrypt password hashing; default admin: `admin`/`admin123`
+- **User Roles**: `admin` (full access) and `worker` (stock operations only, no product management)
+- **Role-Based Access**: Backend middleware enforces permissions; frontend hides admin-only UI
+- **User Management**: Admin-only page at `/admin/users` to create/delete users and assign roles
 - **QR Code Scanning**: Browser camera API + jsQR to scan location QR codes
 - **Location Management**: Locations with IDs like A1-01-02
-- **Product Management**: CRUD with category, buffer stock, alert email
-- **Stock Management**: Per-location quantities, add/remove/set with history
+- **Product Management**: CRUD with category, buffer stock, alert email (admin only)
+- **Stock Management**: Per-location quantities, add/remove/set with history (all users)
 - **Low Stock Alerts**: Automatic email via Nodemailer when stock < buffer
 - **History Log**: Full audit trail of all stock changes
 - **Dashboard**: Summary with low stock alerts, recent activity, category stats
@@ -72,11 +76,24 @@ Set these environment variables to enable email alerts:
 - `GET /api/history` — change history (filterable)
 - `GET /api/dashboard/summary` — dashboard overview
 
+### Auth Routes
+- `POST /api/auth/login` — login with username + password
+- `POST /api/auth/logout` — clear session
+- `GET /api/auth/me` — get current user info
+- `GET /api/auth/users` — list users (admin only)
+- `POST /api/auth/users` — create user (admin only)
+- `DELETE /api/auth/users/:id` — delete user (admin only)
+
 ### Database Schema
 - `locations` — id (text PK), description, created_at
 - `products` — id (serial), name, category, buffer_stock, alert_email, created_at
 - `stock` — (location_id, product_id) composite PK, quantity
 - `stock_history` — id (serial), location_id, product_id, previous_quantity, new_quantity, delta, changed_by, changed_at
+- `users` — id (serial), username (unique), password_hash, role (admin|worker), created_at
+
+### Permissions
+- **Admin**: full CRUD on products, locations, stock, users
+- **Worker**: can view and update stock, scan QR codes, view history and dashboard; cannot manage products or users
 
 ## TypeScript & Composite Projects
 

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, productsTable, stockTable, insertProductSchema } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
+import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
@@ -27,7 +28,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   try {
     const parsed = insertProductSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -69,7 +70,7 @@ const updateProductSchema = z.object({
   alertEmail: z.string().email().nullable().optional(),
 });
 
-router.put("/:productId", async (req, res) => {
+router.put("/:productId", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.productId);
     const parsed = updateProductSchema.safeParse(req.body);
@@ -93,7 +94,7 @@ router.put("/:productId", async (req, res) => {
   }
 });
 
-router.delete("/:productId", async (req, res) => {
+router.delete("/:productId", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.productId);
     await db.delete(productsTable).where(eq(productsTable.id, productId));
