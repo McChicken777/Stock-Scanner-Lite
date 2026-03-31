@@ -83,7 +83,12 @@ router.put("/:locationId/:productId", async (req, res) => {
       return;
     }
 
-    if (existingStock) {
+    if (newQuantity === 0) {
+      // Delete stock entry if quantity reaches 0
+      await db
+        .delete(stockTable)
+        .where(and(eq(stockTable.locationId, locationId), eq(stockTable.productId, productId)));
+    } else if (existingStock) {
       await db
         .update(stockTable)
         .set({ quantity: newQuantity })
