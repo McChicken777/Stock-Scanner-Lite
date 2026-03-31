@@ -1,22 +1,30 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Warehouse Stock Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: locations
+    description: Storage location operations
+  - name: products
+    description: Product management
+  - name: stock
+    description: Stock management
+  - name: history
+    description: Change history log
+  - name: alerts
+    description: Low stock alerts
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +32,269 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /locations:
+    get:
+      operationId: listLocations
+      tags: [locations]
+      summary: List all storage locations
+      responses:
+        "200":
+          description: List of locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Location"
+    post:
+      operationId: createLocation
+      tags: [locations]
+      summary: Create a storage location
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLocationRequest"
+      responses:
+        "201":
+          description: Created location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Location"
+
+  /locations/{locationId}:
+    get:
+      operationId: getLocation
+      tags: [locations]
+      summary: Get a location with its stock
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Location with stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationWithStock"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteLocation
+      tags: [locations]
+      summary: Delete a storage location
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductWithStock"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by ID
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductWithStock"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /stock/{locationId}:
+    get:
+      operationId: getStockAtLocation
+      tags: [stock]
+      summary: Get all stock at a location
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Stock at location
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockEntry"
+
+  /stock/{locationId}/{productId}:
+    put:
+      operationId: updateStock
+      tags: [stock]
+      summary: Update stock quantity at a location
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStockRequest"
+      responses:
+        "200":
+          description: Updated stock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockUpdateResult"
+        "400":
+          description: Bad request (e.g. negative stock)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /history:
+    get:
+      operationId: listHistory
+      tags: [history]
+      summary: List stock change history
+      parameters:
+        - name: productId
+          in: query
+          schema:
+            type: integer
+        - name: locationId
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: History entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HistoryEntry"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [alerts]
+      summary: Get dashboard summary with low stock alerts
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +305,276 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Location:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Location ID e.g. A1-01-02
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - createdAt
+
+    CreateLocationRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required:
+        - id
+
+    LocationWithStock:
+      type: object
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        stock:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockEntry"
+      required:
+        - id
+        - createdAt
+        - stock
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+        bufferStock:
+          type: integer
+          description: Minimum required quantity
+        alertEmail:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - category
+        - bufferStock
+        - createdAt
+
+    ProductWithStock:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+        bufferStock:
+          type: integer
+        alertEmail:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        totalStock:
+          type: integer
+          description: Total quantity across all locations
+        isLowStock:
+          type: boolean
+      required:
+        - id
+        - name
+        - category
+        - bufferStock
+        - createdAt
+        - totalStock
+        - isLowStock
+
+    CreateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        bufferStock:
+          type: integer
+        alertEmail:
+          type: string
+          nullable: true
+      required:
+        - name
+        - category
+        - bufferStock
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        bufferStock:
+          type: integer
+        alertEmail:
+          type: string
+          nullable: true
+
+    StockEntry:
+      type: object
+      properties:
+        locationId:
+          type: string
+        productId:
+          type: integer
+        quantity:
+          type: integer
+        productName:
+          type: string
+        productCategory:
+          type: string
+        bufferStock:
+          type: integer
+      required:
+        - locationId
+        - productId
+        - quantity
+        - productName
+        - productCategory
+        - bufferStock
+
+    UpdateStockRequest:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          description: New absolute quantity
+        delta:
+          type: integer
+          description: Relative change (positive to add, negative to remove)
+        changedBy:
+          type: string
+          nullable: true
+      required: []
+
+    StockUpdateResult:
+      type: object
+      properties:
+        locationId:
+          type: string
+        productId:
+          type: integer
+        quantity:
+          type: integer
+        totalStock:
+          type: integer
+        isLowStock:
+          type: boolean
+        alertSent:
+          type: boolean
+      required:
+        - locationId
+        - productId
+        - quantity
+        - totalStock
+        - isLowStock
+        - alertSent
+
+    HistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        locationId:
+          type: string
+        productId:
+          type: integer
+        productName:
+          type: string
+        previousQuantity:
+          type: integer
+        newQuantity:
+          type: integer
+        delta:
+          type: integer
+        changedBy:
+          type: string
+          nullable: true
+        changedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - locationId
+        - productId
+        - productName
+        - previousQuantity
+        - newQuantity
+        - delta
+        - changedAt
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalLocations:
+          type: integer
+        totalProducts:
+          type: integer
+        lowStockProducts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductWithStock"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+        categoryBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryCount"
+      required:
+        - totalLocations
+        - totalProducts
+        - lowStockProducts
+        - recentActivity
+        - categoryBreakdown
+
+    CategoryCount:
+      type: object
+      properties:
+        category:
+          type: string
+        productCount:
+          type: integer
+        totalStock:
+          type: integer
+      required:
+        - category
+        - productCount
+        - totalStock
