@@ -1,0 +1,94 @@
+Improve my existing warehouse stock management app by implementing a simple login system with user roles (admin and worker).
+
+--------------------------------------------------
+1. LOGIN SYSTEM
+--------------------------------------------------
+
+Add a basic authentication system:
+
+- Users have:
+  - username
+  - password (store securely using hashing, e.g. bcrypt)
+
+- Login page:
+  - Username + password input
+  - Simple and mobile-friendly
+
+- Sessions:
+  - Keep users logged in after login (use sessions or cookies)
+  - Add logout button
+
+- Protect routes:
+  - If user is not logged in, redirect to login page
+
+--------------------------------------------------
+2. USER ROLES
+--------------------------------------------------
+
+Add roles to users:
+
+- Roles:
+  - "admin"
+  - "worker"
+
+- Update Users table:
+  - Add "role" field
+
+--------------------------------------------------
+3. PERMISSIONS
+--------------------------------------------------
+
+WORKER:
+- Can:
+  - Scan QR codes
+  - View stock
+  - Add/remove/edit stock
+
+- Cannot:
+  - Add/edit/delete products
+  - Change buffer levels
+  - Change assigned emails
+
+ADMIN:
+- Can:
+  - Everything a worker can do
+  - Add/edit/delete products
+  - Set buffer levels
+  - Set assigned emails
+  - Access admin-only features
+
+--------------------------------------------------
+4. BACKEND SECURITY (IMPORTANT)
+--------------------------------------------------
+
+- Protect API routes based on role:
+  - Example:
+    - /api/products/create → admin only
+    - /api/products/update → admin only
+
+- Do NOT rely only on frontend hiding buttons
+- Check user role on backend before allowing actions
+
+--------------------------------------------------
+5. UI CHANGES
+--------------------------------------------------
+
+- Show logged-in user name somewhere on screen
+- Show role (admin or worker)
+- Hide admin-only buttons if user is not admin
+
+--------------------------------------------------
+6. KEEP IT SIMPLE
+--------------------------------------------------
+
+- Do not use OAuth or external login systems
+- Do not overcomplicate permissions
+- Use existing app structure and extend it
+
+--------------------------------------------------
+7. BONUS (if easy)
+--------------------------------------------------
+
+- Add a simple user management page (admin only):
+  - Create user
+  - Assign role
