@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, AlertTriangle, Edit2, Trash2 } from "lucide-react";
+import { Plus, Search, AlertTriangle, Edit2, Trash2, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { ProductLocationsDialog } from "@/components/product-locations-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +25,8 @@ export default function ProductsPage() {
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
+  const [showLocationsDialog, setShowLocationsDialog] = useState(false);
   
   const filteredProducts = products?.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -100,21 +103,33 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
+                <div className="space-y-3 mt-4 pt-4 border-t border-border/50">
                   <div className="text-xs text-muted-foreground">
                     Min stock: <span className="font-bold text-foreground">{product.bufferStock}</span>
                   </div>
                   
                   <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setSelectedProduct(product.id);
+                        setShowLocationsDialog(true);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-10 font-bold text-sm"
+                    >
+                      <MapPin className="h-4 w-4 mr-1" /> Locations
+                    </Button>
+
                     <Link href={`/products/${product.id}/edit`}>
-                      <Button variant="outline" size="icon" className="h-8 w-8">
+                      <Button variant="outline" size="icon" className="h-10 w-10">
                         <Edit2 className="h-4 w-4" />
                       </Button>
                     </Link>
                     
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="icon" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
+                        <Button variant="outline" size="icon" className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
@@ -142,6 +157,16 @@ export default function ProductsPage() {
             ))
           )}
         </div>
+      )}
+
+      {selectedProduct && (
+        <ProductLocationsDialog
+          open={showLocationsDialog}
+          onOpenChange={setShowLocationsDialog}
+          productId={selectedProduct}
+          productName={filteredProducts?.find((p) => p.id === selectedProduct)?.name || ""}
+          totalStock={filteredProducts?.find((p) => p.id === selectedProduct)?.totalStock || 0}
+        />
       )}
     </div>
   );
