@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session?.userId) {
+    req.log.warn({ session: req.session, cookies: req.cookies }, "Auth failed - no userId in session");
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
