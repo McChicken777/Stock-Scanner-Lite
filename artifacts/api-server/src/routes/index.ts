@@ -6,6 +6,7 @@ import stockRouter from "./stock";
 import historyRouter from "./history";
 import dashboardRouter from "./dashboard";
 import authRouter from "./auth";
+import workRouter from "./work";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -17,5 +18,6 @@ router.use("/products", requireAuth, productsRouter);
 router.use("/stock", requireAuth, stockRouter);
 router.use("/history", requireAuth, historyRouter);
 router.use("/dashboard", requireAuth, dashboardRouter);
+router.use("/work", workRouter);
 
 export default router;

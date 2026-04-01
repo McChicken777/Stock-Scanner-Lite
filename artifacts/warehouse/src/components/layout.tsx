@@ -1,9 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, ScanLine, Package2, History, MapPin, ShieldCheck, HardHat, LogOut } from "lucide-react";
+import {
+  LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
+  HardHat, LogOut, FolderKanban, Tag, Boxes, ArrowLeftRight
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,7 +55,40 @@ function UserMenu() {
   );
 }
 
-export function BottomNav() {
+function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
+  return (
+    <div className="flex items-center gap-1 bg-muted/50 border border-border rounded-full p-0.5">
+      <Link href="/">
+        <button
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
+            !isWorkSection
+              ? "bg-background shadow text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Boxes className="h-3.5 w-3.5" />
+          Inventory
+        </button>
+      </Link>
+      <Link href="/work/projects">
+        <button
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
+            isWorkSection
+              ? "bg-background shadow text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <FolderKanban className="h-3.5 w-3.5" />
+          Work Orders
+        </button>
+      </Link>
+    </div>
+  );
+}
+
+function InventoryBottomNav() {
   const [location] = useLocation();
 
   const navItems = [
@@ -66,34 +101,63 @@ export function BottomNav() {
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto relative">
-        {/* Floating Scan Button */}
         <Link href="/scan" className="absolute left-1/2 -top-6 -translate-x-1/2 group">
           <div className={cn(
             "h-14 w-14 rounded-full flex items-center justify-center border-4 border-background shadow-lg transition-transform group-active:scale-95",
-            location === "/scan" ? "bg-primary text-primary-foreground" : "bg-primary text-primary-foreground"
+            "bg-primary text-primary-foreground"
           )}>
             <ScanLine className="h-6 w-6" strokeWidth={2.5} />
           </div>
         </Link>
-        
+
         {navItems.map((item) => {
           if (item.href === "/scan") {
             return <div key={item.href} className="flex-1 pointer-events-none" />;
           }
-
           const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
           return (
             <Link key={item.href} href={item.href} className="flex-1">
-              <div
-                className={cn(
-                  "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
-                  isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
-                )}
-              >
+              <div className={cn(
+                "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
+                isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
+              )}>
                 <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium tracking-wide uppercase">
-                  {item.label}
-                </span>
+                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WorkOrdersBottomNav() {
+  const [location] = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
+  const navItems = [
+    { href: "/work/projects", icon: FolderKanban, label: "Projects" },
+    ...(isAdmin ? [{ href: "/work/templates", icon: Tag, label: "Templates" }] : []),
+  ];
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+      <div className="flex h-16 w-full max-w-md mx-auto">
+        {navItems.map((item) => {
+          const isActive = location.startsWith(item.href) && !location.startsWith("/work/projects/new") || location === item.href;
+          const realActive = item.href === "/work/projects"
+            ? (location.startsWith("/work/projects") || location === "/work/projects")
+            : location.startsWith(item.href);
+          return (
+            <Link key={item.href} href={item.href} className="flex-1">
+              <div className={cn(
+                "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
+                realActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
+              )}>
+                <item.icon className="h-6 w-6" strokeWidth={realActive ? 2.5 : 2} />
+                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
               </div>
             </Link>
           );
@@ -105,25 +169,34 @@ export function BottomNav() {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: health } = useHealthCheck({ query: { refetchInterval: 60000 } });
+  const [location] = useLocation();
   const isHealthy = health?.status === "ok";
+  const isWorkSection = location.startsWith("/work");
 
   return (
     <div className="min-h-[100dvh] bg-background pb-16">
       <main className="w-full max-w-md mx-auto bg-background min-h-[100dvh] border-x border-border/50 relative">
-        {/* Top-right indicators */}
-        <div className="absolute top-2 right-2 z-50 flex items-center gap-2">
-          <UserMenu />
-          <div className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-full bg-background/80 backdrop-blur-sm border shadow-sm text-[10px] font-bold uppercase tracking-wider",
-            isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"
-          )}>
-            <div className={cn("h-2 w-2 rounded-full", isHealthy ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-            {isHealthy ? "Online" : "Offline"}
+        {/* Top bar with section switcher + status + user */}
+        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border/40">
+          <div className="flex items-center justify-between px-3 py-2 gap-2">
+            <SectionSwitcher isWorkSection={isWorkSection} />
+            <div className="flex items-center gap-1.5">
+              <UserMenu />
+              <div className={cn(
+                "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider",
+                isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"
+              )}>
+                <div className={cn("h-1.5 w-1.5 rounded-full", isHealthy ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                {isHealthy ? "On" : "Off"}
+              </div>
+            </div>
           </div>
         </div>
+
         {children}
       </main>
-      <BottomNav />
+
+      {isWorkSection ? <WorkOrdersBottomNav /> : <InventoryBottomNav />}
     </div>
   );
 }

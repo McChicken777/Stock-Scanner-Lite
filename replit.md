@@ -92,8 +92,25 @@ Set these environment variables to enable email alerts:
 - `users` — id (serial), username (unique), password_hash, role (admin|worker), created_at
 
 ### Permissions
-- **Admin**: full CRUD on products, locations, stock, users
-- **Worker**: can view and update stock, scan QR codes, view history and dashboard; cannot manage products or users
+- **Admin**: full CRUD on products, locations, stock, users, work projects, templates
+- **Worker**: can view and update stock, scan QR codes, view history and dashboard, view/start/stop work order procedures; cannot manage products or users
+
+### Work Orders Module
+- **Templates**: admin-configurable item blueprints with predefined procedures (Welding, Painting, CNC, Plasma Cutting, etc.)
+- **Projects**: work orders with name, deadline, priority, status. Created by copying templates (data is copied, not referenced)
+- **Items**: project items (copied from templates), each with procedures
+- **Procedures**: individual tasks with start/stop timer, status tracking (not_started/in_progress/completed)
+- **Progress**: item progress = completed procedures / total; project progress = total across all items
+- **Urgency**: < 2 days = red (critical), < 5 days = orange (warning), else green
+- **Timer**: one active timer per user at a time; server enforces this
+
+### Work Order DB Tables
+- `work_templates` — id, name, created_at
+- `work_template_procedures` — id, template_id, name, sort_order
+- `work_projects` — id, name, deadline, priority, status, created_at
+- `work_project_items` — id, project_id, name, sort_order
+- `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds
+- `work_time_logs` — id, procedure_id, user_id, start_time, end_time, duration_seconds
 
 ## TypeScript & Composite Projects
 
@@ -119,6 +136,10 @@ Pages:
 - `/products/:id/edit` — Edit product
 - `/history` — Change history
 - `/locations` — Location management
+- `/work/projects` — Work orders project list
+- `/work/projects/new` — Create work order
+- `/work/projects/:id` — Project detail with items + procedures
+- `/work/templates` — Item template management (admin)
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 

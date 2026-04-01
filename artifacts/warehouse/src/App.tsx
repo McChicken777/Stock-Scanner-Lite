@@ -1,11 +1,11 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
 import { AuthProvider, useAuth } from "@/contexts/auth";
 
-// Pages
+// Inventory Pages
 import Dashboard from "@/pages/dashboard";
 import ScanPage from "@/pages/scan";
 import LocationsPage from "@/pages/locations";
@@ -16,6 +16,12 @@ import HistoryPage from "@/pages/history";
 import AdminUsersPage from "@/pages/admin-users";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+
+// Work Order Pages
+import WorkProjectsPage from "@/pages/work/projects";
+import WorkProjectDetailPage from "@/pages/work/project-detail";
+import WorkProjectFormPage from "@/pages/work/project-form";
+import WorkTemplatesPage from "@/pages/work/templates";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +50,7 @@ function ProtectedRoutes() {
   return (
     <AppLayout>
       <Switch>
+        {/* Inventory */}
         <Route path="/" component={Dashboard} />
         <Route path="/scan" component={ScanPage} />
         <Route path="/locations" component={LocationsPage} />
@@ -53,6 +60,13 @@ function ProtectedRoutes() {
         <Route path="/products/:id/edit" component={ProductFormPage} />
         <Route path="/history" component={HistoryPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
+
+        {/* Work Orders */}
+        <Route path="/work/projects" component={WorkProjectsPage} />
+        <Route path="/work/projects/new" component={WorkProjectFormPage} />
+        <Route path="/work/projects/:id" component={WorkProjectDetailPage} />
+        <Route path="/work/templates" component={WorkTemplatesPage} />
+
         <Route component={NotFound} />
       </Switch>
     </AppLayout>

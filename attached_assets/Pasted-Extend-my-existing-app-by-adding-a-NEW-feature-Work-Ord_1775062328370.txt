@@ -1,0 +1,193 @@
+Extend my existing app by adding a NEW feature: Work Orders / Production Tracking.
+
+IMPORTANT:
+This is a separate module from the existing Inventory system.
+Keep Inventory functionality unchanged and add navigation between the two systems.
+
+--------------------------------------------------
+1. APP STRUCTURE (VERY IMPORTANT)
+--------------------------------------------------
+
+The app now has 2 main sections:
+
+1. Inventory (already exists)
+2. Work Orders (new feature)
+
+Add navigation:
+- Add a top menu or dashboard with buttons:
+  - "Inventory"
+  - "Work Orders"
+
+User must be able to switch between them easily.
+
+--------------------------------------------------
+2. PROJECTS (WORK ORDERS)
+--------------------------------------------------
+
+Create a Work Order (Project) system:
+
+Each project has:
+- Name
+- Deadline (date)
+- Priority (Low, Medium, High)
+- Status (in progress, completed)
+
+Admin can:
+- Create project
+- View all projects
+
+--------------------------------------------------
+3. ITEM TEMPLATES (FOR EASY INPUT)
+--------------------------------------------------
+
+Create Item Templates (admin-configurable):
+
+Each template has:
+- Name (e.g. Mask, Distance Holder)
+- Predefined procedures:
+  - Welding
+  - Painting
+  - CNC
+  - Plasma cutting (customizable)
+
+Admin can:
+- Create/edit/delete templates
+- Add/remove procedures per template
+
+--------------------------------------------------
+4. PROJECT CREATION (SIMPLE UI)
+--------------------------------------------------
+
+When creating a project:
+
+Show:
+- Project name input
+- Deadline picker
+- Priority selector
+
+Then show:
+- List of item templates as checkboxes
+
+User selects items included in the project.
+
+--------------------------------------------------
+5. PROJECT GENERATION LOGIC
+--------------------------------------------------
+
+When project is created:
+
+For each selected item template:
+- Create an item inside the project
+- Copy template name
+- Copy all procedures into that item
+
+IMPORTANT:
+- Do NOT reference templates directly
+- Copy data so existing projects do not change if templates are edited later
+
+--------------------------------------------------
+6. PROCEDURES (TASKS)
+--------------------------------------------------
+
+Each item contains procedures (tasks):
+
+Each procedure has:
+- Status (not started, in progress, completed)
+- Start time
+- End time
+- Total time spent
+
+Worker flow:
+- Select project
+- Select item
+- Select procedure
+- Click "Start"
+- Click "Stop"
+
+System must:
+- Record time spent
+- Link it to user, project, item, and procedure
+
+IMPORTANT:
+- Prevent a user from running multiple tasks at the same time
+
+--------------------------------------------------
+7. PROGRESS CALCULATION
+--------------------------------------------------
+
+Item progress:
+- % = completed procedures / total procedures
+
+Project progress:
+- % = total completed procedures across all items / total procedures in project
+
+Example:
+- 3 items × 3 procedures = 9 total procedures
+- 1 completed → 11% project progress
+
+--------------------------------------------------
+8. DEADLINE & PRIORITY VISUALS
+--------------------------------------------------
+
+For each project:
+
+Display:
+- Deadline
+- Priority
+- Progress %
+
+Add urgency logic:
+- If deadline < 2 days → critical (red)
+- If deadline < 5 days → warning (orange)
+- Else → normal (green)
+
+--------------------------------------------------
+9. UI STRUCTURE
+--------------------------------------------------
+
+Project list view:
+- Project name
+- Deadline
+- Priority
+- Progress bar
+
+Project detail view:
+- Show all items
+- Each item shows:
+  - Name
+  - Progress bar
+  - Small image (if available)
+
+Each item expands to show procedures:
+- Welding ✔ / ❌
+- Painting ✔ / ❌
+- CNC ✔ / ❌
+
+--------------------------------------------------
+10. ROLE SYSTEM (INTEGRATION)
+--------------------------------------------------
+
+Worker:
+- Can start/stop tasks
+- Can view projects
+
+Admin:
+- Can create/edit projects
+- Can manage templates
+
+--------------------------------------------------
+11. KEEP IT SIMPLE
+--------------------------------------------------
+
+- Mobile-friendly UI
+- Large buttons (Start / Stop)
+- Clear progress indicators
+- No overcomplicated UI
+
+--------------------------------------------------
+12. IMPORTANT
+--------------------------------------------------
+
+- This is a NEW module separate from Inventory
+- Do not break existing inventory functionality
+- Ensure smooth navigation between Inventory and Work Orders
