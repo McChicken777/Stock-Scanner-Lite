@@ -25,7 +25,7 @@ async function fetchTemplates(): Promise<Template[]> {
   return res.json();
 }
 
-const defaultProcedures = ["Welding", "Painting", "CNC", "Plasma Cutting"];
+const defaultProcedures = ["Laser cutting", "Sandblasting", "Bending", "CNC", "Welding", "Painting"];
 
 export default function WorkTemplatesPage() {
   const { user } = useAuth();

@@ -18,6 +18,6 @@ router.use("/products", requireAuth, productsRouter);
 router.use("/stock", requireAuth, stockRouter);
 router.use("/history", requireAuth, historyRouter);
 router.use("/dashboard", requireAuth, dashboardRouter);
-router.use("/work", workRouter);
+router.use("/work", requireAuth, workRouter);
 
 export default router;
