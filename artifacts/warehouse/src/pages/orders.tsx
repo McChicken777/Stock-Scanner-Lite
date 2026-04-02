@@ -195,7 +195,7 @@ export default function OrdersPage() {
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground mt-2">
-                {new Date(order.createdAt).toLocaleDateString()}
+                {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "—"}
               </p>
             </div>
           ))}

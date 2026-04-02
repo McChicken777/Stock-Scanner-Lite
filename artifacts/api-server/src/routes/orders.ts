@@ -12,13 +12,18 @@ router.get("/orders", requireAuth, async (req, res) => {
     const { companyId } = req.session;
 
     const orders = await db.select({
-      order: ordersTable,
+      id: ordersTable.id,
+      supplier: ordersTable.supplier,
+      status: ordersTable.status,
+      createdAt: ordersTable.createdAt,
+      companyId: ordersTable.companyId,
       itemCount: sql<number>`COUNT(${orderItemsTable.id})`,
     })
       .from(ordersTable)
       .leftJoin(orderItemsTable, eq(ordersTable.id, orderItemsTable.orderId))
       .where(eq(ordersTable.companyId, companyId))
-      .groupBy(ordersTable.id);
+      .groupBy(ordersTable.id)
+      .orderBy(ordersTable.createdAt);
 
     res.json(orders);
   } catch (err) {
@@ -46,7 +51,10 @@ router.get("/:id", requireAuth, async (req, res) => {
     }
 
     const items = await db.select({
-      item: orderItemsTable,
+      id: orderItemsTable.id,
+      orderId: orderItemsTable.orderId,
+      productId: orderItemsTable.productId,
+      quantity: orderItemsTable.quantity,
       productName: productsTable.name,
       supplierProductName: productsTable.supplierProductName,
       supplierSku: productsTable.supplierSku,
