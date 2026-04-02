@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, AlertTriangle, Edit2, Trash2, MapPin } from "lucide-react";
+import { Plus, Search, AlertTriangle, Edit2, Trash2, MapPin, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,9 +94,14 @@ export default function ProductsPage() {
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-bold text-lg leading-tight pr-16">{product.name}</h3>
-                    <Badge variant="secondary" className="mt-1 font-medium bg-secondary/10 hover:bg-secondary/10 text-secondary border-none">
-                      {product.category}
-                    </Badge>
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                      <Badge variant="secondary" className="font-medium bg-secondary/10 hover:bg-secondary/10 text-secondary border-none">
+                        {product.category}
+                      </Badge>
+                      <Badge className={`font-medium text-xs ${(product as any).itemType === "production" ? "bg-orange-100 text-orange-700 hover:bg-orange-100" : "bg-blue-100 text-blue-700 hover:bg-blue-100"}`} variant="outline">
+                        {(product as any).itemType === "production" ? "In-House" : "Purchase"}
+                      </Badge>
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className={`text-2xl font-black leading-none ${product.isLowStock ? 'text-destructive' : ''}`}>
@@ -109,8 +114,25 @@ export default function ProductsPage() {
                 </div>
 
                 <div className="space-y-3 mt-4 pt-4 border-t border-border/50">
-                  <div className="text-xs text-muted-foreground">
-                    Min stock: <span className="font-bold text-foreground">{product.bufferStock}</span>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-muted-foreground">Buffer</p>
+                      <p className="font-bold text-sm text-foreground">{product.bufferStock}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Target</p>
+                      <p className="font-bold text-sm text-foreground">{(product as any).targetStock || 0}</p>
+                    </div>
+                    {product.totalStock < product.bufferStock && (
+                      <div className="bg-red-50 rounded p-2 col-span-3">
+                        <div className="flex items-center gap-1 text-red-700">
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span className="font-bold text-xs">
+                            Restock: +{((product as any).targetStock || 0) - product.totalStock}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="flex gap-2">

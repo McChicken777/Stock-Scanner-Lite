@@ -16,7 +16,9 @@ import { useAuth } from "@/contexts/auth";
 const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   category: z.string().min(2, "Category is required"),
+  itemType: z.enum(["purchase", "production"]).default("purchase"),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
+  targetStock: z.coerce.number().min(0, "Must be positive"),
   alertEmail: z.string().email("Invalid email").optional().or(z.literal("")),
 });
 
@@ -44,7 +46,9 @@ export default function ProductFormPage() {
     defaultValues: {
       name: "",
       category: "",
+      itemType: "purchase",
       bufferStock: 0,
+      targetStock: 0,
       alertEmail: "",
     },
   });
@@ -54,7 +58,9 @@ export default function ProductFormPage() {
       form.reset({
         name: product.name,
         category: product.category,
+        itemType: (product as any).itemType || "purchase",
         bufferStock: product.bufferStock,
+        targetStock: (product as any).targetStock || 0,
         alertEmail: product.alertEmail || "",
       });
     }
@@ -159,14 +165,46 @@ export default function ProductFormPage() {
 
             <FormField
               control={form.control}
+              name="itemType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Item Type</FormLabel>
+                  <FormControl>
+                    <select className="w-full h-14 px-3 border-2 rounded-lg text-lg shadow-sm bg-background" {...field}>
+                      <option value="purchase">Purchase (sourced from suppliers)</option>
+                      <option value="production">Production (produced in-house)</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="bufferStock"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Minimum Stock Level</FormLabel>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Minimum Stock Level (Buffer)</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
                   </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">Alerts when total stock drops below this number</p>
+                  <p className="text-xs text-muted-foreground mt-1.5">Triggers restock alert when stock drops below this level</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="targetStock"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Target Stock Level</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1.5">Desired stock level for restocking calculations</p>
                   <FormMessage />
                 </FormItem>
               )}
