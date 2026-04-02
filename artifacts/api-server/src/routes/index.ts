@@ -10,6 +10,7 @@ import workRouter from "./work";
 import inboundRouter from "./inbound";
 import tasksRouter from "./tasks";
 import ordersRouter from "./orders";
+import suppliersRouter from "./suppliers";
 import companyRouter from "./company";
 import ownerRouter from "./owner";
 import { requireAuth } from "../middlewares/auth";
@@ -29,5 +30,6 @@ router.use("/work", requireAuth, workRouter);
 router.use("/inbound", requireAuth, inboundRouter);
 router.use("/tasks", requireAuth, tasksRouter);
 router.use("/orders", requireAuth, ordersRouter);
+router.use("/suppliers", requireAuth, suppliersRouter);
 
 export default router;

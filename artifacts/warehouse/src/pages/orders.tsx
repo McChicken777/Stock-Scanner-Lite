@@ -10,7 +10,8 @@ interface OrderItem {
   id: number;
   productId: number;
   productName: string;
-  supplier: string;
+  supplierProductName: string | null;
+  supplierSku: string | null;
   quantity: number;
 }
 
@@ -231,47 +232,56 @@ export default function OrdersPage() {
               {selectedOrderQuery.data.items.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-white p-3 rounded border-l-4 border-blue-500 flex items-center justify-between gap-2"
+                  className="bg-white p-3 rounded border-l-4 border-blue-500 space-y-2"
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{item.productName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Supplier: {item.supplier}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <input
-                      type="number"
-                      min="0"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const qty = parseInt(e.target.value) || 0;
-                        updateQuantityMutation.mutate({
-                          orderId: selectedOrder,
-                          itemId: item.id,
-                          quantity: qty,
-                        });
-                      }}
-                      disabled={
-                        updateQuantityMutation.isPending ||
-                        selectedOrderQuery.data.status !== "draft"
-                      }
-                      className="w-16 px-2 py-1 border rounded text-sm text-center"
-                    />
-                    {selectedOrderQuery.data.status === "draft" && (
-                      <button
-                        onClick={() =>
-                          removeMutation.mutate({
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm">{item.productName}</p>
+                      {item.supplierProductName && (
+                        <p className="text-xs text-muted-foreground">
+                          Supplier: {item.supplierProductName}
+                        </p>
+                      )}
+                      {item.supplierSku && (
+                        <p className="text-xs text-muted-foreground font-mono">
+                          SKU: {item.supplierSku}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const qty = parseInt(e.target.value) || 0;
+                          updateQuantityMutation.mutate({
                             orderId: selectedOrder,
                             itemId: item.id,
-                          })
+                            quantity: qty,
+                          });
+                        }}
+                        disabled={
+                          updateQuantityMutation.isPending ||
+                          selectedOrderQuery.data.status !== "draft"
                         }
-                        disabled={removeMutation.isPending}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
+                        className="w-16 px-2 py-1 border rounded text-sm text-center"
+                      />
+                      {selectedOrderQuery.data.status === "draft" && (
+                        <button
+                          onClick={() =>
+                            removeMutation.mutate({
+                              orderId: selectedOrder,
+                              itemId: item.id,
+                            })
+                          }
+                          disabled={removeMutation.isPending}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

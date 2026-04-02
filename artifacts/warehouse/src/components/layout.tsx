@@ -63,6 +63,11 @@ function UserMenu() {
                 <Building2 className="mr-2 h-4 w-4" /> Company & Plan
               </DropdownMenuItem>
             </Link>
+            <Link href="/admin/suppliers">
+              <DropdownMenuItem className="cursor-pointer">
+                <Building2 className="mr-2 h-4 w-4" /> Suppliers
+              </DropdownMenuItem>
+            </Link>
           </>
         )}
         <DropdownMenuItem

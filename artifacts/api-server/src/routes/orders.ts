@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, ordersTable, orderItemsTable, productsTable, stockTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { db, ordersTable, orderItemsTable, productsTable, stockTable, suppliersTable } from "@workspace/db";
+import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -48,7 +48,8 @@ router.get("/:id", requireAuth, async (req, res) => {
     const items = await db.select({
       item: orderItemsTable,
       productName: productsTable.name,
-      supplier: productsTable.supplier,
+      supplierProductName: productsTable.supplierProductName,
+      supplierSku: productsTable.supplierSku,
     })
       .from(orderItemsTable)
       .innerJoin(productsTable, eq(orderItemsTable.productId, productsTable.id))
@@ -66,41 +67,47 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { companyId } = req.session;
 
-    // Get all purchase items below buffer stock
+    // Get all purchase items below buffer stock with suppliers
     const lowStockItems = await db.select({
       product: productsTable,
+      supplier: suppliersTable,
       totalStock: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`,
     })
       .from(productsTable)
       .leftJoin(stockTable, eq(productsTable.id, stockTable.productId))
+      .leftJoin(suppliersTable, eq(productsTable.supplierId, suppliersTable.id))
       .where(
         and(
           eq(productsTable.companyId, companyId),
           eq(productsTable.itemType, "purchase"),
-          sql`${productsTable.supplier} IS NOT NULL`
+          isNotNull(productsTable.supplierId)
         )
       )
-      .groupBy(productsTable.id)
+      .groupBy(productsTable.id, suppliersTable.id)
       .having(sql`COALESCE(SUM(${stockTable.quantity}), 0) < ${productsTable.bufferStock}`);
 
-    // Group by supplier and create orders
-    const ordersBySupplier = new Map<string, typeof lowStockItems>();
+    // Group by supplierId and create orders
+    const ordersBySupplier = new Map<number, typeof lowStockItems>();
     lowStockItems.forEach((item) => {
-      const supplier = item.product.supplier || "Unknown";
-      if (!ordersBySupplier.has(supplier)) {
-        ordersBySupplier.set(supplier, []);
+      if (item.supplier) {
+        const supplierId = item.supplier.id;
+        if (!ordersBySupplier.has(supplierId)) {
+          ordersBySupplier.set(supplierId, []);
+        }
+        ordersBySupplier.get(supplierId)!.push(item);
       }
-      ordersBySupplier.get(supplier)!.push(item);
     });
 
     const createdOrders = [];
 
-    for (const [supplier, items] of ordersBySupplier.entries()) {
+    for (const [supplierId, items] of ordersBySupplier.entries()) {
+      const supplierName = items[0]?.supplier?.name || "Unknown";
+      
       // Check if draft already exists for this supplier
       const existing = await db.query.ordersTable.findFirst({
         where: and(
           eq(ordersTable.companyId, companyId),
-          eq(ordersTable.supplier, supplier),
+          eq(ordersTable.supplier, supplierName),
           eq(ordersTable.status, "draft")
         ),
       });
@@ -110,7 +117,7 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
         orderId = existing.id;
       } else {
         const [inserted] = await db.insert(ordersTable).values({
-          supplier,
+          supplier: supplierName,
           status: "draft",
           companyId,
         }).returning();
@@ -142,7 +149,7 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
 
       createdOrders.push({
         id: orderId,
-        supplier,
+        supplier: supplierName,
         itemCount: items.length,
       });
     }

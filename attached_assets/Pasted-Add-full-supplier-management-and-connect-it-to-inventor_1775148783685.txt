@@ -1,0 +1,123 @@
+Add full supplier management and connect it to inventory and order drafts.
+
+IMPORTANT:
+- Build on existing multi-company system
+- Do NOT break existing inventory or order logic
+- Keep UI simple and admin-friendly
+
+--------------------------------------------------
+1. SUPPLIERS TABLE
+--------------------------------------------------
+
+Create Suppliers table:
+
+- id
+- name
+- email
+- phone (optional)
+- notes (optional)
+- company_id
+
+--------------------------------------------------
+2. ADMIN SUPPLIER MANAGEMENT
+--------------------------------------------------
+
+Add a "Suppliers" tab in admin/company management:
+
+Allow admin to:
+- create supplier
+- edit supplier
+- delete supplier
+
+When clicking a supplier:
+- show full details (email, phone, notes)
+
+--------------------------------------------------
+3. LINK ITEMS TO SUPPLIER
+--------------------------------------------------
+
+Extend inventory items:
+
+Add:
+- supplier_id (nullable)
+
+Allow admin to:
+- select supplier when editing item
+
+--------------------------------------------------
+4. SUPPLIER PRODUCT INFO (IMPORTANT)
+--------------------------------------------------
+
+Extend items with:
+
+- supplier_product_name
+- supplier_sku
+
+These should be editable in item edit page.
+
+--------------------------------------------------
+5. UPDATE ORDER DRAFT LOGIC
+--------------------------------------------------
+
+When generating order drafts:
+
+- only include items with supplier_id
+- group items by supplier_id
+- create one order per supplier
+
+--------------------------------------------------
+6. ORDER DISPLAY IMPROVEMENT
+--------------------------------------------------
+
+In Orders page:
+
+Show:
+
+- supplier name
+- supplier email
+
+For each item show:
+- supplier_product_name (if exists)
+- supplier_sku (if exists)
+- quantity
+
+Fallback to item name if supplier_product_name is empty
+
+--------------------------------------------------
+7. VALIDATION
+--------------------------------------------------
+
+If item has no supplier:
+- exclude from order draft
+OR
+- show warning: "No supplier assigned"
+
+--------------------------------------------------
+8. UI IMPROVEMENTS
+--------------------------------------------------
+
+In item edit page:
+
+Add fields:
+- supplier (dropdown)
+- supplier product name
+- supplier SKU
+
+Keep layout clean and mobile-friendly.
+
+--------------------------------------------------
+9. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure:
+- suppliers belong to company
+- items only show suppliers from same company
+- orders grouped per company
+
+--------------------------------------------------
+10. IMPORTANT
+--------------------------------------------------
+
+- Do NOT add email sending yet
+- Do NOT overcomplicate supplier system
+- Keep it simple but structured

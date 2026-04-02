@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Save } from "lucide-react";
 import { useCreateProduct, useUpdateProduct, useGetProduct } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -19,10 +19,24 @@ const formSchema = z.object({
   itemType: z.enum(["purchase", "production"]).default("purchase"),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
+  supplierId: z.coerce.number().optional().or(z.literal("")),
+  supplierProductName: z.string().optional().or(z.literal("")),
+  supplierSku: z.string().optional().or(z.literal("")),
   alertEmail: z.string().email("Invalid email").optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+interface Supplier {
+  id: number;
+  name: string;
+}
+
+async function fetchSuppliers(): Promise<Supplier[]> {
+  const res = await fetch("/api/suppliers", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
 
 export default function ProductFormPage() {
   const [, params] = useRoute("/products/:id/edit");
@@ -38,6 +52,11 @@ export default function ProductFormPage() {
     query: { enabled: isEdit, queryKey: [`/api/products/${productId}`] }
   });
 
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: fetchSuppliers,
+  });
+
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
 
@@ -49,6 +68,9 @@ export default function ProductFormPage() {
       itemType: "purchase",
       bufferStock: 0,
       targetStock: 0,
+      supplierId: "",
+      supplierProductName: "",
+      supplierSku: "",
       alertEmail: "",
     },
   });
@@ -61,6 +83,9 @@ export default function ProductFormPage() {
         itemType: (product as any).itemType || "purchase",
         bufferStock: product.bufferStock,
         targetStock: (product as any).targetStock || 0,
+        supplierId: (product as any).supplierId ? String((product as any).supplierId) : "",
+        supplierProductName: (product as any).supplierProductName || "",
+        supplierSku: (product as any).supplierSku || "",
         alertEmail: product.alertEmail || "",
       });
     }
@@ -69,6 +94,9 @@ export default function ProductFormPage() {
   const onSubmit = (data: FormValues) => {
     const payload = {
       ...data,
+      supplierId: data.supplierId ? parseInt(String(data.supplierId)) : null,
+      supplierProductName: data.supplierProductName || null,
+      supplierSku: data.supplierSku || null,
       alertEmail: data.alertEmail || null,
     };
 
@@ -205,6 +233,57 @@ export default function ProductFormPage() {
                     <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
                   </FormControl>
                   <p className="text-xs text-muted-foreground mt-1.5">Desired stock level for restocking calculations</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="supplierId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier (Purchase Items Only)</FormLabel>
+                  <FormControl>
+                    <select className="w-full h-14 px-3 border-2 rounded-lg text-lg shadow-sm bg-background" {...field}>
+                      <option value="">No supplier</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="supplierProductName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier Product Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-14 text-lg border-2 shadow-sm" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1.5">The product name as listed by the supplier</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="supplierSku"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier SKU</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. MB-2024-001" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1.5">The supplier's part/SKU number</p>
                   <FormMessage />
                 </FormItem>
               )}
