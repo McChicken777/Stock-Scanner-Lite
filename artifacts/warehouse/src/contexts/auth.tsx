@@ -12,7 +12,7 @@ export interface CompanyFeatures {
 export interface AuthUser {
   id: number;
   username: string;
-  role: "admin" | "worker";
+  role: "owner" | "admin" | "worker";
   companyId: number | null;
   features: CompanyFeatures;
 }

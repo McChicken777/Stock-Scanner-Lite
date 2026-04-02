@@ -48,6 +48,25 @@ export async function seedAdminUser() {
       });
       logger.info("Default admin user created (username: admin, password: admin123)");
     }
+
+    // 4. Ensure owner account exists (companyId = null, role = owner)
+    const ownerUsername = process.env.OWNER_USERNAME || "owner";
+    const ownerPassword = process.env.OWNER_PASSWORD || "owner123";
+    const [existingOwner] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`${usersTable.role} = 'owner'`);
+
+    if (!existingOwner) {
+      const passwordHash = await bcrypt.hash(ownerPassword, 12);
+      await db.insert(usersTable).values({
+        username: ownerUsername,
+        passwordHash,
+        role: "owner",
+        companyId: null,
+      });
+      logger.info({ username: ownerUsername }, "Owner account created");
+    }
   } catch (err) {
     logger.error({ err }, "Failed to seed");
   }

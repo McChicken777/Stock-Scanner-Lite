@@ -10,7 +10,7 @@ declare module "express-session" {
   interface SessionData {
     userId: number;
     username: string;
-    role: "admin" | "worker";
+    role: "owner" | "admin" | "worker";
     companyId: number;
     features: import("@workspace/db").CompanyFeatures;
   }

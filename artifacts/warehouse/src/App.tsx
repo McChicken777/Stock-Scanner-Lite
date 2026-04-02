@@ -15,6 +15,7 @@ import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminCompanyPage from "@/pages/admin-company";
+import OwnerPanelPage from "@/pages/owner-panel";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
@@ -51,6 +52,9 @@ function ProtectedRoutes() {
   return (
     <AppLayout>
       <Switch>
+        {/* Owner redirect */}
+        {user.role === "owner" && <Route path="/" component={() => { window.location.replace("/owner"); return null; }} />}
+
         {/* Inventory */}
         <Route path="/" component={Dashboard} />
         <Route path="/scan" component={ScanPage} />
@@ -62,6 +66,7 @@ function ProtectedRoutes() {
         <Route path="/history" component={HistoryPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/company" component={AdminCompanyPage} />
+        <Route path="/owner" component={OwnerPanelPage} />
 
         {/* Work Orders */}
         <Route path="/work/projects" component={WorkProjectsPage} />
