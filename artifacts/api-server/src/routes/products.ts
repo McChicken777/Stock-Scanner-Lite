@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable, stockTable, insertProductSchema } from "@workspace/db";
+import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
@@ -118,6 +118,157 @@ router.delete("/:productId", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to delete product");
     res.status(500).json({ error: "Failed to delete product" });
+  }
+});
+
+// ─── PRODUCT COMPONENTS (BOM) ──────────────────────────────────────────────────
+
+router.get("/:productId/components", requireAuth, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const components = await db.select().from(productComponentsTable)
+      .where(eq(productComponentsTable.parentProductId, productId))
+      .orderBy(productComponentsTable.sortOrder);
+
+    const componentsWithDetails = await Promise.all(
+      components.map(async (comp) => {
+        const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+        const procedures = await db.select().from(productProceduresTable)
+          .where(eq(productProceduresTable.productId, comp.componentProductId))
+          .orderBy(productProceduresTable.sortOrder);
+        return { ...comp, product: compProduct, procedures };
+      }),
+    );
+
+    res.json(componentsWithDetails);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list components");
+    res.status(500).json({ error: "Failed to list components" });
+  }
+});
+
+router.post("/:productId/components", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const parsed = z.object({
+      componentProductId: z.number().int(),
+      quantity: z.number().int().min(1).default(1),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { componentProductId, quantity } = parsed.data;
+    const [compProduct] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, componentProductId), eq(productsTable.companyId, companyId)));
+    if (!compProduct) { res.status(404).json({ error: "Component product not found" }); return; }
+
+    const existing = await db.select().from(productComponentsTable)
+      .where(eq(productComponentsTable.parentProductId, productId))
+      .orderBy(productComponentsTable.sortOrder);
+    const sortOrder = existing.length;
+
+    const [comp] = await db.insert(productComponentsTable).values({
+      parentProductId: productId, componentProductId, quantity, sortOrder,
+    }).returning();
+
+    const procedures = await db.select().from(productProceduresTable)
+      .where(eq(productProceduresTable.productId, componentProductId))
+      .orderBy(productProceduresTable.sortOrder);
+
+    res.status(201).json({ ...comp, product: compProduct, procedures });
+  } catch (err) {
+    req.log.error({ err }, "Failed to add component");
+    res.status(500).json({ error: "Failed to add component" });
+  }
+});
+
+router.delete("/:productId/components/:componentId", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    await db.delete(productComponentsTable)
+      .where(and(eq(productComponentsTable.id, componentId), eq(productComponentsTable.parentProductId, productId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove component");
+    res.status(500).json({ error: "Failed to remove component" });
+  }
+});
+
+// ─── PRODUCT PROCEDURES (for manufactured_parts) ───────────────────────────────
+
+router.get("/:productId/procedures", requireAuth, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const procedures = await db.select().from(productProceduresTable)
+      .where(eq(productProceduresTable.productId, productId))
+      .orderBy(productProceduresTable.sortOrder);
+    res.json(procedures);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list procedures");
+    res.status(500).json({ error: "Failed to list procedures" });
+  }
+});
+
+router.post("/:productId/procedures", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const existing = await db.select().from(productProceduresTable)
+      .where(eq(productProceduresTable.productId, productId));
+    const sortOrder = existing.length;
+
+    const [proc] = await db.insert(productProceduresTable).values({
+      productId, name: parsed.data.name, sortOrder,
+    }).returning();
+    res.status(201).json(proc);
+  } catch (err) {
+    req.log.error({ err }, "Failed to add procedure");
+    res.status(500).json({ error: "Failed to add procedure" });
+  }
+});
+
+router.delete("/:productId/procedures/:procedureId", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const procedureId = Number(req.params.procedureId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    await db.delete(productProceduresTable)
+      .where(and(eq(productProceduresTable.id, procedureId), eq(productProceduresTable.productId, productId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove procedure");
+    res.status(500).json({ error: "Failed to remove procedure" });
   }
 });
 

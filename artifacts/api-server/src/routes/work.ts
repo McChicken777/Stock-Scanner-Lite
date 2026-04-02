@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable, productsTable } from "@workspace/db";
+import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable, productsTable, productComponentsTable, productProceduresTable } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -232,6 +232,22 @@ router.post("/projects", requireAdmin, async (req, res) => {
       const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
       if (!template) continue;
 
+      // Load BOM components if this template has an associated product
+      let bomComponents: { componentProductId: number; quantity: number; name: string; procedures: { name: string; sortOrder: number }[]; itemType: string }[] = [];
+      if (template.productId) {
+        const components = await db.select().from(productComponentsTable)
+          .where(eq(productComponentsTable.parentProductId, template.productId))
+          .orderBy(productComponentsTable.sortOrder);
+        for (const comp of components) {
+          const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+          if (!compProduct) continue;
+          const procedures = await db.select().from(productProceduresTable)
+            .where(eq(productProceduresTable.productId, comp.componentProductId))
+            .orderBy(productProceduresTable.sortOrder);
+          bomComponents.push({ componentProductId: comp.componentProductId, quantity: comp.quantity, name: compProduct.name, procedures, itemType: compProduct.itemType });
+        }
+      }
+
       for (let i = 1; i <= quantity; i++) {
         const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
         const [item] = await db.insert(workProjectItemsTable).values({
@@ -251,6 +267,26 @@ router.post("/projects", requireAdmin, async (req, res) => {
             itemId: item.id, name: "Painting", sortOrder: 1,
             requiresInbound: false,
           });
+        }
+
+        // Create sub-items for each manufactured_part in BOM
+        for (const comp of bomComponents) {
+          if (comp.itemType !== "manufactured_part") continue;
+          for (let q = 1; q <= comp.quantity; q++) {
+            const subName = comp.quantity > 1
+              ? `${itemName} › ${comp.name} #${q}`
+              : `${itemName} › ${comp.name}`;
+            const [subItem] = await db.insert(workProjectItemsTable).values({
+              projectId: project.id, name: subName, sortOrder,
+            }).returning();
+            sortOrder++;
+            for (const proc of comp.procedures) {
+              await db.insert(workItemProceduresTable).values({
+                itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
+                requiresInbound: false,
+              });
+            }
+          }
         }
       }
     }
