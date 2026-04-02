@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Loader2, Package, ChevronDown, ChevronRight, Wrench, ShoppingCart, X, ListPlus } from "lucide-react";
+import { Plus, Trash2, Loader2, Package, ChevronDown, ChevronRight, Wrench, ShoppingCart, X, ListPlus, ArrowUp, ArrowDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -152,6 +152,54 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
     onError: () => toast({ title: "Failed to remove component", variant: "destructive" }),
   });
 
+  const reorderComponentsMutation = useMutation({
+    mutationFn: async (order: { id: number; sortOrder: number }[]) => {
+      await fetch(`/api/products/${productId}/components/reorder`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+    },
+    onSuccess: () => invalidateComponents(),
+    onError: () => toast({ title: "Failed to reorder", variant: "destructive" }),
+  });
+
+  const reorderProceduresMutation = useMutation({
+    mutationFn: async ({ partProductId, order }: { partProductId: number; order: { id: number; sortOrder: number }[] }) => {
+      await fetch(`/api/products/${partProductId}/procedures/reorder`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+    },
+    onSuccess: () => invalidateComponents(),
+    onError: () => toast({ title: "Failed to reorder", variant: "destructive" }),
+  });
+
+  const moveComponent = (index: number, direction: -1 | 1) => {
+    const newComps = [...components];
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= newComps.length) return;
+    const order = newComps.map((c, i) => {
+      if (i === index) return { id: c.id, sortOrder: swapIndex };
+      if (i === swapIndex) return { id: c.id, sortOrder: index };
+      return { id: c.id, sortOrder: i };
+    });
+    reorderComponentsMutation.mutate(order);
+  };
+
+  const moveProcedure = (comp: ComponentEntry, procIndex: number, direction: -1 | 1) => {
+    const newProcs = [...comp.procedures];
+    const swapIndex = procIndex + direction;
+    if (swapIndex < 0 || swapIndex >= newProcs.length) return;
+    const order = newProcs.map((p, i) => {
+      if (i === procIndex) return { id: p.id, sortOrder: swapIndex };
+      if (i === swapIndex) return { id: p.id, sortOrder: procIndex };
+      return { id: p.id, sortOrder: i };
+    });
+    reorderProceduresMutation.mutate({ partProductId: comp.componentProductId, order });
+  };
+
   const addProcedureMutation = useMutation({
     mutationFn: async ({ partProductId, name }: { partProductId: number; name: string }) => {
       const res = await fetch(`/api/products/${partProductId}/procedures`, {
@@ -219,7 +267,7 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
         <p className="text-sm text-muted-foreground italic">No components yet. Add sub-parts below.</p>
       )}
 
-      {components.map((comp) => {
+      {components.map((comp, compIndex) => {
         const isManufactured = comp.product?.itemType === "manufactured_part";
         const isPurchased = comp.product?.itemType === "purchased_part" || comp.product?.itemType === "purchase";
 
@@ -227,6 +275,22 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
           <div key={comp.id} className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40" : "border-orange-200 bg-orange-50/40"}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => moveComponent(compIndex, -1)}
+                    disabled={compIndex === 0 || reorderComponentsMutation.isPending}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                  >
+                    <ArrowUp className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={() => moveComponent(compIndex, 1)}
+                    disabled={compIndex === components.length - 1 || reorderComponentsMutation.isPending}
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                  >
+                    <ArrowDown className="h-3 w-3" />
+                  </button>
+                </div>
                 {isManufactured
                   ? <Wrench className="h-4 w-4 text-blue-600" />
                   : <ShoppingCart className="h-4 w-4 text-orange-600" />}
@@ -252,9 +316,28 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
                 {comp.procedures.length === 0 && (
                   <p className="text-xs text-muted-foreground italic">No procedures defined</p>
                 )}
-                {comp.procedures.map((proc) => (
+                {comp.procedures.map((proc, procIndex) => (
                   <div key={proc.id} className="flex items-center justify-between bg-white rounded px-2 py-1 border border-blue-100">
-                    <span className="text-sm">{proc.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => moveProcedure(comp, procIndex, -1)}
+                          disabled={procIndex === 0 || reorderProceduresMutation.isPending}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none"
+                        >
+                          <ArrowUp className="h-2.5 w-2.5" />
+                        </button>
+                        <button
+                          onClick={() => moveProcedure(comp, procIndex, 1)}
+                          disabled={procIndex === comp.procedures.length - 1 || reorderProceduresMutation.isPending}
+                          className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none"
+                        >
+                          <ArrowDown className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                      <span className="text-xs text-muted-foreground font-mono w-4">{procIndex + 1}.</span>
+                      <span className="text-sm">{proc.name}</span>
+                    </div>
                     <button
                       onClick={() => removeProcedureMutation.mutate({ partProductId: comp.componentProductId, procedureId: proc.id })}
                       className="text-muted-foreground hover:text-destructive p-0.5 rounded"

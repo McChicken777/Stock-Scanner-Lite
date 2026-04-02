@@ -209,6 +209,30 @@ router.delete("/:productId/components/:componentId", requireAdmin, async (req, r
   }
 });
 
+router.put("/:productId/components/reorder", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const parsed = z.object({
+      order: z.array(z.object({ id: z.number().int(), sortOrder: z.number().int() })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    for (const { id, sortOrder } of parsed.data.order) {
+      await db.update(productComponentsTable).set({ sortOrder })
+        .where(and(eq(productComponentsTable.id, id), eq(productComponentsTable.parentProductId, productId)));
+    }
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder components");
+    res.status(500).json({ error: "Failed to reorder components" });
+  }
+});
+
 // ─── PRODUCT PROCEDURES (for manufactured_parts) ───────────────────────────────
 
 router.get("/:productId/procedures", requireAuth, async (req, res) => {
@@ -237,12 +261,18 @@ router.post("/:productId/procedures", requireAdmin, async (req, res) => {
       .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
     if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1),
+      sortOrder: z.number().int().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const existing = await db.select().from(productProceduresTable)
-      .where(eq(productProceduresTable.productId, productId));
-    const sortOrder = existing.length;
+    let sortOrder = parsed.data.sortOrder;
+    if (sortOrder === undefined) {
+      const existing = await db.select().from(productProceduresTable)
+        .where(eq(productProceduresTable.productId, productId));
+      sortOrder = existing.length;
+    }
 
     const [proc] = await db.insert(productProceduresTable).values({
       productId, name: parsed.data.name, sortOrder,
@@ -251,6 +281,30 @@ router.post("/:productId/procedures", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to add procedure");
     res.status(500).json({ error: "Failed to add procedure" });
+  }
+});
+
+router.put("/:productId/procedures/reorder", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const parsed = z.object({
+      order: z.array(z.object({ id: z.number().int(), sortOrder: z.number().int() })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    for (const { id, sortOrder } of parsed.data.order) {
+      await db.update(productProceduresTable).set({ sortOrder })
+        .where(and(eq(productProceduresTable.id, id), eq(productProceduresTable.productId, productId)));
+    }
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder procedures");
+    res.status(500).json({ error: "Failed to reorder procedures" });
   }
 });
 
