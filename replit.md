@@ -96,10 +96,12 @@ Set these environment variables to enable email alerts:
 - **Worker**: can view and update stock, scan QR codes, view history and dashboard, view/start/stop work order procedures; cannot manage products or users
 
 ### Work Orders Module
-- **Templates**: admin-configurable item blueprints with predefined procedures (Welding, Painting, CNC, etc.); each procedure can optionally have `requiresInbound` flag
-- **Projects**: work orders with name, deadline, priority, status, RAL paint color, `requiresExternalParts` flag. Created by copying templates.
-- **Items**: project items (copied from templates), each with procedures, per-item paint color override
-- **Procedures**: individual tasks with start/stop timer, status tracking (not_started/in_progress/completed); procedures with `requiresInbound=true` are blocked until inbound status is arrived/stored/in_production
+- **Templates**: simple item blueprints (names only); when created, automatically generates a `final_product` with matching name
+- **Projects**: work orders with name, deadline, priority, status, RAL paint color, `requiresExternalParts` flag, and `includePainting` toggle
+- **Items**: project items created from templates; always include Sandblasting; conditionally include Painting if `includePainting=true`
+- **Auto Procedures**: every project item gets Sandblasting (sortOrder=0) and optionally Painting (sortOrder=1) based on project config
+- **Default**: Sandblasting always included; Painting optional per project
+- **Manual Add**: when adding items to existing project, Sandblasting always added (Painting requires re-creating project)
 - **Progress**: item progress = completed procedures / total; project progress = total across all items
 - **Urgency**: < 2 days = red (critical), < 5 days = orange (warning), else green
 - **Timer**: one active timer per user at a time; server enforces this
@@ -115,13 +117,12 @@ Set these environment variables to enable email alerts:
 - **Role**: all users can view and Unload; only admins can Route and Delete
 
 ### Work Order DB Tables
-- `work_templates` — id, name, company_id, created_at
-- `work_template_procedures` — id, template_id, name, sort_order, requires_inbound (bool)
+- `work_templates` — id, name, product_id (FK to final_product), company_id, created_at
 - `work_projects` — id, name, deadline, priority, status, paint_color, requires_external_parts (bool), company_id, created_at
 - `work_project_items` — id, project_id, name, paint_color, sort_order
 - `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds, requires_inbound (bool)
 - `work_time_logs` — id, procedure_id, user_id, start_time, end_time, duration_seconds
-- `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, received_at, notes, company_id, created_at
+- `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, procedure_id (FK), received_at, notes, company_id, created_at
 
 ### Item Type System
 Three distinct item types replacing the old purchase/production binary:

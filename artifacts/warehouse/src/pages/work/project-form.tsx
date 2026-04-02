@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 interface Template {
   id: number;
   name: string;
-  procedures: { id: number; name: string; sortOrder: number }[];
 }
 
 interface TemplateItem {
@@ -81,6 +80,7 @@ export default function WorkProjectFormPage() {
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [paintColor, setPaintColor] = useState("");
   const [requiresExternalParts, setRequiresExternalParts] = useState(false);
+  const [includePainting, setIncludePainting] = useState(false);
   const [templateItems, setTemplateItems] = useState<TemplateItem[]>([]);
 
   const { data: templates = [], isLoading } = useQuery({
@@ -89,7 +89,7 @@ export default function WorkProjectFormPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; deadline: string; priority: string; paintColor: string | null; requiresExternalParts: boolean; templateItems: TemplateItem[] }) => {
+    mutationFn: async (data: { name: string; deadline: string; priority: string; paintColor: string | null; requiresExternalParts: boolean; includePainting: boolean; templateItems: TemplateItem[] }) => {
       const res = await fetch("/api/work/projects", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -214,6 +214,25 @@ export default function WorkProjectFormPage() {
           </div>
         </div>
 
+        {/* Include Painting */}
+        <div
+          className={`rounded-xl border-2 p-4 flex items-start gap-3 cursor-pointer transition-all ${includePainting ? "border-purple-400 bg-purple-50" : "border-border bg-muted/20"}`}
+          onClick={() => setIncludePainting((v) => !v)}
+        >
+          <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${includePainting ? "bg-purple-500 border-purple-500" : "border-muted-foreground/40 bg-background"}`}>
+            {includePainting && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <Palette className={`h-4 w-4 ${includePainting ? "text-purple-600" : "text-muted-foreground"}`} />
+              <p className={`font-bold text-sm ${includePainting ? "text-purple-700" : "text-foreground"}`}>Include Painting Step</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Adds painting as a final optional step. Sandblasting is always included.
+            </p>
+          </div>
+        </div>
+
         {/* Template selection with quantity */}
         <div className="space-y-3">
           <Label className="text-sm font-bold">Select Items to Produce</Label>
@@ -248,7 +267,7 @@ export default function WorkProjectFormPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-bold">{template.name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {template.procedures.length} step{template.procedures.length !== 1 ? "s" : ""}: {template.procedures.map((p) => p.name).join(", ")}
+                          Final product • Sandblasting {includePainting ? "+ Painting" : "only"}
                         </p>
                       </div>
                     </label>
@@ -314,6 +333,7 @@ export default function WorkProjectFormPage() {
             name: name.trim(), deadline, priority,
             paintColor: paintColor || null,
             requiresExternalParts,
+            includePainting,
             templateItems,
           })}
           disabled={!canSubmit || createMutation.isPending}

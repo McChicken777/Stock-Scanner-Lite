@@ -14,13 +14,7 @@ router.get("/templates", requireAuth, async (req, res) => {
     const templates = await db.select().from(workTemplatesTable)
       .where(eq(workTemplatesTable.companyId, companyId))
       .orderBy(workTemplatesTable.name);
-    const procedures = await db.select().from(workTemplateProceduresTable)
-      .orderBy(workTemplateProceduresTable.sortOrder);
-    const result = templates.map((t) => ({
-      ...t,
-      procedures: procedures.filter((p) => p.templateId === t.id),
-    }));
-    res.json(result);
+    res.json(templates);
   } catch (err) {
     req.log.error({ err }, "Failed to list templates");
     res.status(500).json({ error: "Failed to list templates" });
@@ -33,11 +27,11 @@ router.post("/templates", requireAdmin, async (req, res) => {
     const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
 
-    // Auto-create a matching product as manufactured_part
+    // Auto-create a final_product
     const [product] = await db.insert(productsTable).values({
       name: parsed.data.name,
       category: "",
-      itemType: "manufactured_part",
+      itemType: "final_product",
       bufferStock: 0,
       targetStock: 0,
       companyId,
@@ -48,7 +42,7 @@ router.post("/templates", requireAdmin, async (req, res) => {
       companyId,
       productId: product.id,
     }).returning();
-    res.status(201).json({ ...t, procedures: [], productId: product.id });
+    res.status(201).json({ ...t, productId: product.id });
   } catch (err) {
     req.log.error({ err }, "Failed to create template");
     res.status(500).json({ error: "Failed to create template" });
@@ -179,6 +173,7 @@ const createProjectSchema = z.object({
   priority: z.enum(["low", "medium", "high"]),
   paintColor: z.string().nullable().optional(),
   requiresExternalParts: z.boolean().optional().default(false),
+  includePainting: z.boolean().optional().default(false),
   templateItems: z.array(z.object({
     templateId: z.number().int(),
     quantity: z.number().int().min(1).max(100),
@@ -225,7 +220,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const { name, deadline, priority, paintColor, requiresExternalParts, templateItems } = parsed.data;
+    const { name, deadline, priority, paintColor, requiresExternalParts, includePainting, templateItems } = parsed.data;
 
     const [project] = await db.insert(workProjectsTable).values({
       name, deadline: new Date(deadline), priority, paintColor: paintColor ?? null,
@@ -237,10 +232,6 @@ router.post("/projects", requireAdmin, async (req, res) => {
       const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
       if (!template) continue;
 
-      const templateProcs = await db.select().from(workTemplateProceduresTable)
-        .where(eq(workTemplateProceduresTable.templateId, templateId))
-        .orderBy(workTemplateProceduresTable.sortOrder);
-
       for (let i = 1; i <= quantity; i++) {
         const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
         const [item] = await db.insert(workProjectItemsTable).values({
@@ -248,10 +239,17 @@ router.post("/projects", requireAdmin, async (req, res) => {
         }).returning();
         sortOrder++;
 
-        for (const proc of templateProcs) {
+        // Always add Sandblasting (required final step)
+        await db.insert(workItemProceduresTable).values({
+          itemId: item.id, name: "Sandblasting", sortOrder: 0,
+          requiresInbound: false,
+        });
+
+        // Conditionally add Painting if requested
+        if (includePainting) {
           await db.insert(workItemProceduresTable).values({
-            itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
-            requiresInbound: proc.requiresInbound,
+            itemId: item.id, name: "Painting", sortOrder: 1,
+            requiresInbound: false,
           });
         }
       }
@@ -344,10 +342,6 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
     const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
     if (!template) { res.status(404).json({ error: "Template not found" }); return; }
 
-    const templateProcs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
-
     // Get current max sort order
     const existingItems = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));
     let sortOrder = existingItems.length;
@@ -360,11 +354,12 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
       }).returning();
       sortOrder++;
 
-      for (const proc of templateProcs) {
-        await db.insert(workItemProceduresTable).values({
-          itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
-        });
-      }
+      // Always add Sandblasting
+      await db.insert(workItemProceduresTable).values({
+        itemId: item.id, name: "Sandblasting", sortOrder: 0,
+        requiresInbound: false,
+      });
+
       newItems.push(item);
     }
 
