@@ -48,6 +48,11 @@ function UserMenu() {
         )}
         {user.role === "admin" && (
           <>
+            <Link href="/admin/dashboard">
+              <DropdownMenuItem className="cursor-pointer font-semibold text-blue-600 focus:text-blue-600">
+                <LayoutDashboard className="mr-2 h-4 w-4" /> Admin Dashboard
+              </DropdownMenuItem>
+            </Link>
             <Link href="/admin/users">
               <DropdownMenuItem className="cursor-pointer">
                 <ShieldCheck className="mr-2 h-4 w-4" /> Manage Users

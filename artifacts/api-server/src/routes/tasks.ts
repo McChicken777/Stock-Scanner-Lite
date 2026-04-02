@@ -255,6 +255,7 @@ router.get("/tasks", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const userId = req.session.userId!;
+    const isAdmin = req.session.role === "admin";
     
     // Get user's roles with priority
     const userRoles = await db.select({ roleId: userRolesTable.roleId, priority: userRolesTable.priority })
@@ -262,7 +263,8 @@ router.get("/tasks", requireAuth, async (req, res) => {
       .where(eq(userRolesTable.userId, userId));
     const roleIds = userRoles.map((r) => r.roleId);
     
-    if (roleIds.length === 0) {
+    // If not admin and has no roles, return empty
+    if (!isAdmin && roleIds.length === 0) {
       res.json([]);
       return;
     }
@@ -274,7 +276,7 @@ router.get("/tasks", requireAuth, async (req, res) => {
       priorityMap.set(ur.roleId, priorityOrder[ur.priority as keyof typeof priorityOrder]);
     });
 
-    // Get tasks for user's roles
+    // Get tasks for user's roles (or all tasks if admin)
     const tasks = await db.select({
       task: tasksTable,
       procedureName: proceduresTable.name,
@@ -285,10 +287,14 @@ router.get("/tasks", requireAuth, async (req, res) => {
       .innerJoin(proceduresTable, eq(tasksTable.procedureId, proceduresTable.id))
       .innerJoin(workProjectItemsTable, eq(tasksTable.itemId, workProjectItemsTable.id))
       .innerJoin(rolesTable, eq(proceduresTable.roleId, rolesTable.id))
-      .where(and(
-        eq(tasksTable.companyId, companyId),
-        inArray(proceduresTable.roleId, roleIds),
-      ));
+      .where(
+        isAdmin
+          ? eq(tasksTable.companyId, companyId)
+          : and(
+              eq(tasksTable.companyId, companyId),
+              inArray(proceduresTable.roleId, roleIds),
+            )
+      );
 
     // Compute READY/BLOCKED status for each task
     const tasksWithStatus = await Promise.all(tasks.map(async (t) => {
@@ -362,11 +368,13 @@ router.get("/tasks", requireAuth, async (req, res) => {
       };
     }));
 
-    // Sort by role priority, then READY first, then status, then createdAt
+    // Sort by role priority (for workers), then READY first, then status, then createdAt
     const sorted = tasksWithStatus.sort((a, b) => {
-      const aPriority = priorityMap.get(a.roleId) ?? 999;
-      const bPriority = priorityMap.get(b.roleId) ?? 999;
-      if (aPriority !== bPriority) return aPriority - bPriority;
+      if (!isAdmin) {
+        const aPriority = priorityMap.get(a.roleId) ?? 999;
+        const bPriority = priorityMap.get(b.roleId) ?? 999;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+      }
       
       const readyOrder = { READY: 0, BLOCKED: 1 };
       const aReadyOrder = readyOrder[a.readyStatus as keyof typeof readyOrder];
