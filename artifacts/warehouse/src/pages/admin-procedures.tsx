@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, Settings } from "lucide-react";
 import { Link } from "wouter";
 import {
   Select,
@@ -108,18 +108,30 @@ export default function AdminProceduresPage() {
                 <p className="font-medium">{proc.name}</p>
                 <p className="text-xs text-muted-foreground">Role: {proc.roleName}</p>
               </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  if (confirm(`Delete "${proc.name}"?`)) {
-                    deleteMutation.mutate(proc.id);
-                  }
-                }}
-                className="text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-1">
+                <Link href={`/admin/procedure-inputs/${proc.id}`}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-blue-600"
+                    title="Manage inputs"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    if (confirm(`Delete "${proc.name}"?`)) {
+                      deleteMutation.mutate(proc.id);
+                    }
+                  }}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>

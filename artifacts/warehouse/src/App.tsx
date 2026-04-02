@@ -17,6 +17,7 @@ import AdminUsersPage from "@/pages/admin-users";
 import AdminCompanyPage from "@/pages/admin-company";
 import AdminRolesPage from "@/pages/admin-roles";
 import AdminProceduresPage from "@/pages/admin-procedures";
+import AdminProcedureInputsPage from "@/pages/admin-procedure-inputs";
 import OwnerPanelPage from "@/pages/owner-panel";
 import TasksDashboardPage from "@/pages/tasks-dashboard";
 import LoginPage from "@/pages/login";
@@ -78,6 +79,7 @@ function ProtectedRoutes() {
         <Route path="/admin/company" component={AdminCompanyPage} />
         <Route path="/admin/roles" component={AdminRolesPage} />
         <Route path="/admin/procedures" component={AdminProceduresPage} />
+        <Route path="/admin/procedure-inputs/:procId" component={AdminProcedureInputsPage} />
         <Route path="/owner" component={OwnerPanelPage} />
         <Route path="/tasks" component={TasksDashboardPage} />
 

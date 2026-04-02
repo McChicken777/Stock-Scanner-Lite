@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Play, CheckCircle2, Circle } from "lucide-react";
+import { Play, CheckCircle2, Circle, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Task {
@@ -16,6 +16,8 @@ interface Task {
   procedureName: string;
   itemName: string;
   roleName: string;
+  readyStatus: "READY" | "BLOCKED";
+  blockedReason: string;
 }
 
 async function fetchTasks(): Promise<Task[]> {
@@ -69,7 +71,8 @@ export default function TasksDashboardPage() {
     onError: () => toast({ title: "Failed", variant: "destructive" }),
   });
 
-  const notStarted = tasks.filter((t) => t.status === "not_started");
+  const ready = tasks.filter((t) => t.readyStatus === "READY" && t.status === "not_started");
+  const blocked = tasks.filter((t) => t.readyStatus === "BLOCKED" && t.status === "not_started");
   const inProgress = tasks.filter((t) => t.status === "in_progress");
   const completed = tasks.filter((t) => t.status === "completed");
 
@@ -106,11 +109,11 @@ export default function TasksDashboardPage() {
             </div>
           )}
 
-          {notStarted.length > 0 && (
+          {ready.length > 0 && (
             <div className="space-y-2">
-              <h2 className="text-sm font-bold uppercase text-muted-foreground">Ready to Start</h2>
-              {notStarted.map((task) => (
-                <div key={task.id} className="bg-card border-2 border-border rounded-lg p-3 space-y-2">
+              <h2 className="text-sm font-bold uppercase text-green-600">Ready to Start</h2>
+              {ready.map((task) => (
+                <div key={task.id} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 space-y-2">
                   <p className="font-bold">{task.procedureName}</p>
                   <p className="text-sm text-muted-foreground">{task.itemName}</p>
                   <Button
@@ -121,6 +124,24 @@ export default function TasksDashboardPage() {
                   >
                     <Play className="h-4 w-4 mr-1" /> Start Task
                   </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {blocked.length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-bold uppercase text-red-600">Blocked</h2>
+              {blocked.map((task) => (
+                <div key={task.id} className="bg-red-50 border-2 border-red-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-bold">{task.procedureName}</p>
+                      <p className="text-sm text-muted-foreground">{task.itemName}</p>
+                      <p className="text-xs text-red-700 mt-1 font-medium">{task.blockedReason}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -141,6 +162,12 @@ export default function TasksDashboardPage() {
           {tasks.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p>No tasks assigned to your roles</p>
+            </div>
+          )}
+          
+          {ready.length === 0 && blocked.length === 0 && inProgress.length === 0 && tasks.length > 0 && (
+            <div className="text-center py-6 text-muted-foreground">
+              <p>All tasks completed! 🎉</p>
             </div>
           )}
         </div>

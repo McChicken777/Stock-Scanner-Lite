@@ -1,0 +1,138 @@
+Add a READY / BLOCKED system with procedure inputs for production tasks.
+
+IMPORTANT:
+- Build on top of existing tasks, procedures, and roles
+- Keep logic simple and stable
+- No deep recursion or complex BOM
+- Must respect multi-company setup
+
+--------------------------------------------------
+1. PROCEDURE INPUTS
+--------------------------------------------------
+
+Create ProcedureInputs table:
+
+- id
+- procedure_id
+- item_id (required item or material)
+- quantity_required
+- company_id
+
+This defines what each procedure needs before it can start.
+
+--------------------------------------------------
+2. TASK STATUS UPGRADE
+--------------------------------------------------
+
+Extend task logic:
+
+Each task should have a computed status:
+
+- READY
+- BLOCKED
+
+(Keep original status: not_started, in_progress, completed)
+
+--------------------------------------------------
+3. READY / BLOCKED LOGIC
+--------------------------------------------------
+
+A task is READY only if:
+
+1. All previous procedures (lower order_index) are completed
+2. All required inputs are available
+
+Otherwise:
+- task = BLOCKED
+
+--------------------------------------------------
+4. INPUT AVAILABILITY CHECK
+--------------------------------------------------
+
+For each required input:
+
+Check:
+
+IF item_type = "purchase":
+    check inventory stock
+
+IF item_type = "production":
+    check if related production task is completed
+
+If any input is missing:
+- task = BLOCKED
+
+--------------------------------------------------
+5. BLOCKED REASON (VERY IMPORTANT)
+--------------------------------------------------
+
+For blocked tasks, store/display reason:
+
+Examples:
+- "Missing: Steel rod (10)"
+- "Waiting for bearings (CNC not completed)"
+
+Keep messages simple and clear.
+
+--------------------------------------------------
+6. DASHBOARD UPDATE
+--------------------------------------------------
+
+Update user dashboard:
+
+Show tasks grouped into:
+
+- READY
+- BLOCKED
+
+For BLOCKED tasks:
+- display reason
+
+--------------------------------------------------
+7. PREVENT STARTING BLOCKED TASKS
+--------------------------------------------------
+
+If task is BLOCKED:
+- user cannot start it
+
+Show message explaining why.
+
+--------------------------------------------------
+8. SIMPLE AUTOMATION LINK
+--------------------------------------------------
+
+If a required item is missing:
+
+- IF item_type = purchase:
+    ensure it appears in restock calculation
+
+- IF item_type = production:
+    ensure corresponding task exists
+
+(No complex automation yet, just connection)
+
+--------------------------------------------------
+9. ADMIN UI
+--------------------------------------------------
+
+Allow admin to:
+
+- define inputs for each procedure
+- set quantity_required
+
+Keep UI simple (list of required items per procedure)
+
+--------------------------------------------------
+10. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure all data is filtered by company_id
+
+--------------------------------------------------
+11. IMPORTANT
+--------------------------------------------------
+
+- No recursive dependencies
+- Only check one level deep
+- Keep performance fast
+- Focus on clarity for workers

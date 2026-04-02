@@ -124,19 +124,26 @@ Set these environment variables to enable email alerts:
 - `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, received_at, notes, company_id, created_at
 
 ### Flexible Tasks System (New)
-- **Roles**: Company-scoped production roles (Welding, CNC, Sandblasting, etc.). Users can have multiple roles.
+- **Roles**: Company-scoped production roles (Welding, CNC, Sandblasting, etc.). Users can have multiple roles with priority (primary/secondary/substitution).
 - **Procedures**: Admin-defined production procedures assigned to a role. Procedures are company-scoped with order_index to define sequence.
 - **Item Procedures**: Link procedures to project items. Each item can have different procedures in different orders.
 - **Tasks**: Generated when project is created. Each task = (item, procedure) pair with status tracking.
-- **Task Flow**: User sees only tasks for their assigned roles. Tasks can't start until previous procedures (lower order_index) are completed.
+- **Task Flow**: User sees only tasks for their assigned roles, sorted by role priority (primary first).
+- **Ready/Blocked Status**: Each task computes READY or BLOCKED status:
+  - **READY**: all previous procedures completed AND all required inputs available
+  - **BLOCKED**: waiting for previous procedures OR missing required inputs (shows reason)
+- **Procedure Inputs**: Define what each procedure needs (purchase items or production items)
+  - Purchase items: blocks task if stock < required quantity
+  - Production items: blocks task if related production task not completed
 - **Inbound Block**: If procedure.requires_inbound = true, task is blocked until inbound status != "expected".
 
 ### Tasks DB Tables
 - `roles` — id, name, company_id, created_at
-- `user_roles` — user_id, role_id (many-to-many)
+- `user_roles` — user_id, role_id, priority (primary/secondary/substitution)
 - `procedures` — id, name, role_id (FK), order_index, requires_inbound (bool), company_id, created_at
 - `item_procedures` — item_id, procedure_id, order_index, company_id
 - `tasks` — id, project_id, item_id, procedure_id, status (not_started/in_progress/completed), company_id, created_at
+- `procedure_inputs` — id, procedure_id, item_id (FK to products), quantity_required, company_id, created_at
 
 ## TypeScript & Composite Projects
 

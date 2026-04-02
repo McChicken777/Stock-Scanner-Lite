@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, integer, serial, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
+import { productsTable } from "./products";
 
 export const workPriorityEnum = pgEnum("work_priority", ["low", "medium", "high"]);
 export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress", "completed"]);
@@ -113,6 +114,16 @@ export const tasksTable = pgTable("tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Procedure inputs: what items are required for a procedure
+export const procedureInputsTable = pgTable("procedure_inputs", {
+  id: serial("id").primaryKey(),
+  procedureId: integer("procedure_id").notNull().references(() => proceduresTable.id, { onDelete: "cascade" }),
+  itemId: integer("item_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
+  quantityRequired: integer("quantity_required").notNull().default(1),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
 export type WorkTemplateProcedure = typeof workTemplateProceduresTable.$inferSelect;
 export type WorkProject = typeof workProjectsTable.$inferSelect;
@@ -124,3 +135,4 @@ export type UserRole = typeof userRolesTable.$inferSelect;
 export type Procedure = typeof proceduresTable.$inferSelect;
 export type ItemProcedure = typeof itemProceduresTable.$inferSelect;
 export type Task = typeof tasksTable.$inferSelect;
+export type ProcedureInput = typeof procedureInputsTable.$inferSelect;
