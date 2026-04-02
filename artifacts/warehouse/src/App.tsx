@@ -49,12 +49,18 @@ function ProtectedRoutes() {
     return <LoginPage />;
   }
 
+  // Owner sees only the panel
+  if (user.role === "owner") {
+    return (
+      <AppLayout>
+        <OwnerPanelPage />
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <Switch>
-        {/* Owner redirect */}
-        {user.role === "owner" && <Route path="/" component={() => { window.location.replace("/owner"); return null; }} />}
-
         {/* Inventory */}
         <Route path="/" component={Dashboard} />
         <Route path="/scan" component={ScanPage} />
