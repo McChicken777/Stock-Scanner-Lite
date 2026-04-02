@@ -144,36 +144,39 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
 
   const removeComponentMutation = useMutation({
     mutationFn: async (componentId: number) => {
-      await fetch(`/api/products/${productId}/components/${componentId}`, {
+      const res = await fetch(`/api/products/${productId}/components/${componentId}`, {
         method: "DELETE", credentials: "include",
       });
+      if (!res.ok) throw new Error("Failed to remove component");
     },
     onSuccess: () => { invalidateComponents(); toast({ title: "Component removed" }); },
-    onError: () => toast({ title: "Failed to remove component", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const reorderComponentsMutation = useMutation({
     mutationFn: async (order: { id: number; sortOrder: number }[]) => {
-      await fetch(`/api/products/${productId}/components/reorder`, {
+      const res = await fetch(`/api/products/${productId}/components/reorder`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order }),
       });
+      if (!res.ok) throw new Error("Failed to reorder components");
     },
     onSuccess: () => invalidateComponents(),
-    onError: () => toast({ title: "Failed to reorder", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const reorderProceduresMutation = useMutation({
     mutationFn: async ({ partProductId, order }: { partProductId: number; order: { id: number; sortOrder: number }[] }) => {
-      await fetch(`/api/products/${partProductId}/procedures/reorder`, {
+      const res = await fetch(`/api/products/${partProductId}/procedures/reorder`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order }),
       });
+      if (!res.ok) throw new Error("Failed to reorder procedures");
     },
     onSuccess: () => invalidateComponents(),
-    onError: () => toast({ title: "Failed to reorder", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const moveComponent = (index: number, direction: -1 | 1) => {
@@ -224,12 +227,13 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
 
   const removeProcedureMutation = useMutation({
     mutationFn: async ({ partProductId, procedureId }: { partProductId: number; procedureId: number }) => {
-      await fetch(`/api/products/${partProductId}/procedures/${procedureId}`, {
+      const res = await fetch(`/api/products/${partProductId}/procedures/${procedureId}`, {
         method: "DELETE", credentials: "include",
       });
+      if (!res.ok) throw new Error("Failed to remove procedure");
     },
     onSuccess: () => { invalidateComponents(); toast({ title: "Procedure removed" }); },
-    onError: () => toast({ title: "Failed to remove procedure", variant: "destructive" }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const manufactureParts = allProducts.filter((p) => p.itemType === "manufactured_part");
@@ -275,40 +279,44 @@ function TemplateBOM({ template, allProducts }: { template: Template; allProduct
           <div key={comp.id} className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40" : "border-orange-200 bg-orange-50/40"}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="flex flex-col">
-                  <button
-                    onClick={() => moveComponent(compIndex, -1)}
-                    disabled={compIndex === 0 || reorderComponentsMutation.isPending}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
-                  >
-                    <ArrowUp className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={() => moveComponent(compIndex, 1)}
-                    disabled={compIndex === components.length - 1 || reorderComponentsMutation.isPending}
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
-                  >
-                    <ArrowDown className="h-3 w-3" />
-                  </button>
-                </div>
+                {isManufactured && (
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => moveComponent(compIndex, -1)}
+                      disabled={compIndex === 0 || reorderComponentsMutation.isPending}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => moveComponent(compIndex, 1)}
+                      disabled={compIndex === components.length - 1 || reorderComponentsMutation.isPending}
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
                 {isManufactured
                   ? <Wrench className="h-4 w-4 text-blue-600" />
                   : <ShoppingCart className="h-4 w-4 text-orange-600" />}
                 <span className="font-bold text-sm">{comp.product?.name ?? "Unknown"}</span>
                 <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isManufactured ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
-                  {isManufactured ? "Manufactured" : "Purchased"}
+                  {isManufactured ? "Manufactured" : "Purchased · reference only"}
                 </span>
                 {comp.quantity > 1 && (
                   <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">×{comp.quantity}</span>
                 )}
               </div>
-              <button
-                onClick={() => removeComponentMutation.mutate(comp.id)}
-                disabled={removeComponentMutation.isPending}
-                className="text-destructive hover:text-destructive/80 p-1 rounded"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              {isManufactured && (
+                <button
+                  onClick={() => removeComponentMutation.mutate(comp.id)}
+                  disabled={removeComponentMutation.isPending}
+                  className="text-destructive hover:text-destructive/80 p-1 rounded"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             {isManufactured && (
@@ -586,11 +594,14 @@ export default function WorkTemplatesPage() {
             const isExpanded = expandedId === template.id;
             return (
               <div key={template.id} className="bg-card border-2 border-border rounded-xl overflow-hidden">
-                <button
-                  className="w-full flex items-center justify-between p-4 text-left hover:bg-muted/30 transition-colors"
-                  onClick={() => setExpandedId(isExpanded ? null : template.id)}
-                >
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                  <div
+                    className="flex items-center gap-3 flex-1 cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setExpandedId(isExpanded ? null : template.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpandedId(isExpanded ? null : template.id); }}
+                  >
                     {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                     <div>
                       <h3 className="font-bold text-base">{template.name}</h3>
@@ -598,9 +609,8 @@ export default function WorkTemplatesPage() {
                     </div>
                   </div>
                   <button
-                    className="p-2 text-destructive hover:text-destructive/80 hover:bg-destructive/10 rounded-lg z-10"
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    className="p-2 text-destructive hover:text-destructive/80 hover:bg-destructive/10 rounded-lg"
+                    onClick={() => {
                       if (confirm(`Delete template "${template.name}"?`)) {
                         deleteTemplate.mutate(template.id);
                         if (expandedId === template.id) setExpandedId(null);
@@ -609,7 +619,7 @@ export default function WorkTemplatesPage() {
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
-                </button>
+                </div>
 
                 {isExpanded && (
                   <div className="border-t-2 border-border">
