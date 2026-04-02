@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
+import type { CompanyFeatures } from "@workspace/db";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session?.userId) {
-    req.log.warn({ session: req.session, cookies: req.cookies }, "Auth failed - no userId in session");
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
@@ -19,4 +19,14 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return;
   }
   next();
+}
+
+export function requireFeature(feature: keyof CompanyFeatures) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session?.features?.[feature]) {
+      res.status(403).json({ error: `Feature "${feature}" is not enabled for your plan` });
+      return;
+    }
+    next();
+  };
 }

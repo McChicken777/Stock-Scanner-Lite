@@ -1,5 +1,6 @@
 import { pgTable, text, timestamp, integer, serial, pgEnum } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
+import { companiesTable } from "./companies";
 
 export const workPriorityEnum = pgEnum("work_priority", ["low", "medium", "high"]);
 export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress", "completed"]);
@@ -9,6 +10,7 @@ export const workProcedureStatusEnum = pgEnum("work_procedure_status", ["not_sta
 export const workTemplatesTable = pgTable("work_templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -27,6 +29,8 @@ export const workProjectsTable = pgTable("work_projects", {
   deadline: timestamp("deadline").notNull(),
   priority: workPriorityEnum("priority").notNull().default("medium"),
   status: workProjectStatusEnum("status").notNull().default("in_progress"),
+  paintColor: text("paint_color"),
+  companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -35,6 +39,7 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => workProjectsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  paintColor: text("paint_color"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
 

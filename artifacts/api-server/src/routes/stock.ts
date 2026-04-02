@@ -9,6 +9,12 @@ const router: IRouter = Router();
 router.get("/:locationId", async (req, res) => {
   try {
     const { locationId } = req.params;
+    const companyId = req.session.companyId!;
+    // Verify location belongs to this company
+    const [location] = await db.select().from(locationsTable)
+      .where(and(eq(locationsTable.id, locationId), eq(locationsTable.companyId, companyId)));
+    if (!location) { res.status(404).json({ error: "Location not found" }); return; }
+
     const stock = await db
       .select({
         locationId: stockTable.locationId,
@@ -20,7 +26,7 @@ router.get("/:locationId", async (req, res) => {
       })
       .from(stockTable)
       .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
-      .where(eq(stockTable.locationId, locationId));
+      .where(and(eq(stockTable.locationId, locationId), eq(productsTable.companyId, companyId)));
     res.json(stock);
   } catch (err) {
     req.log.error({ err }, "Failed to get stock at location");
@@ -38,6 +44,7 @@ router.put("/:locationId/:productId", async (req, res) => {
   try {
     const { locationId } = req.params;
     const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
 
     const parsed = updateStockSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -52,17 +59,13 @@ router.put("/:locationId/:productId", async (req, res) => {
       return;
     }
 
-    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
-    if (!product) {
-      res.status(404).json({ error: "Product not found" });
-      return;
-    }
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-    const [location] = await db.select().from(locationsTable).where(eq(locationsTable.id, locationId));
-    if (!location) {
-      res.status(404).json({ error: "Location not found" });
-      return;
-    }
+    const [location] = await db.select().from(locationsTable)
+      .where(and(eq(locationsTable.id, locationId), eq(locationsTable.companyId, companyId)));
+    if (!location) { res.status(404).json({ error: "Location not found" }); return; }
 
     const [existingStock] = await db
       .select()
@@ -84,13 +87,10 @@ router.put("/:locationId/:productId", async (req, res) => {
     }
 
     if (newQuantity === 0) {
-      // Delete stock entry if quantity reaches 0
-      await db
-        .delete(stockTable)
+      await db.delete(stockTable)
         .where(and(eq(stockTable.locationId, locationId), eq(stockTable.productId, productId)));
     } else if (existingStock) {
-      await db
-        .update(stockTable)
+      await db.update(stockTable)
         .set({ quantity: newQuantity })
         .where(and(eq(stockTable.locationId, locationId), eq(stockTable.productId, productId)));
     } else {
@@ -105,6 +105,7 @@ router.put("/:locationId/:productId", async (req, res) => {
       newQuantity,
       delta: actualDelta,
       changedBy: changedBy ?? null,
+      companyId,
     });
 
     const [totalRow] = await db
@@ -116,7 +117,7 @@ router.put("/:locationId/:productId", async (req, res) => {
     const isLowStock = totalStock < product.bufferStock;
 
     let alertSent = false;
-    if (isLowStock && product.alertEmail && actualDelta <= 0) {
+    if (isLowStock && product.alertEmail && actualDelta <= 0 && req.session.features?.alerts) {
       alertSent = await sendLowStockAlert({
         productName: product.name,
         category: product.category,

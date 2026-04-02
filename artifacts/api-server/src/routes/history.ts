@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, historyTable, productsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -19,8 +19,9 @@ router.get("/", async (req, res) => {
       return;
     }
     const { productId, locationId, limit } = parsed.data;
+    const companyId = req.session.companyId!;
 
-    let query = db
+    const entries = await db
       .select({
         id: historyTable.id,
         locationId: historyTable.locationId,
@@ -34,18 +35,15 @@ router.get("/", async (req, res) => {
       })
       .from(historyTable)
       .innerJoin(productsTable, eq(historyTable.productId, productsTable.id))
+      .where(and(
+        eq(historyTable.companyId, companyId),
+        ...(productId ? [eq(historyTable.productId, productId)] : []),
+        ...(locationId ? [eq(historyTable.locationId, locationId)] : []),
+      ))
       .orderBy(desc(historyTable.changedAt))
       .limit(limit);
 
-    const entries = await query;
-
-    const filtered = entries.filter((e) => {
-      if (productId && e.productId !== productId) return false;
-      if (locationId && e.locationId !== locationId) return false;
-      return true;
-    });
-
-    res.json(filtered);
+    res.json(entries);
   } catch (err) {
     req.log.error({ err }, "Failed to list history");
     res.status(500).json({ error: "Failed to list history" });

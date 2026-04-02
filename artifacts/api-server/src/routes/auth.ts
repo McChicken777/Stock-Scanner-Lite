@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, companiesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
+import type { CompanyFeatures } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -34,11 +35,30 @@ router.post("/login", async (req, res) => {
       return;
     }
 
+    // Load company features
+    let features: CompanyFeatures = {
+      inventory: true, alerts: true, work_orders: true,
+      progress_tracking: true, deadline_alerts: true, time_tracking: true,
+    };
+
+    if (user.companyId) {
+      const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, user.companyId));
+      if (company) features = company.features as CompanyFeatures;
+    }
+
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.role = user.role;
+    req.session.companyId = user.companyId ?? 0;
+    req.session.features = features;
 
-    res.json({ id: user.id, username: user.username, role: user.role });
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      companyId: user.companyId,
+      features,
+    });
   } catch (err) {
     req.log.error({ err }, "Login failed");
     res.status(500).json({ error: "Login failed" });
@@ -53,18 +73,32 @@ router.post("/logout", (req, res) => {
 });
 
 router.get("/me", requireAuth, async (req, res) => {
+  // Refresh features from DB each time /me is called
+  let features = req.session.features;
+  if (req.session.companyId) {
+    const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.session.companyId));
+    if (company) {
+      features = company.features as CompanyFeatures;
+      req.session.features = features;
+    }
+  }
+
   res.json({
     id: req.session.userId,
     username: req.session.username,
     role: req.session.role,
+    companyId: req.session.companyId,
+    features,
   });
 });
 
 router.get("/users", requireAdmin, async (req, res) => {
   try {
+    const companyId = req.session.companyId!;
     const users = await db
       .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, createdAt: usersTable.createdAt })
       .from(usersTable)
+      .where(eq(usersTable.companyId, companyId))
       .orderBy(usersTable.username);
     res.json(users);
   } catch (err) {
@@ -82,6 +116,7 @@ router.post("/users", requireAdmin, async (req, res) => {
     }
 
     const { username, password, role } = parsed.data;
+    const companyId = req.session.companyId!;
     const existing = await db.select().from(usersTable).where(eq(usersTable.username, username));
     if (existing.length > 0) {
       res.status(409).json({ error: "Username already taken" });
@@ -91,7 +126,7 @@ router.post("/users", requireAdmin, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const [user] = await db
       .insert(usersTable)
-      .values({ username, passwordHash, role })
+      .values({ username, passwordHash, role, companyId })
       .returning({ id: usersTable.id, username: usersTable.username, role: usersTable.role, createdAt: usersTable.createdAt });
 
     res.status(201).json(user);

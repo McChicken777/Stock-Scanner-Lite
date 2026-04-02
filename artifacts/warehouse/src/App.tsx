@@ -14,6 +14,7 @@ import ProductsPage from "@/pages/products";
 import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
 import AdminUsersPage from "@/pages/admin-users";
+import AdminCompanyPage from "@/pages/admin-company";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
@@ -60,6 +61,7 @@ function ProtectedRoutes() {
         <Route path="/products/:id/edit" component={ProductFormPage} />
         <Route path="/history" component={HistoryPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
+        <Route path="/admin/company" component={AdminCompanyPage} />
 
         {/* Work Orders */}
         <Route path="/work/projects" component={WorkProjectsPage} />

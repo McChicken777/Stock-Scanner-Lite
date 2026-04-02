@@ -1,6 +1,7 @@
 import { pgTable, text, integer, serial, timestamp } from "drizzle-orm/pg-core";
 import { locationsTable } from "./locations";
 import { productsTable } from "./products";
+import { companiesTable } from "./companies";
 
 export const historyTable = pgTable("stock_history", {
   id: serial("id").primaryKey(),
@@ -15,6 +16,7 @@ export const historyTable = pgTable("stock_history", {
   delta: integer("delta").notNull(),
   changedBy: text("changed_by"),
   changedAt: timestamp("changed_at").defaultNow().notNull(),
+  companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "set null" }),
 });
 
 export type HistoryEntry = typeof historyTable.$inferSelect;

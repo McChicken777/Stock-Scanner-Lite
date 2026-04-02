@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, integer, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { companiesTable } from "./companies";
 
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
@@ -8,6 +9,7 @@ export const productsTable = pgTable("products", {
   category: text("category").notNull(),
   bufferStock: integer("buffer_stock").notNull().default(0),
   alertEmail: text("alert_email"),
+  companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

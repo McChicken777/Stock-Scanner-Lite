@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Calendar, FolderPlus } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -16,23 +16,14 @@ interface Template {
   procedures: { id: number; name: string; sortOrder: number }[];
 }
 
+interface TemplateItem {
+  templateId: number;
+  quantity: number;
+}
+
 async function fetchTemplates(): Promise<Template[]> {
   const res = await fetch("/api/work/templates", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load templates");
-  return res.json();
-}
-
-async function createProject(data: { name: string; deadline: string; priority: string; templateIds: number[] }) {
-  const res = await fetch("/api/work/projects", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const d = await res.json().catch(() => ({}));
-    throw new Error(d.error || "Failed to create project");
-  }
   return res.json();
 }
 
@@ -41,6 +32,43 @@ const priorities = [
   { value: "medium", label: "Medium", color: "border-orange-400 bg-orange-50 text-orange-700" },
   { value: "high", label: "High", color: "border-red-400 bg-red-50 text-red-700" },
 ];
+
+function RalColorInput({
+  value,
+  onChange,
+  placeholder = "e.g. RAL9005",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [raw, setRaw] = useState(() => {
+    const m = value?.match(/^RAL(\d+)$/i);
+    return m ? m[1] : value || "";
+  });
+
+  const handleChange = (v: string) => {
+    const num = v.replace(/\D/g, "");
+    setRaw(num);
+    onChange(num ? `RAL${num}` : "");
+  };
+
+  return (
+    <div className="flex items-center border-2 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary/30 bg-background">
+      <span className="px-3 py-2.5 bg-muted font-bold text-sm text-muted-foreground border-r-2 border-border">RAL</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={raw}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder={placeholder.replace(/^RAL/, "")}
+        className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none"
+      />
+    </div>
+  );
+}
+
+export { RalColorInput };
 
 export default function WorkProjectFormPage() {
   const { user } = useAuth();
@@ -51,7 +79,8 @@ export default function WorkProjectFormPage() {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [selectedTemplates, setSelectedTemplates] = useState<number[]>([]);
+  const [paintColor, setPaintColor] = useState("");
+  const [templateItems, setTemplateItems] = useState<TemplateItem[]>([]);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["/api/work/templates"],
@@ -59,10 +88,21 @@ export default function WorkProjectFormPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: createProject,
+    mutationFn: async (data: { name: string; deadline: string; priority: string; paintColor: string | null; templateItems: TemplateItem[] }) => {
+      const res = await fetch("/api/work/projects", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to create project");
+      }
+      return res.json();
+    },
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/projects"] });
-      toast({ title: "Project created!" });
+      toast({ title: "Work order created!" });
       setLocation(`/work/projects/${project.id}`);
     },
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" }),
@@ -72,13 +112,23 @@ export default function WorkProjectFormPage() {
     return <div className="p-6 text-center text-muted-foreground mt-20"><p>Admin only</p></div>;
   }
 
-  const handleToggleTemplate = (id: number) => {
-    setSelectedTemplates((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+  const getTemplateItem = (id: number) => templateItems.find((t) => t.templateId === id);
+
+  const toggleTemplate = (id: number) => {
+    if (getTemplateItem(id)) {
+      setTemplateItems((prev) => prev.filter((t) => t.templateId !== id));
+    } else {
+      setTemplateItems((prev) => [...prev, { templateId: id, quantity: 1 }]);
+    }
+  };
+
+  const setQuantity = (id: number, qty: number) => {
+    setTemplateItems((prev) =>
+      prev.map((t) => t.templateId === id ? { ...t, quantity: Math.max(1, Math.min(100, qty)) } : t)
     );
   };
 
-  const canSubmit = name.trim() && deadline && selectedTemplates.length > 0;
+  const canSubmit = name.trim() && deadline && templateItems.length > 0;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -90,6 +140,7 @@ export default function WorkProjectFormPage() {
       </div>
 
       <div className="p-4 space-y-6 pb-24">
+        {/* Name */}
         <div className="space-y-2">
           <Label className="text-sm font-bold">Project Name</Label>
           <Input
@@ -100,6 +151,7 @@ export default function WorkProjectFormPage() {
           />
         </div>
 
+        {/* Deadline */}
         <div className="space-y-2">
           <Label className="text-sm font-bold flex items-center gap-2">
             <Calendar className="h-4 w-4" /> Deadline
@@ -113,6 +165,7 @@ export default function WorkProjectFormPage() {
           />
         </div>
 
+        {/* Priority */}
         <div className="space-y-2">
           <Label className="text-sm font-bold">Priority</Label>
           <div className="grid grid-cols-3 gap-2">
@@ -132,8 +185,18 @@ export default function WorkProjectFormPage() {
           </div>
         </div>
 
+        {/* Project-level Paint Color */}
+        <div className="space-y-2">
+          <Label className="text-sm font-bold flex items-center gap-2">
+            <Palette className="h-4 w-4" /> Paint Color (whole order)
+          </Label>
+          <RalColorInput value={paintColor} onChange={setPaintColor} placeholder="RAL9005" />
+          <p className="text-xs text-muted-foreground">Leave blank if items have individual colors or no paint needed.</p>
+        </div>
+
+        {/* Template selection with quantity */}
         <div className="space-y-3">
-          <Label className="text-sm font-bold">Select Items to Include</Label>
+          <Label className="text-sm font-bold">Select Items to Produce</Label>
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted/40 rounded-lg animate-pulse" />)}
@@ -145,35 +208,93 @@ export default function WorkProjectFormPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {templates.map((template) => (
-                <label
-                  key={template.id}
-                  className={cn(
-                    "flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all",
-                    selectedTemplates.includes(template.id)
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card"
-                  )}
-                >
-                  <Checkbox
-                    checked={selectedTemplates.includes(template.id)}
-                    onCheckedChange={() => handleToggleTemplate(template.id)}
-                    className="mt-0.5"
-                  />
-                  <div className="flex-1">
-                    <p className="font-bold">{template.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {template.procedures.length} procedure{template.procedures.length !== 1 ? "s" : ""}: {template.procedures.map((p) => p.name).join(", ")}
-                    </p>
+              {templates.map((template) => {
+                const item = getTemplateItem(template.id);
+                const selected = !!item;
+                return (
+                  <div
+                    key={template.id}
+                    className={cn(
+                      "rounded-lg border-2 transition-all overflow-hidden",
+                      selected ? "border-primary bg-primary/5" : "border-border bg-card"
+                    )}
+                  >
+                    <label className="flex items-start gap-3 p-3 cursor-pointer">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => toggleTemplate(template.id)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold">{template.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {template.procedures.length} step{template.procedures.length !== 1 ? "s" : ""}: {template.procedures.map((p) => p.name).join(", ")}
+                        </p>
+                      </div>
+                    </label>
+
+                    {selected && (
+                      <div className="px-3 pb-3 flex items-center gap-3">
+                        <span className="text-sm font-semibold text-muted-foreground">Quantity:</span>
+                        <div className="flex items-center gap-1 bg-background border-2 border-primary/20 rounded-lg">
+                          <button
+                            type="button"
+                            className="p-2 hover:bg-muted rounded-l-lg transition-colors"
+                            onClick={() => setQuantity(template.id, (item?.quantity ?? 1) - 1)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={item?.quantity ?? 1}
+                            onChange={(e) => setQuantity(template.id, Number(e.target.value))}
+                            className="w-14 text-center text-lg font-black bg-transparent outline-none py-1"
+                          />
+                          <button
+                            type="button"
+                            className="p-2 hover:bg-muted rounded-r-lg transition-colors"
+                            onClick={() => setQuantity(template.id, (item?.quantity ?? 1) + 1)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          = {item?.quantity ?? 1} item{(item?.quantity ?? 1) !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
+        {/* Summary */}
+        {templateItems.length > 0 && (
+          <div className="bg-muted/30 border border-border rounded-xl p-3 text-sm">
+            <p className="font-bold mb-1">Summary</p>
+            {templateItems.map((ti) => {
+              const t = templates.find((t) => t.id === ti.templateId);
+              return t ? (
+                <p key={ti.templateId} className="text-muted-foreground">
+                  • {ti.quantity}× {t.name}
+                  {ti.quantity > 1 && <span className="text-xs ml-1">(numbered {t.name} #1 – #{ti.quantity})</span>}
+                </p>
+              ) : null;
+            })}
+            {paintColor && <p className="mt-1 font-medium text-primary">Paint: {paintColor}</p>}
+          </div>
+        )}
+
         <Button
-          onClick={() => createMutation.mutate({ name: name.trim(), deadline, priority, templateIds: selectedTemplates })}
+          onClick={() => createMutation.mutate({
+            name: name.trim(), deadline, priority,
+            paintColor: paintColor || null,
+            templateItems,
+          })}
           disabled={!canSubmit || createMutation.isPending}
           className="w-full h-14 font-bold text-base"
         >

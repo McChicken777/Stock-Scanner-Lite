@@ -1,12 +1,16 @@
 import { Router, type IRouter } from "express";
 import { db, locationsTable, stockTable, productsTable, insertLocationSchema } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 router.get("/", async (req, res) => {
   try {
-    const locations = await db.select().from(locationsTable).orderBy(locationsTable.id);
+    const companyId = req.session.companyId!;
+    const locations = await db.select().from(locationsTable)
+      .where(eq(locationsTable.companyId, companyId))
+      .orderBy(locationsTable.id);
     res.json(locations);
   } catch (err) {
     req.log.error({ err }, "Failed to list locations");
@@ -14,9 +18,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   try {
-    const parsed = insertLocationSchema.safeParse(req.body);
+    const companyId = req.session.companyId!;
+    const parsed = insertLocationSchema.safeParse({ ...req.body, companyId });
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
       return;
@@ -40,10 +45,11 @@ router.post("/", async (req, res) => {
 router.get("/:locationId", async (req, res) => {
   try {
     const { locationId } = req.params;
+    const companyId = req.session.companyId!;
     const [location] = await db
       .select()
       .from(locationsTable)
-      .where(eq(locationsTable.id, locationId));
+      .where(and(eq(locationsTable.id, locationId), eq(locationsTable.companyId, companyId)));
     if (!location) {
       res.status(404).json({ error: "Location not found" });
       return;
@@ -59,7 +65,7 @@ router.get("/:locationId", async (req, res) => {
       })
       .from(stockTable)
       .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
-      .where(eq(stockTable.locationId, locationId));
+      .where(and(eq(stockTable.locationId, locationId), eq(productsTable.companyId, companyId)));
     res.json({ ...location, stock });
   } catch (err) {
     req.log.error({ err }, "Failed to get location");
@@ -67,10 +73,11 @@ router.get("/:locationId", async (req, res) => {
   }
 });
 
-router.delete("/:locationId", async (req, res) => {
+router.delete("/:locationId", requireAdmin, async (req, res) => {
   try {
     const { locationId } = req.params;
-    await db.delete(locationsTable).where(eq(locationsTable.id, locationId));
+    const companyId = req.session.companyId!;
+    await db.delete(locationsTable).where(and(eq(locationsTable.id, locationId), eq(locationsTable.companyId, companyId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete location");

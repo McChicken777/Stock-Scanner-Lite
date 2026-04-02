@@ -1,0 +1,109 @@
+Refactor my app to support multiple companies (multi-tenant architecture) and feature-based plans.
+
+--------------------------------------------------
+1. COMPANIES SYSTEM
+--------------------------------------------------
+
+Create a Companies table:
+
+Fields:
+- id
+- name
+- plan (basic, pro)
+
+--------------------------------------------------
+2. MULTI-TENANT DATA STRUCTURE
+--------------------------------------------------
+
+Update ALL existing data models to include company_id:
+
+- users
+- inventory
+- products
+- projects
+- items
+- procedures
+
+Ensure:
+- Users can only access data from their own company
+- All queries are filtered by company_id
+
+--------------------------------------------------
+3. FEATURE FLAGS SYSTEM
+--------------------------------------------------
+
+Add feature-based control per company.
+
+Each company should have enabled/disabled features:
+
+Features:
+- inventory
+- alerts
+- work_orders
+- progress_tracking
+- deadline_alerts
+- time_tracking
+
+Store features as:
+- JSON field in companies table OR separate features table
+
+--------------------------------------------------
+4. FEATURE CHECKING LOGIC
+--------------------------------------------------
+
+Before showing or executing a feature:
+
+- Check if the feature is enabled for that company
+- If disabled:
+  - Hide UI elements
+  - Block backend routes
+
+Example:
+- If alerts disabled → do not send emails
+- If progress_tracking disabled → hide progress bars
+
+--------------------------------------------------
+5. PLAN SYSTEM
+--------------------------------------------------
+
+Define plans:
+
+BASIC:
+- inventory: true
+- alerts: false
+- work_orders: true
+- progress_tracking: false
+- deadline_alerts: false
+- time_tracking: false
+
+PRO:
+- all features enabled
+
+When company is created:
+- assign plan
+- automatically assign features
+
+--------------------------------------------------
+6. ADMIN CONTROL
+--------------------------------------------------
+
+Allow admin to:
+- Change company plan
+- Enable/disable features manually
+
+Changes should apply instantly without restarting app
+
+--------------------------------------------------
+7. SECURITY (IMPORTANT)
+--------------------------------------------------
+
+- Ensure users cannot access other companies' data
+- Always filter by company_id on backend
+
+--------------------------------------------------
+8. KEEP IT SIMPLE
+--------------------------------------------------
+
+- Do not overcomplicate architecture
+- Focus on clean separation between companies
+- Maintain existing functionality

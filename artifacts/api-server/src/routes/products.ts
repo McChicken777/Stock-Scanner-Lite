@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, productsTable, stockTable, insertProductSchema } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin } from "../middlewares/auth";
 
@@ -8,13 +8,18 @@ const router: IRouter = Router();
 
 router.get("/", async (req, res) => {
   try {
-    const products = await db.select().from(productsTable).orderBy(productsTable.name);
+    const companyId = req.session.companyId!;
+    const products = await db.select().from(productsTable)
+      .where(eq(productsTable.companyId, companyId))
+      .orderBy(productsTable.name);
     const stockTotals = await db
       .select({
         productId: stockTable.productId,
         total: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`.as("total"),
       })
       .from(stockTable)
+      .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
+      .where(eq(productsTable.companyId, companyId))
       .groupBy(stockTable.productId);
     const totalsMap = new Map(stockTotals.map((s) => [s.productId, s.total]));
     const result = products.map((p) => {
@@ -30,7 +35,8 @@ router.get("/", async (req, res) => {
 
 router.post("/", requireAdmin, async (req, res) => {
   try {
-    const parsed = insertProductSchema.safeParse(req.body);
+    const companyId = req.session.companyId!;
+    const parsed = insertProductSchema.safeParse({ ...req.body, companyId });
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
       return;
@@ -46,7 +52,9 @@ router.post("/", requireAdmin, async (req, res) => {
 router.get("/:productId", async (req, res) => {
   try {
     const productId = Number(req.params.productId);
-    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
     if (!product) {
       res.status(404).json({ error: "Product not found" });
       return;
@@ -73,6 +81,7 @@ const updateProductSchema = z.object({
 router.put("/:productId", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.productId);
+    const companyId = req.session.companyId!;
     const parsed = updateProductSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
@@ -81,7 +90,7 @@ router.put("/:productId", requireAdmin, async (req, res) => {
     const [product] = await db
       .update(productsTable)
       .set(parsed.data)
-      .where(eq(productsTable.id, productId))
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)))
       .returning();
     if (!product) {
       res.status(404).json({ error: "Product not found" });
@@ -97,7 +106,8 @@ router.put("/:productId", requireAdmin, async (req, res) => {
 router.delete("/:productId", requireAdmin, async (req, res) => {
   try {
     const productId = Number(req.params.productId);
-    await db.delete(productsTable).where(eq(productsTable.id, productId));
+    const companyId = req.session.companyId!;
+    await db.delete(productsTable).where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete product");

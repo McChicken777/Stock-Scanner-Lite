@@ -1,11 +1,11 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, ArrowLeftRight
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, useFeature } from "@/contexts/auth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,11 +38,18 @@ function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {user.role === "admin" && (
-          <Link href="/admin/users">
-            <DropdownMenuItem className="cursor-pointer">
-              <ShieldCheck className="mr-2 h-4 w-4" /> Manage Users
-            </DropdownMenuItem>
-          </Link>
+          <>
+            <Link href="/admin/users">
+              <DropdownMenuItem className="cursor-pointer">
+                <ShieldCheck className="mr-2 h-4 w-4" /> Manage Users
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/admin/company">
+              <DropdownMenuItem className="cursor-pointer">
+                <Building2 className="mr-2 h-4 w-4" /> Company & Plan
+              </DropdownMenuItem>
+            </Link>
+          </>
         )}
         <DropdownMenuItem
           className="text-destructive focus:text-destructive cursor-pointer"
@@ -56,6 +63,7 @@ function UserMenu() {
 }
 
 function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
+  const workOrdersEnabled = useFeature("work_orders");
   return (
     <div className="flex items-center gap-1 bg-muted/50 border border-border rounded-full p-0.5">
       <Link href="/">
@@ -71,19 +79,21 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
           Inventory
         </button>
       </Link>
-      <Link href="/work/projects">
-        <button
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
-            isWorkSection
-              ? "bg-background shadow text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <FolderKanban className="h-3.5 w-3.5" />
-          Work Orders
-        </button>
-      </Link>
+      {workOrdersEnabled && (
+        <Link href="/work/projects">
+          <button
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all",
+              isWorkSection
+                ? "bg-background shadow text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FolderKanban className="h-3.5 w-3.5" />
+            Work Orders
+          </button>
+        </Link>
+      )}
     </div>
   );
 }
