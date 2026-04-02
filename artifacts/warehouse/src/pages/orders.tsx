@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Package, Plus, Trash2, Send, AlertCircle } from "lucide-react";
+import { Package, Plus, Trash2, Send } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
@@ -75,7 +75,8 @@ async function markAsSent(orderId: number): Promise<void> {
 }
 
 export default function OrdersPage() {
-  const { isAdmin } = useAuth();
+  const { user } = useAuth();
+  const canManage = user?.role === "admin" || user?.role === "owner";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
@@ -144,26 +145,20 @@ export default function OrdersPage() {
     },
   });
 
-  if (!isAdmin) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen text-center">
-        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <p className="text-lg font-bold">Admin Only</p>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Orders</h1>
-        <Button
-          onClick={() => generateMutation.mutate()}
-          disabled={generateMutation.isPending}
-          className="gap-2"
-        >
-          <Plus className="h-4 w-4" /> Generate Drafts
-        </Button>
+        {canManage && (
+          <Button
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" /> Generate Drafts
+          </Button>
+        )}
       </div>
 
       {ordersQuery.isLoading ? (
@@ -216,7 +211,7 @@ export default function OrdersPage() {
         <div className="border-2 border-blue-200 bg-blue-50 rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">{selectedOrderQuery.data.supplier}</h2>
-            {selectedOrderQuery.data.status === "draft" && (
+            {canManage && selectedOrderQuery.data.status === "draft" && (
               <Button
                 onClick={() => sendMutation.mutate(selectedOrder)}
                 disabled={sendMutation.isPending}
@@ -249,25 +244,29 @@ export default function OrdersPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <input
-                        type="number"
-                        min="0"
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const qty = parseInt(e.target.value) || 0;
-                          updateQuantityMutation.mutate({
-                            orderId: selectedOrder,
-                            itemId: item.id,
-                            quantity: qty,
-                          });
-                        }}
-                        disabled={
-                          updateQuantityMutation.isPending ||
-                          selectedOrderQuery.data.status !== "draft"
-                        }
-                        className="w-16 px-2 py-1 border rounded text-sm text-center"
-                      />
-                      {selectedOrderQuery.data.status === "draft" && (
+                      {canManage ? (
+                        <input
+                          type="number"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const qty = parseInt(e.target.value) || 0;
+                            updateQuantityMutation.mutate({
+                              orderId: selectedOrder,
+                              itemId: item.id,
+                              quantity: qty,
+                            });
+                          }}
+                          disabled={
+                            updateQuantityMutation.isPending ||
+                            selectedOrderQuery.data.status !== "draft"
+                          }
+                          className="w-16 px-2 py-1 border rounded text-sm text-center"
+                        />
+                      ) : (
+                        <span className="w-16 px-2 py-1 text-sm text-center font-medium">{item.quantity}</span>
+                      )}
+                      {canManage && selectedOrderQuery.data.status === "draft" && (
                         <button
                           onClick={() =>
                             removeMutation.mutate({

@@ -170,7 +170,7 @@ function WorkOrdersBottomNav() {
     { href: "/tasks", icon: CheckSquare, label: "Tasks" },
     { href: "/work/projects", icon: FolderKanban, label: "Projects" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    ...(isAdmin ? [{ href: "/orders", icon: Truck, label: "Orders" }] : []),
+    { href: "/orders", icon: Truck, label: "Orders" },
     ...(isAdmin ? [{ href: "/work/templates", icon: Tag, label: "Templates" }] : []),
   ];
 
