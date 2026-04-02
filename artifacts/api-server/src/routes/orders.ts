@@ -1,0 +1,253 @@
+import { Router, type IRouter } from "express";
+import { db, ordersTable, orderItemsTable, productsTable, stockTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { requireAuth, requireAdmin } from "../middlewares/auth";
+
+const router: IRouter = Router();
+
+// GET /api/orders/orders - List all orders
+router.get("/orders", requireAuth, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+
+    const orders = await db.select({
+      order: ordersTable,
+      itemCount: sql<number>`COUNT(${orderItemsTable.id})`,
+    })
+      .from(ordersTable)
+      .leftJoin(orderItemsTable, eq(ordersTable.id, orderItemsTable.orderId))
+      .where(eq(ordersTable.companyId, companyId))
+      .groupBy(ordersTable.id);
+
+    res.json(orders);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list orders");
+    res.status(500).json({ error: "Failed to list orders" });
+  }
+});
+
+// GET /api/orders/:id - Get order with items
+router.get("/:id", requireAuth, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+    const { id } = req.params;
+
+    const order = await db.query.ordersTable.findFirst({
+      where: and(
+        eq(ordersTable.id, parseInt(id)),
+        eq(ordersTable.companyId, companyId)
+      ),
+    });
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    const items = await db.select({
+      item: orderItemsTable,
+      productName: productsTable.name,
+      supplier: productsTable.supplier,
+    })
+      .from(orderItemsTable)
+      .innerJoin(productsTable, eq(orderItemsTable.productId, productsTable.id))
+      .where(eq(orderItemsTable.orderId, parseInt(id)));
+
+    res.json({ ...order, items });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch order");
+    res.status(500).json({ error: "Failed to fetch order" });
+  }
+});
+
+// POST /api/orders/generate-drafts - Generate order drafts for all low-stock items
+router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+
+    // Get all purchase items below buffer stock
+    const lowStockItems = await db.select({
+      product: productsTable,
+      totalStock: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`,
+    })
+      .from(productsTable)
+      .leftJoin(stockTable, eq(productsTable.id, stockTable.productId))
+      .where(
+        and(
+          eq(productsTable.companyId, companyId),
+          eq(productsTable.itemType, "purchase"),
+          sql`${productsTable.supplier} IS NOT NULL`
+        )
+      )
+      .groupBy(productsTable.id)
+      .having(sql`COALESCE(SUM(${stockTable.quantity}), 0) < ${productsTable.bufferStock}`);
+
+    // Group by supplier and create orders
+    const ordersBySupplier = new Map<string, typeof lowStockItems>();
+    lowStockItems.forEach((item) => {
+      const supplier = item.product.supplier || "Unknown";
+      if (!ordersBySupplier.has(supplier)) {
+        ordersBySupplier.set(supplier, []);
+      }
+      ordersBySupplier.get(supplier)!.push(item);
+    });
+
+    const createdOrders = [];
+
+    for (const [supplier, items] of ordersBySupplier.entries()) {
+      // Check if draft already exists for this supplier
+      const existing = await db.query.ordersTable.findFirst({
+        where: and(
+          eq(ordersTable.companyId, companyId),
+          eq(ordersTable.supplier, supplier),
+          eq(ordersTable.status, "draft")
+        ),
+      });
+
+      let orderId: number;
+      if (existing) {
+        orderId = existing.id;
+      } else {
+        const [inserted] = await db.insert(ordersTable).values({
+          supplier,
+          status: "draft",
+          companyId,
+        }).returning();
+        orderId = inserted.id;
+      }
+
+      // Add items to order
+      for (const item of items) {
+        const restockAmount = item.product.targetStock - (item.totalStock || 0);
+        if (restockAmount > 0) {
+          // Check if item already in order
+          const existingItem = await db.query.orderItemsTable.findFirst({
+            where: and(
+              eq(orderItemsTable.orderId, orderId),
+              eq(orderItemsTable.productId, item.product.id)
+            ),
+          });
+
+          if (!existingItem) {
+            await db.insert(orderItemsTable).values({
+              orderId,
+              productId: item.product.id,
+              quantity: restockAmount,
+              companyId,
+            });
+          }
+        }
+      }
+
+      createdOrders.push({
+        id: orderId,
+        supplier,
+        itemCount: items.length,
+      });
+    }
+
+    res.json({
+      message: "Order drafts generated",
+      orders: createdOrders,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate order drafts");
+    res.status(500).json({ error: "Failed to generate order drafts" });
+  }
+});
+
+// PUT /api/orders/:id/items/:itemId - Update order item quantity
+router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+    const { id, itemId } = req.params;
+    const { quantity } = req.body;
+
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      res.status(400).json({ error: "Invalid quantity" });
+      return;
+    }
+
+    const item = await db.query.orderItemsTable.findFirst({
+      where: and(
+        eq(orderItemsTable.id, parseInt(itemId)),
+        eq(orderItemsTable.orderId, parseInt(id)),
+        eq(orderItemsTable.companyId, companyId)
+      ),
+    });
+
+    if (!item) {
+      res.status(404).json({ error: "Item not found" });
+      return;
+    }
+
+    await db.update(orderItemsTable)
+      .set({ quantity })
+      .where(eq(orderItemsTable.id, parseInt(itemId)));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update order item");
+    res.status(500).json({ error: "Failed to update order item" });
+  }
+});
+
+// DELETE /api/orders/:id/items/:itemId - Remove item from order
+router.delete("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+    const { id, itemId } = req.params;
+
+    const item = await db.query.orderItemsTable.findFirst({
+      where: and(
+        eq(orderItemsTable.id, parseInt(itemId)),
+        eq(orderItemsTable.orderId, parseInt(id)),
+        eq(orderItemsTable.companyId, companyId)
+      ),
+    });
+
+    if (!item) {
+      res.status(404).json({ error: "Item not found" });
+      return;
+    }
+
+    await db.delete(orderItemsTable).where(eq(orderItemsTable.id, parseInt(itemId)));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove order item");
+    res.status(500).json({ error: "Failed to remove order item" });
+  }
+});
+
+// PUT /api/orders/:id/mark-sent - Mark order as sent
+router.put("/:id/mark-sent", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { companyId } = req.session;
+    const { id } = req.params;
+
+    const order = await db.query.ordersTable.findFirst({
+      where: and(
+        eq(ordersTable.id, parseInt(id)),
+        eq(ordersTable.companyId, companyId)
+      ),
+    });
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    await db.update(ordersTable)
+      .set({ status: "sent" })
+      .where(eq(ordersTable.id, parseInt(id)));
+
+    res.json({ success: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to mark order as sent");
+    res.status(500).json({ error: "Failed to mark order as sent" });
+  }
+});
+
+export default router;

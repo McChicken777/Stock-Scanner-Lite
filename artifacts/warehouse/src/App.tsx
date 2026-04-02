@@ -21,6 +21,7 @@ import AdminProcedureInputsPage from "@/pages/admin-procedure-inputs";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import OwnerPanelPage from "@/pages/owner-panel";
 import TasksDashboardPage from "@/pages/tasks-dashboard";
+import OrdersPage from "@/pages/orders";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
@@ -84,6 +85,7 @@ function ProtectedRoutes() {
         <Route path="/admin/dashboard" component={AdminDashboardPage} />
         <Route path="/owner" component={OwnerPanelPage} />
         <Route path="/tasks" component={TasksDashboardPage} />
+        <Route path="/orders" component={OrdersPage} />
 
         {/* Work Orders */}
         <Route path="/work/projects" component={WorkProjectsPage} />

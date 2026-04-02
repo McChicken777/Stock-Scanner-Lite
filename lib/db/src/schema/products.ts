@@ -12,6 +12,7 @@ export const productsTable = pgTable("products", {
   itemType: itemTypeEnum("item_type").notNull().default("purchase"),
   bufferStock: integer("buffer_stock").notNull().default(0),
   targetStock: integer("target_stock").notNull().default(0),
+  supplier: text("supplier"),
   alertEmail: text("alert_email"),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

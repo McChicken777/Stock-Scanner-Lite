@@ -1,0 +1,117 @@
+Add a semi-automated Order Draft system for restocking.
+
+IMPORTANT:
+- Build on existing inventory and restock logic
+- Only handle purchase items
+- Do NOT auto-send orders
+- Must respect multi-company setup
+
+--------------------------------------------------
+1. ORDERS TABLE
+--------------------------------------------------
+
+Create Orders table:
+
+- id
+- supplier_id
+- status ("draft", "sent")
+- created_at
+- company_id
+
+--------------------------------------------------
+2. ORDER ITEMS
+--------------------------------------------------
+
+Create OrderItems table:
+
+- id
+- order_id
+- item_id
+- quantity
+- company_id
+
+--------------------------------------------------
+3. RESTOCK DETECTION
+--------------------------------------------------
+
+For all items:
+
+If:
+- item_type = "purchase"
+- stock < buffer
+
+Then:
+- calculate restock_amount = target_stock - stock
+
+--------------------------------------------------
+4. GROUP BY SUPPLIER
+--------------------------------------------------
+
+When generating drafts:
+
+- group items by supplier_id
+- create one order per supplier
+
+--------------------------------------------------
+5. CREATE ORDER DRAFTS
+--------------------------------------------------
+
+Add action:
+
+"Generate Order Drafts"
+
+System:
+- scans all items
+- creates draft orders grouped by supplier
+- adds order items with calculated quantities
+
+--------------------------------------------------
+6. UI
+--------------------------------------------------
+
+Create "Orders" page:
+
+Show:
+- list of orders (status = draft or sent)
+
+Each order shows:
+- supplier
+- list of items
+- quantities
+
+--------------------------------------------------
+7. EDITING
+--------------------------------------------------
+
+Allow admin to:
+- edit quantities
+- remove items from draft
+
+--------------------------------------------------
+8. SEND ACTION (NO EMAIL YET)
+--------------------------------------------------
+
+Add button: "Mark as Sent"
+
+When clicked:
+- update order status = "sent"
+
+(No email yet, just status change)
+
+--------------------------------------------------
+9. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure all:
+- orders
+- order items
+
+are filtered by company_id
+
+--------------------------------------------------
+10. IMPORTANT
+--------------------------------------------------
+
+- Do NOT send emails yet
+- Do NOT auto-trigger orders
+- Keep system simple and safe

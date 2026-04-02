@@ -6,3 +6,4 @@ export * from "./stock";
 export * from "./history";
 export * from "./work";
 export * from "./inbound";
+export * from "./orders";
