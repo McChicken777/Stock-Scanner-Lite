@@ -15,7 +15,10 @@ import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminCompanyPage from "@/pages/admin-company";
+import AdminRolesPage from "@/pages/admin-roles";
+import AdminProceduresPage from "@/pages/admin-procedures";
 import OwnerPanelPage from "@/pages/owner-panel";
+import TasksDashboardPage from "@/pages/tasks-dashboard";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 
@@ -73,7 +76,10 @@ function ProtectedRoutes() {
         <Route path="/history" component={HistoryPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/company" component={AdminCompanyPage} />
+        <Route path="/admin/roles" component={AdminRolesPage} />
+        <Route path="/admin/procedures" component={AdminProceduresPage} />
         <Route path="/owner" component={OwnerPanelPage} />
+        <Route path="/tasks" component={TasksDashboardPage} />
 
         {/* Work Orders */}
         <Route path="/work/projects" component={WorkProjectsPage} />

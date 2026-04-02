@@ -66,9 +66,59 @@ export const workTimeLogsTable = pgTable("work_time_logs", {
   durationSeconds: integer("duration_seconds"),
 });
 
+// Flexible roles (e.g. welding, CNC, sandblasting)
+export const rolesTable = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Many-to-many: users can have multiple roles
+export const userRolesTable = pgTable("user_roles", {
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  roleId: integer("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
+});
+
+// Procedures: admin-defined production procedures with role assignment
+export const proceduresTable = pgTable("procedures", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  roleId: integer("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
+  orderIndex: integer("order_index").notNull().default(0),
+  requiresInbound: boolean("requires_inbound").notNull().default(false),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Link procedures to items: each item has its own set of procedures
+export const itemProceduresTable = pgTable("item_procedures", {
+  itemId: integer("item_id").notNull().references(() => workProjectItemsTable.id, { onDelete: "cascade" }),
+  procedureId: integer("procedure_id").notNull().references(() => proceduresTable.id, { onDelete: "cascade" }),
+  orderIndex: integer("order_index").notNull().default(0),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+});
+
+// Tasks: generated when project is created, one per (item, procedure) pair
+export const taskStatusEnum = pgEnum("task_status", ["not_started", "in_progress", "completed"]);
+export const tasksTable = pgTable("tasks", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => workProjectsTable.id, { onDelete: "cascade" }),
+  itemId: integer("item_id").notNull().references(() => workProjectItemsTable.id, { onDelete: "cascade" }),
+  procedureId: integer("procedure_id").notNull().references(() => proceduresTable.id, { onDelete: "cascade" }),
+  status: taskStatusEnum("status").notNull().default("not_started"),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
 export type WorkTemplateProcedure = typeof workTemplateProceduresTable.$inferSelect;
 export type WorkProject = typeof workProjectsTable.$inferSelect;
 export type WorkProjectItem = typeof workProjectItemsTable.$inferSelect;
 export type WorkItemProcedure = typeof workItemProceduresTable.$inferSelect;
 export type WorkTimeLog = typeof workTimeLogsTable.$inferSelect;
+export type Role = typeof rolesTable.$inferSelect;
+export type UserRole = typeof userRolesTable.$inferSelect;
+export type Procedure = typeof proceduresTable.$inferSelect;
+export type ItemProcedure = typeof itemProceduresTable.$inferSelect;
+export type Task = typeof tasksTable.$inferSelect;

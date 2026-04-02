@@ -1,0 +1,161 @@
+Add a flexible production task system with admin-controlled procedures and role assignments.
+
+IMPORTANT:
+- The app already supports multiple companies
+- Do NOT break existing functionality
+- Keep everything simple and editable by admins
+- Must respect company_id everywhere
+
+--------------------------------------------------
+1. ROLES SYSTEM (FLEXIBLE)
+--------------------------------------------------
+
+Create Roles table:
+
+- id
+- name (e.g. welding, CNC, bending, sandblasting)
+- company_id
+
+Users can have MULTIPLE roles:
+
+Create UserRoles table:
+- user_id
+- role_id
+
+Allow admin to:
+- create roles
+- edit roles
+- assign one or multiple roles to users
+
+--------------------------------------------------
+2. PROCEDURES (ADMIN-CONTROLLED)
+--------------------------------------------------
+
+Create Procedures table:
+
+- id
+- name (e.g. welding, CNC, bending)
+- role_id (which role performs it)
+- order_index (execution order)
+- requires_inbound (boolean)
+- company_id
+
+Allow admin to:
+- create procedures
+- edit procedure name
+- assign role
+- change order_index (execution order)
+- delete procedures
+
+IMPORTANT:
+- Procedures define the production workflow per company
+
+--------------------------------------------------
+3. ITEM → PROCEDURE LINK
+--------------------------------------------------
+
+Each item should have its own set of procedures.
+
+Create ItemProcedures table:
+- item_id
+- procedure_id
+- order_index (copy from procedure but allow override if needed)
+- company_id
+
+Allow admin to:
+- assign procedures to items
+- reorder procedures per item
+
+--------------------------------------------------
+4. TASK GENERATION (PROJECT LEVEL)
+--------------------------------------------------
+
+When a project is created:
+
+For each item in the project:
+- generate tasks based on that item's procedures
+
+Create Tasks table:
+
+- id
+- project_id
+- item_id
+- procedure_id
+- status ("not_started", "in_progress", "completed")
+- company_id
+
+--------------------------------------------------
+5. TASK ORDER LOGIC (SIMPLE)
+--------------------------------------------------
+
+A task can only be started if:
+
+- all previous procedures (lower order_index) are completed
+
+Keep this check simple.
+
+--------------------------------------------------
+6. ROLE-BASED DASHBOARD
+--------------------------------------------------
+
+Each user sees ONLY tasks where:
+
+- task.procedure.role_id matches ANY of the user's roles
+
+Display:
+- project name
+- item name
+- procedure name
+- status
+
+--------------------------------------------------
+7. TASK ACTIONS
+--------------------------------------------------
+
+Users can:
+- Start task → status = "in_progress"
+- Complete task → status = "completed"
+
+--------------------------------------------------
+8. BASIC INBOUND INTEGRATION
+--------------------------------------------------
+
+If procedure.requires_inbound = true:
+
+- task should NOT be startable if inbound status = "expected"
+
+(Just basic blocking for now)
+
+--------------------------------------------------
+9. ADMIN UI
+--------------------------------------------------
+
+Add admin interfaces for:
+
+- managing roles
+- assigning roles to users
+- managing procedures
+- assigning procedures to items
+- reordering procedures (drag/drop or simple number input)
+
+Keep UI simple.
+
+--------------------------------------------------
+10. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure all:
+- roles
+- procedures
+- tasks
+- item-procedure links
+
+are filtered by company_id
+
+--------------------------------------------------
+11. IMPORTANT
+--------------------------------------------------
+
+- Keep logic simple
+- Do NOT add advanced dependencies yet
+- Do NOT overcomplicate UI
