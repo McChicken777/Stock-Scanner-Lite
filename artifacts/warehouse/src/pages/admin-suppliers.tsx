@@ -52,7 +52,6 @@ async function deleteSupplier(id: number): Promise<void> {
 }
 
 export default function AdminSuppliersPage() {
-  const { isAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
@@ -62,7 +61,6 @@ export default function AdminSuppliersPage() {
   const suppliersQuery = useQuery({
     queryKey: ["suppliers"],
     queryFn: fetchSuppliers,
-    enabled: isAdmin,
   });
 
   const createMutation = useMutation({
@@ -126,10 +124,6 @@ export default function AdminSuppliersPage() {
     });
     setShowForm(true);
   };
-
-  if (!isAdmin) {
-    return <div className="p-4 text-red-600">Admin only</div>;
-  }
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-4xl mx-auto">
