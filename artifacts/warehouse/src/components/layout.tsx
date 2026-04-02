@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -157,6 +157,7 @@ function WorkOrdersBottomNav() {
   const isAdmin = user?.role === "admin";
 
   const navItems = [
+    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
     { href: "/work/projects", icon: FolderKanban, label: "Projects" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
     ...(isAdmin ? [{ href: "/work/templates", icon: Tag, label: "Templates" }] : []),

@@ -34,6 +34,74 @@ router.post("/roles", requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/roles/for-user/:userId
+router.get("/roles/for-user/:userId", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const userId = Number(req.params.userId);
+    const roles = await db.select().from(rolesTable)
+      .where(eq(rolesTable.companyId, companyId))
+      .orderBy(rolesTable.name);
+    
+    const assigned = await db.select({ roleId: userRolesTable.roleId, priority: userRolesTable.priority })
+      .from(userRolesTable)
+      .where(eq(userRolesTable.userId, userId));
+    
+    res.json({
+      available: roles,
+      assigned: assigned,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to list roles for user");
+    res.status(500).json({ error: "Failed to list roles" });
+  }
+});
+
+// POST /api/roles/assign
+router.post("/roles/assign", requireAdmin, async (req, res) => {
+  try {
+    const parsed = z.object({
+      userId: z.number(),
+      roleId: z.number(),
+      priority: z.enum(["primary", "secondary", "substitution"]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    
+    // Delete existing if any
+    await db.delete(userRolesTable)
+      .where(and(eq(userRolesTable.userId, parsed.data.userId), eq(userRolesTable.roleId, parsed.data.roleId)));
+    
+    // Insert new
+    const [assigned] = await db.insert(userRolesTable).values({
+      userId: parsed.data.userId,
+      roleId: parsed.data.roleId,
+      priority: parsed.data.priority,
+    }).returning();
+    res.status(201).json(assigned);
+  } catch (err) {
+    req.log.error({ err }, "Failed to assign role");
+    res.status(500).json({ error: "Failed to assign role" });
+  }
+});
+
+// DELETE /api/roles/unassign
+router.delete("/roles/unassign", requireAdmin, async (req, res) => {
+  try {
+    const parsed = z.object({
+      userId: z.number(),
+      roleId: z.number(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    
+    await db.delete(userRolesTable)
+      .where(and(eq(userRolesTable.userId, parsed.data.userId), eq(userRolesTable.roleId, parsed.data.roleId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to unassign role");
+    res.status(500).json({ error: "Failed to unassign role" });
+  }
+});
+
 // GET /api/procedures
 router.get("/procedures", requireAuth, async (req, res) => {
   try {
@@ -115,8 +183,8 @@ router.get("/tasks", requireAuth, async (req, res) => {
     const companyId = req.session.companyId!;
     const userId = req.session.userId!;
     
-    // Get user's roles
-    const userRoles = await db.select({ roleId: userRolesTable.roleId })
+    // Get user's roles with priority
+    const userRoles = await db.select({ roleId: userRolesTable.roleId, priority: userRolesTable.priority })
       .from(userRolesTable)
       .where(eq(userRolesTable.userId, userId));
     const roleIds = userRoles.map((r) => r.roleId);
@@ -126,12 +194,20 @@ router.get("/tasks", requireAuth, async (req, res) => {
       return;
     }
 
+    // Create priority map
+    const priorityMap = new Map<number, number>();
+    const priorityOrder = { primary: 0, secondary: 1, substitution: 2 };
+    userRoles.forEach((ur) => {
+      priorityMap.set(ur.roleId, priorityOrder[ur.priority as keyof typeof priorityOrder]);
+    });
+
     // Get tasks for user's roles
     const tasks = await db.select({
       task: tasksTable,
       procedureName: proceduresTable.name,
       itemName: workProjectItemsTable.name,
       roleName: rolesTable.name,
+      roleId: rolesTable.id,
     }).from(tasksTable)
       .innerJoin(proceduresTable, eq(tasksTable.procedureId, proceduresTable.id))
       .innerJoin(workProjectItemsTable, eq(tasksTable.itemId, workProjectItemsTable.id))
@@ -139,10 +215,23 @@ router.get("/tasks", requireAuth, async (req, res) => {
       .where(and(
         eq(tasksTable.companyId, companyId),
         inArray(proceduresTable.roleId, roleIds),
-      ))
-      .orderBy(tasksTable.createdAt);
+      ));
 
-    res.json(tasks.map((t) => ({
+    // Sort by role priority then status (not_started/in_progress first) then createdAt
+    const sorted = tasks.sort((a, b) => {
+      const aPriority = priorityMap.get(a.roleId) ?? 999;
+      const bPriority = priorityMap.get(b.roleId) ?? 999;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      
+      const statusOrder = { not_started: 0, in_progress: 1, completed: 2 };
+      const aStatusOrder = statusOrder[a.task.status as keyof typeof statusOrder];
+      const bStatusOrder = statusOrder[b.task.status as keyof typeof statusOrder];
+      if (aStatusOrder !== bStatusOrder) return aStatusOrder - bStatusOrder;
+      
+      return new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
+    });
+
+    res.json(sorted.map((t) => ({
       ...t.task,
       procedureName: t.procedureName,
       itemName: t.itemName,

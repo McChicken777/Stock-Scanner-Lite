@@ -20,13 +20,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X } from "lucide-react";
 
 interface UserEntry {
   id: number;
   username: string;
   role: "admin" | "worker";
   createdAt: string;
+}
+
+interface Role {
+  id: number;
+  name: string;
+}
+
+interface UserRoleAssignment {
+  roleId: number;
+  priority: "primary" | "secondary" | "substitution";
 }
 
 async function fetchUsers(): Promise<UserEntry[]> {
@@ -60,25 +70,62 @@ async function deleteUser(userId: number) {
   }
 }
 
+async function fetchUserRoles(userId: number) {
+  const res = await fetch(`/api/tasks/roles/for-user/${userId}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load roles");
+  return res.json();
+}
+
+async function assignUserRole(userId: number, roleId: number, priority: "primary" | "secondary" | "substitution") {
+  const res = await fetch("/api/tasks/roles/assign", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, roleId, priority }),
+  });
+  if (!res.ok) throw new Error("Failed to assign role");
+  return res.json();
+}
+
+async function unassignUserRole(userId: number, roleId: number) {
+  const res = await fetch("/api/tasks/roles/unassign", {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, roleId }),
+  });
+  if (!res.ok) throw new Error("Failed to unassign role");
+}
+
 export default function AdminUsersPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "worker">("worker");
+  const [newRoleId, setNewRoleId] = useState<string>("");
+  const [newRolePriority, setNewRolePriority] = useState<"primary" | "secondary" | "substitution">("primary");
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/auth/users"],
     queryFn: fetchUsers,
   });
 
+  const { data: userRoles = null, isLoading: rolesLoading } = useQuery({
+    queryKey: ["/api/tasks/roles", "for-user", selectedUserId],
+    queryFn: () => selectedUserId ? fetchUserRoles(selectedUserId) : null,
+    enabled: !!selectedUserId,
+  });
+
   const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/users"] });
-      setOpen(false);
+      setCreateOpen(false);
       setNewUsername("");
       setNewPassword("");
       setNewRole("worker");
@@ -100,6 +147,34 @@ export default function AdminUsersPage() {
     },
   });
 
+  const assignMutation = useMutation({
+    mutationFn: ({ userId, roleId, priority }: { userId: number; roleId: number; priority: "primary" | "secondary" | "substitution" }) =>
+      assignUserRole(userId, roleId, priority),
+    onSuccess: () => {
+      if (selectedUserId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks/roles", "for-user", selectedUserId] });
+      }
+      setNewRoleId("");
+      toast({ title: "Role assigned" });
+    },
+    onError: (err) => {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    },
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: ({ userId, roleId }: { userId: number; roleId: number }) => unassignUserRole(userId, roleId),
+    onSuccess: () => {
+      if (selectedUserId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/tasks/roles", "for-user", selectedUserId] });
+      }
+      toast({ title: "Role removed" });
+    },
+    onError: (err) => {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    },
+  });
+
   if (user?.role !== "admin") {
     return (
       <div className="p-6 text-center text-muted-foreground">
@@ -109,15 +184,15 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
           <h1 className="text-2xl font-black">Users</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Manage access
+            Manage access & roles
           </p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="font-bold gap-2">
               <UserPlus className="h-4 w-4" /> Add User
@@ -209,20 +284,123 @@ export default function AdminUsersPage() {
                   </Badge>
                 </div>
               </div>
-              {u.id !== user?.id && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => {
-                    if (confirm(`Delete user "${u.username}"?`)) {
-                      deleteMutation.mutate(u.id);
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {u.role === "worker" && (
+                  <Dialog open={rolesOpen && selectedUserId === u.id} onOpenChange={(open) => {
+                    if (!open) setSelectedUserId(null);
+                    setRolesOpen(open);
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600"
+                        onClick={() => setSelectedUserId(u.id)}
+                      >
+                        Roles
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="w-[90vw] max-w-sm rounded-xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Assign Roles: {u.username}</DialogTitle>
+                      </DialogHeader>
+                      {rolesLoading ? (
+                        <div className="text-center text-muted-foreground">Loading...</div>
+                      ) : (
+                        <div className="space-y-4">
+                          {userRoles?.assigned?.length > 0 && (
+                            <div>
+                              <p className="text-sm font-bold mb-2">Current Roles:</p>
+                              <div className="space-y-2">
+                                {userRoles.assigned.map((ar: UserRoleAssignment) => {
+                                  const role = userRoles.available.find((r: Role) => r.id === ar.roleId);
+                                  return (
+                                    <div
+                                      key={ar.roleId}
+                                      className="flex items-center justify-between bg-muted/50 p-2 rounded border"
+                                    >
+                                      <div>
+                                        <p className="text-sm font-medium">{role?.name}</p>
+                                        <p className="text-xs text-muted-foreground capitalize">{ar.priority}</p>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => unassignMutation.mutate({ userId: u.id, roleId: ar.roleId })}
+                                        disabled={unassignMutation.isPending}
+                                        className="text-destructive"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="pt-4 border-t space-y-2">
+                            <p className="text-sm font-bold">Add Role:</p>
+                            <Select value={newRoleId} onValueChange={setNewRoleId}>
+                              <SelectTrigger className="h-10">
+                                <SelectValue placeholder="Select role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {userRoles?.available?.map((r: Role) => (
+                                  <SelectItem key={r.id} value={String(r.id)}>
+                                    {r.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={newRolePriority}
+                              onValueChange={(v) => setNewRolePriority(v as "primary" | "secondary" | "substitution")}
+                            >
+                              <SelectTrigger className="h-10">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="primary">Primary</SelectItem>
+                                <SelectItem value="secondary">Secondary</SelectItem>
+                                <SelectItem value="substitution">Substitution</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              className="w-full gap-1"
+                              disabled={!newRoleId || assignMutation.isPending}
+                              onClick={() => {
+                                assignMutation.mutate({
+                                  userId: u.id,
+                                  roleId: Number(newRoleId),
+                                  priority: newRolePriority,
+                                });
+                              }}
+                            >
+                              <Plus className="h-4 w-4" /> Add Role
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                )}
+                {u.id !== user?.id && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      if (confirm(`Delete user "${u.username}"?`)) {
+                        deleteMutation.mutate(u.id);
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </div>

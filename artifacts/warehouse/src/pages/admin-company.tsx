@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Users, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -159,6 +159,27 @@ export default function AdminCompanyPage() {
               </Button>
             </div>
           )}
+        </div>
+
+        {/* Quick Links for Task Management */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Task Management</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/admin/roles" className="block">
+              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left">
+                <Users className="h-5 w-5 text-blue-600 mb-1" />
+                <p className="font-bold text-sm">Roles</p>
+                <p className="text-xs text-muted-foreground">Create production roles</p>
+              </button>
+            </Link>
+            <Link href="/admin/procedures" className="block">
+              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left">
+                <Wrench className="h-5 w-5 text-purple-600 mb-1" />
+                <p className="font-bold text-sm">Procedures</p>
+                <p className="text-xs text-muted-foreground">Define production steps</p>
+              </button>
+            </Link>
+          </div>
         </div>
 
         {/* Plan */}

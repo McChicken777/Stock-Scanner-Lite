@@ -74,10 +74,12 @@ export const rolesTable = pgTable("roles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Many-to-many: users can have multiple roles
+// Many-to-many: users can have multiple roles with priority levels
+export const userRolePriorityEnum = pgEnum("user_role_priority", ["primary", "secondary", "substitution"]);
 export const userRolesTable = pgTable("user_roles", {
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   roleId: integer("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
+  priority: userRolePriorityEnum("priority").notNull().default("primary"),
 });
 
 // Procedures: admin-defined production procedures with role assignment
