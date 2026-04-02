@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 
@@ -20,6 +20,7 @@ export const workTemplateProceduresTable = pgTable("work_template_procedures", {
   templateId: integer("template_id").notNull().references(() => workTemplatesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  requiresInbound: boolean("requires_inbound").notNull().default(false),
 });
 
 // Projects / Work Orders
@@ -30,6 +31,7 @@ export const workProjectsTable = pgTable("work_projects", {
   priority: workPriorityEnum("priority").notNull().default("medium"),
   status: workProjectStatusEnum("status").notNull().default("in_progress"),
   paintColor: text("paint_color"),
+  requiresExternalParts: boolean("requires_external_parts").notNull().default(false),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -51,6 +53,7 @@ export const workItemProceduresTable = pgTable("work_item_procedures", {
   status: workProcedureStatusEnum("status").notNull().default("not_started"),
   sortOrder: integer("sort_order").notNull().default(0),
   totalTimeSeconds: integer("total_time_seconds").notNull().default(0),
+  requiresInbound: boolean("requires_inbound").notNull().default(false),
 });
 
 // Time log: individual start/stop sessions per procedure per user

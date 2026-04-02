@@ -24,6 +24,7 @@ import WorkProjectsPage from "@/pages/work/projects";
 import WorkProjectDetailPage from "@/pages/work/project-detail";
 import WorkProjectFormPage from "@/pages/work/project-form";
 import WorkTemplatesPage from "@/pages/work/templates";
+import WorkInboundPage from "@/pages/work/inbound";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ function ProtectedRoutes() {
         <Route path="/work/projects/new" component={WorkProjectFormPage} />
         <Route path="/work/projects/:id" component={WorkProjectDetailPage} />
         <Route path="/work/templates" component={WorkTemplatesPage} />
+        <Route path="/work/inbound" component={WorkInboundPage} />
 
         <Route component={NotFound} />
       </Switch>

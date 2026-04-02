@@ -7,6 +7,7 @@ import historyRouter from "./history";
 import dashboardRouter from "./dashboard";
 import authRouter from "./auth";
 import workRouter from "./work";
+import inboundRouter from "./inbound";
 import companyRouter from "./company";
 import ownerRouter from "./owner";
 import { requireAuth } from "../middlewares/auth";
@@ -23,5 +24,6 @@ router.use("/stock", requireAuth, stockRouter);
 router.use("/history", requireAuth, historyRouter);
 router.use("/dashboard", requireAuth, dashboardRouter);
 router.use("/work", requireAuth, workRouter);
+router.use("/inbound", requireAuth, inboundRouter);
 
 export default router;

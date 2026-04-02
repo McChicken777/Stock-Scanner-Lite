@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable } from "@workspace/db";
+import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -83,6 +83,25 @@ router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
   }
 });
 
+router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
+  try {
+    const procId = Number(req.params.procId);
+    const parsed = z.object({
+      name: z.string().min(1).optional(),
+      sortOrder: z.number().int().optional(),
+      requiresInbound: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [p] = await db.update(workTemplateProceduresTable).set(parsed.data)
+      .where(eq(workTemplateProceduresTable.id, procId)).returning();
+    if (!p) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(p);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update procedure");
+    res.status(500).json({ error: "Failed to update procedure" });
+  }
+});
+
 router.delete("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
   try {
     await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.id, Number(req.params.procId)));
@@ -124,12 +143,17 @@ async function getProjectWithItems(projectId: number) {
   const totalProcs = procedures.length;
   const completedProcs = procedures.filter((p) => p.status === "completed").length;
 
+  // Fetch linked inbound record (if any)
+  const [inbound] = await db.select().from(inboundTable)
+    .where(eq(inboundTable.projectId, projectId));
+
   return {
     ...project,
     items: itemsWithProcs,
     totalProcedures: totalProcs,
     completedProcedures: completedProcs,
     progress: totalProcs > 0 ? Math.round((completedProcs / totalProcs) * 100) : 0,
+    inbound: inbound ?? null,
   };
 }
 
@@ -139,6 +163,7 @@ const createProjectSchema = z.object({
   deadline: z.string(),
   priority: z.enum(["low", "medium", "high"]),
   paintColor: z.string().nullable().optional(),
+  requiresExternalParts: z.boolean().optional().default(false),
   templateItems: z.array(z.object({
     templateId: z.number().int(),
     quantity: z.number().int().min(1).max(100),
@@ -185,10 +210,11 @@ router.post("/projects", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const { name, deadline, priority, paintColor, templateItems } = parsed.data;
+    const { name, deadline, priority, paintColor, requiresExternalParts, templateItems } = parsed.data;
 
     const [project] = await db.insert(workProjectsTable).values({
-      name, deadline: new Date(deadline), priority, paintColor: paintColor ?? null, companyId,
+      name, deadline: new Date(deadline), priority, paintColor: paintColor ?? null,
+      requiresExternalParts: requiresExternalParts ?? false, companyId,
     }).returning();
 
     let sortOrder = 0;
@@ -210,9 +236,19 @@ router.post("/projects", requireAdmin, async (req, res) => {
         for (const proc of templateProcs) {
           await db.insert(workItemProceduresTable).values({
             itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
+            requiresInbound: proc.requiresInbound,
           });
         }
       }
+    }
+
+    // Auto-create inbound record if project requires external parts
+    if (requiresExternalParts) {
+      await db.insert(inboundTable).values({
+        projectId: project.id,
+        status: "expected",
+        companyId,
+      });
     }
 
     const full = await getProjectWithItems(project.id);
@@ -373,6 +409,7 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
   try {
     const procedureId = Number(req.params.procedureId);
     const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
 
     const [existing] = await db.select().from(workTimeLogsTable).where(
       and(eq(workTimeLogsTable.userId, userId), isNull(workTimeLogsTable.endTime))
@@ -384,6 +421,19 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
 
     const [procedure] = await db.select().from(workItemProceduresTable).where(eq(workItemProceduresTable.id, procedureId));
     if (!procedure) { res.status(404).json({ error: "Procedure not found" }); return; }
+
+    // Check inbound requirement: if procedure requires inbound, block when still "expected"
+    if (procedure.requiresInbound) {
+      const [item] = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.id, procedure.itemId));
+      if (item) {
+        const [inbound] = await db.select().from(inboundTable)
+          .where(and(eq(inboundTable.projectId, item.projectId), eq(inboundTable.companyId, companyId)));
+        if (inbound && inbound.status === "expected") {
+          res.status(403).json({ error: "Cannot start: waiting for inbound parts to arrive." });
+          return;
+        }
+      }
+    }
 
     await db.update(workItemProceduresTable).set({ status: "in_progress" }).where(eq(workItemProceduresTable.id, procedureId));
     const [log] = await db.insert(workTimeLogsTable).values({ procedureId, userId, startTime: new Date() }).returning();

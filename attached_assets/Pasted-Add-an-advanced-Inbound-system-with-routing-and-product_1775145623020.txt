@@ -1,0 +1,125 @@
+Add an advanced Inbound system with routing and production integration.
+
+IMPORTANT:
+- This is NOT inventory tracking
+- This is a workflow system for handling incoming pallets
+- Must work with multi-company structure
+
+--------------------------------------------------
+1. INBOUND TABLE
+--------------------------------------------------
+
+Create Inbound table:
+
+- id
+- project_id
+- status ("expected", "arrived", "stored", "in_production")
+- location_id (optional)
+- assigned_procedure (optional)
+- received_at (timestamp)
+- company_id
+
+--------------------------------------------------
+2. PROJECT INTEGRATION
+--------------------------------------------------
+
+Projects already have:
+
+- requires_external_parts (boolean)
+
+If true:
+- create inbound record with status = "expected"
+
+--------------------------------------------------
+3. ARRIVAL FLOW
+--------------------------------------------------
+
+Add action: "Unload Pallet"
+
+Flow:
+- user selects project from expected list
+- confirms
+
+System:
+- update inbound status to "arrived"
+- set received_at
+
+--------------------------------------------------
+4. ROUTING FLOW
+--------------------------------------------------
+
+For inbound with status = "arrived":
+
+Add action: "Route"
+
+User chooses:
+
+OPTION A: Store
+- select location
+- set status = "stored"
+
+OPTION B: Send to production
+- select procedure (e.g. sandblasting)
+- set status = "in_production"
+- set assigned_procedure
+
+--------------------------------------------------
+5. PROCEDURE DEPENDENCY
+--------------------------------------------------
+
+Extend procedures:
+
+- requires_inbound (boolean)
+
+Logic:
+- If requires_inbound = true AND inbound status = "expected":
+    block procedure
+
+- If inbound status = "arrived", "stored", or "in_production":
+    allow procedure
+
+--------------------------------------------------
+6. ROLE VISIBILITY
+--------------------------------------------------
+
+Ensure:
+
+- Users only see procedures assigned to their role
+
+- CNC-type roles (procedures without requires_inbound):
+    always visible
+
+- Other roles:
+    only visible if inbound is not "expected"
+
+--------------------------------------------------
+7. UI
+--------------------------------------------------
+
+Create "Inbound" page:
+
+Sections:
+
+1. Expected
+2. Arrived (needs routing)
+3. Stored / In Production
+
+Add buttons:
+- "Unload Pallet"
+- "Route"
+
+Keep UI simple and mobile-friendly.
+
+--------------------------------------------------
+8. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure all inbound data is filtered by company_id
+
+--------------------------------------------------
+9. IMPORTANT
+--------------------------------------------------
+
+- Do NOT track individual items inside pallets
+- Keep system fast and simple
+- Focus on workflow, not inventory

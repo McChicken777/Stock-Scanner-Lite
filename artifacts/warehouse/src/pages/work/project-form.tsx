@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +80,7 @@ export default function WorkProjectFormPage() {
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
   const [paintColor, setPaintColor] = useState("");
+  const [requiresExternalParts, setRequiresExternalParts] = useState(false);
   const [templateItems, setTemplateItems] = useState<TemplateItem[]>([]);
 
   const { data: templates = [], isLoading } = useQuery({
@@ -88,7 +89,7 @@ export default function WorkProjectFormPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; deadline: string; priority: string; paintColor: string | null; templateItems: TemplateItem[] }) => {
+    mutationFn: async (data: { name: string; deadline: string; priority: string; paintColor: string | null; requiresExternalParts: boolean; templateItems: TemplateItem[] }) => {
       const res = await fetch("/api/work/projects", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -194,6 +195,25 @@ export default function WorkProjectFormPage() {
           <p className="text-xs text-muted-foreground">Leave blank if items have individual colors or no paint needed.</p>
         </div>
 
+        {/* Requires External Parts */}
+        <div
+          className={`rounded-xl border-2 p-4 flex items-start gap-3 cursor-pointer transition-all ${requiresExternalParts ? "border-orange-400 bg-orange-50" : "border-border bg-muted/20"}`}
+          onClick={() => setRequiresExternalParts((v) => !v)}
+        >
+          <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${requiresExternalParts ? "bg-orange-500 border-orange-500" : "border-muted-foreground/40 bg-background"}`}>
+            {requiresExternalParts && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <PackageCheck className={`h-4 w-4 ${requiresExternalParts ? "text-orange-600" : "text-muted-foreground"}`} />
+              <p className={`font-bold text-sm ${requiresExternalParts ? "text-orange-700" : "text-foreground"}`}>Requires External Parts</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Creates an inbound record so you can track when parts arrive and route them.
+            </p>
+          </div>
+        </div>
+
         {/* Template selection with quantity */}
         <div className="space-y-3">
           <Label className="text-sm font-bold">Select Items to Produce</Label>
@@ -293,6 +313,7 @@ export default function WorkProjectFormPage() {
           onClick={() => createMutation.mutate({
             name: name.trim(), deadline, priority,
             paintColor: paintColor || null,
+            requiresExternalParts,
             templateItems,
           })}
           disabled={!canSubmit || createMutation.isPending}

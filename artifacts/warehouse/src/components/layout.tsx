@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -158,6 +158,7 @@ function WorkOrdersBottomNav() {
 
   const navItems = [
     { href: "/work/projects", icon: FolderKanban, label: "Projects" },
+    { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
     ...(isAdmin ? [{ href: "/work/templates", icon: Tag, label: "Templates" }] : []),
   ];
 
@@ -165,9 +166,8 @@ function WorkOrdersBottomNav() {
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto">
         {navItems.map((item) => {
-          const isActive = location.startsWith(item.href) && !location.startsWith("/work/projects/new") || location === item.href;
           const realActive = item.href === "/work/projects"
-            ? (location.startsWith("/work/projects") || location === "/work/projects")
+            ? (location.startsWith("/work/projects") || location === "/work/projects") && !location.startsWith("/work/projects/new") || location === "/work/projects"
             : location.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href} className="flex-1">

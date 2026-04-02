@@ -96,21 +96,32 @@ Set these environment variables to enable email alerts:
 - **Worker**: can view and update stock, scan QR codes, view history and dashboard, view/start/stop work order procedures; cannot manage products or users
 
 ### Work Orders Module
-- **Templates**: admin-configurable item blueprints with predefined procedures (Welding, Painting, CNC, Plasma Cutting, etc.)
-- **Projects**: work orders with name, deadline, priority, status. Created by copying templates (data is copied, not referenced)
-- **Items**: project items (copied from templates), each with procedures
-- **Procedures**: individual tasks with start/stop timer, status tracking (not_started/in_progress/completed)
+- **Templates**: admin-configurable item blueprints with predefined procedures (Welding, Painting, CNC, etc.); each procedure can optionally have `requiresInbound` flag
+- **Projects**: work orders with name, deadline, priority, status, RAL paint color, `requiresExternalParts` flag. Created by copying templates.
+- **Items**: project items (copied from templates), each with procedures, per-item paint color override
+- **Procedures**: individual tasks with start/stop timer, status tracking (not_started/in_progress/completed); procedures with `requiresInbound=true` are blocked until inbound status is arrived/stored/in_production
 - **Progress**: item progress = completed procedures / total; project progress = total across all items
 - **Urgency**: < 2 days = red (critical), < 5 days = orange (warning), else green
 - **Timer**: one active timer per user at a time; server enforces this
+- **Inbound Banner**: project detail shows linked inbound status and blocks procedures if parts not yet arrived
+
+### Inbound Module (workflow, not inventory tracking)
+- **Purpose**: track pallet arrivals for projects that require external parts
+- **Auto-creation**: creating a project with `requiresExternalParts=true` auto-creates an inbound record (status="expected")
+- **Arrival Flow**: any user can "Unload Pallet" → changes status to "arrived", stamps receivedAt
+- **Routing Flow** (admin): arrived pallets can be routed to "Store" (select location → status=stored) or "Production" (enter procedure → status=in_production)
+- **Procedure Blocking**: if a procedure has `requiresInbound=true` and the project's inbound is still "expected", the Start button is disabled with "Waiting" label both in UI and enforced server-side
+- **Manual Records**: admins can create inbound records not linked to a project (standalone pallets)
+- **Role**: all users can view and Unload; only admins can Route and Delete
 
 ### Work Order DB Tables
-- `work_templates` — id, name, created_at
-- `work_template_procedures` — id, template_id, name, sort_order
-- `work_projects` — id, name, deadline, priority, status, created_at
-- `work_project_items` — id, project_id, name, sort_order
-- `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds
+- `work_templates` — id, name, company_id, created_at
+- `work_template_procedures` — id, template_id, name, sort_order, requires_inbound (bool)
+- `work_projects` — id, name, deadline, priority, status, paint_color, requires_external_parts (bool), company_id, created_at
+- `work_project_items` — id, project_id, name, paint_color, sort_order
+- `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds, requires_inbound (bool)
 - `work_time_logs` — id, procedure_id, user_id, start_time, end_time, duration_seconds
+- `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, received_at, notes, company_id, created_at
 
 ## TypeScript & Composite Projects
 
@@ -137,9 +148,10 @@ Pages:
 - `/history` — Change history
 - `/locations` — Location management
 - `/work/projects` — Work orders project list
-- `/work/projects/new` — Create work order
-- `/work/projects/:id` — Project detail with items + procedures
-- `/work/templates` — Item template management (admin)
+- `/work/projects/new` — Create work order (with requiresExternalParts toggle)
+- `/work/projects/:id` — Project detail with items + procedures + inbound status banner
+- `/work/templates` — Item template management (admin); toggle requiresInbound per procedure
+- `/work/inbound` — Inbound pallet management (Expected / Arrived / Stored+InProduction)
 
 ### `artifacts/api-server` (`@workspace/api-server`)
 

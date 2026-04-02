@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit2, Check, X, Tag, Loader2, GripVertical } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, X, Tag, Loader2, GripVertical, PackageCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ import {
 interface Template {
   id: number;
   name: string;
-  procedures: { id: number; name: string; sortOrder: number }[];
+  procedures: { id: number; name: string; sortOrder: number; requiresInbound: boolean }[];
 }
 
 async function fetchTemplates(): Promise<Template[]> {
@@ -104,6 +104,19 @@ export default function WorkTemplatesPage() {
     },
     onSuccess: () => invalidate(),
     onError: () => toast({ title: "Failed to delete procedure", variant: "destructive" }),
+  });
+
+  const toggleRequiresInbound = useMutation({
+    mutationFn: async ({ templateId, procId, requiresInbound }: { templateId: number; procId: number; requiresInbound: boolean }) => {
+      const res = await fetch(`/api/work/templates/${templateId}/procedures/${procId}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requiresInbound }),
+      });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => invalidate(),
+    onError: () => toast({ title: "Failed to update procedure", variant: "destructive" }),
   });
 
   if (user?.role !== "admin") {
@@ -239,6 +252,13 @@ export default function WorkTemplatesPage() {
                     <div key={proc.id} className="flex items-center gap-2 text-sm">
                       <GripVertical className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       <span className="flex-1">{proc.name}</span>
+                      <button
+                        title={proc.requiresInbound ? "Requires inbound (click to disable)" : "Click to require inbound parts"}
+                        onClick={() => toggleRequiresInbound.mutate({ templateId: template.id, procId: proc.id, requiresInbound: !proc.requiresInbound })}
+                        className={`p-1 rounded transition-colors ${proc.requiresInbound ? "text-orange-500 hover:text-orange-600" : "text-muted-foreground/40 hover:text-orange-400"}`}
+                      >
+                        <PackageCheck className="h-3.5 w-3.5" />
+                      </button>
                       <button
                         onClick={() => deleteProcedure.mutate({ templateId: template.id, procId: proc.id })}
                         className="p-1 text-muted-foreground hover:text-destructive transition-colors"

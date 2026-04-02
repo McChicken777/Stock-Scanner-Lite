@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
-  ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check
+  ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
+  PackageCheck, Truck
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -20,6 +21,7 @@ interface Procedure {
   status: "not_started" | "in_progress" | "completed";
   sortOrder: number;
   totalTimeSeconds: number;
+  requiresInbound: boolean;
 }
 
 interface ProjectItem {
@@ -29,6 +31,14 @@ interface ProjectItem {
   progress: number;
   paintColor: string | null;
   procedures: Procedure[];
+}
+
+interface InboundRecord {
+  id: number;
+  status: "expected" | "arrived" | "stored" | "in_production";
+  locationId: string | null;
+  assignedProcedure: string | null;
+  receivedAt: string | null;
 }
 
 interface Project {
@@ -41,6 +51,8 @@ interface Project {
   totalProcedures: number;
   completedProcedures: number;
   paintColor: string | null;
+  requiresExternalParts: boolean;
+  inbound: InboundRecord | null;
   items: ProjectItem[];
 }
 
@@ -89,10 +101,11 @@ const priorityColors: Record<string, string> = {
 };
 
 function ProcedureRow({
-  proc, isAdmin, activeTimerProcedureId, hasAnyActiveTimer, projectId,
+  proc, isAdmin, activeTimerProcedureId, hasAnyActiveTimer, projectId, inboundStatus,
 }: {
   proc: Procedure; isAdmin: boolean; activeTimerProcedureId: number | null;
   hasAnyActiveTimer: boolean; projectId: number;
+  inboundStatus?: string | null;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -131,14 +144,25 @@ function ProcedureRow({
     completed: <CheckCircle2 className="h-4 w-4 text-green-500" />,
   }[proc.status];
 
+  const inboundBlocked = proc.requiresInbound && inboundStatus === "expected";
+
   return (
     <div className={cn(
       "flex items-center gap-3 p-3 rounded-lg border",
+      inboundBlocked ? "bg-orange-50/60 border-orange-200 opacity-80" :
       isActive ? "bg-orange-50 border-orange-300" : proc.status === "completed" ? "bg-green-50/50 border-green-200/50" : "bg-background border-border"
     )}>
       {statusIcon}
       <div className="flex-1 min-w-0">
         <p className={cn("font-medium text-sm", proc.status === "completed" && "line-through text-muted-foreground")}>{proc.name}</p>
+        {proc.requiresInbound && (
+          <p className={cn("text-[10px] font-bold flex items-center gap-0.5 mt-0.5",
+            inboundBlocked ? "text-orange-600" : "text-green-600"
+          )}>
+            <PackageCheck className="h-3 w-3" />
+            {inboundBlocked ? "Waiting for parts" : "Parts available"}
+          </p>
+        )}
         {proc.totalTimeSeconds > 0 && (
           <p className="text-xs text-muted-foreground"><Clock className="inline h-3 w-3 mr-0.5" />{formatSeconds(proc.totalTimeSeconds)}</p>
         )}
@@ -150,8 +174,10 @@ function ProcedureRow({
             <Square className="h-3.5 w-3.5" /> Stop
           </Button>
         ) : proc.status !== "completed" ? (
-          <Button size="sm" onClick={() => startMutation.mutate()} disabled={hasAnyActiveTimer || startMutation.isPending} className="h-9 px-3 bg-green-600 hover:bg-green-700 font-bold gap-1">
-            <Play className="h-3.5 w-3.5" /> Start
+          <Button size="sm" onClick={() => startMutation.mutate()} disabled={hasAnyActiveTimer || startMutation.isPending || inboundBlocked}
+            className={cn("h-9 px-3 font-bold gap-1", inboundBlocked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-green-600 hover:bg-green-700")}>
+            {inboundBlocked ? <PackageCheck className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            {inboundBlocked ? "Waiting" : "Start"}
           </Button>
         ) : isAdmin ? (
           <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => resetMutation.mutate()} title="Reset procedure">
@@ -164,10 +190,11 @@ function ProcedureRow({
 }
 
 function ItemCard({
-  item, isAdmin, activeTimerProcedureId, projectId, editMode, onDelete, onColorChange,
+  item, isAdmin, activeTimerProcedureId, projectId, editMode, onDelete, onColorChange, inboundStatus,
 }: {
   item: ProjectItem; isAdmin: boolean; activeTimerProcedureId: number | null;
   projectId: number; editMode: boolean; onDelete: () => void; onColorChange: (color: string | null) => void;
+  inboundStatus?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editingColor, setEditingColor] = useState(false);
@@ -239,7 +266,8 @@ function ItemCard({
             <p className="text-sm text-muted-foreground text-center py-4">No procedures</p>
           ) : item.procedures.map((proc) => (
             <ProcedureRow key={proc.id} proc={proc} isAdmin={isAdmin}
-              activeTimerProcedureId={activeTimerProcedureId} hasAnyActiveTimer={hasActiveTimer} projectId={projectId} />
+              activeTimerProcedureId={activeTimerProcedureId} hasAnyActiveTimer={hasActiveTimer}
+              projectId={projectId} inboundStatus={inboundStatus} />
           ))}
         </div>
       )}
@@ -502,6 +530,39 @@ export default function WorkProjectDetailPage() {
           </div>
         </div>
 
+        {/* Inbound status banner */}
+        {project.inbound && (
+          <div className={cn(
+            "rounded-xl border-2 p-3 flex items-center gap-3",
+            project.inbound.status === "expected" ? "bg-blue-50 border-blue-200" :
+            project.inbound.status === "arrived" ? "bg-orange-50 border-orange-300" :
+            project.inbound.status === "in_production" ? "bg-purple-50 border-purple-200" :
+            "bg-green-50 border-green-200"
+          )}>
+            {project.inbound.status === "expected" ? <PackageCheck className="h-4 w-4 text-blue-600 flex-shrink-0" /> :
+             project.inbound.status === "arrived" ? <Truck className="h-4 w-4 text-orange-600 flex-shrink-0 animate-pulse" /> :
+             <PackageCheck className="h-4 w-4 text-green-600 flex-shrink-0" />}
+            <div className="flex-1 min-w-0">
+              <p className={cn("text-xs font-bold uppercase tracking-wide",
+                project.inbound.status === "expected" ? "text-blue-700" :
+                project.inbound.status === "arrived" ? "text-orange-700" :
+                project.inbound.status === "in_production" ? "text-purple-700" :
+                "text-green-700"
+              )}>
+                Parts: {project.inbound.status === "expected" ? "Awaiting arrival" :
+                        project.inbound.status === "arrived" ? "Arrived — needs routing" :
+                        project.inbound.status === "stored" ? "Stored in warehouse" :
+                        "Sent to production"}
+              </p>
+              {project.inbound.receivedAt && (
+                <p className="text-[10px] text-muted-foreground">
+                  Received {new Date(project.inbound.receivedAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Active timer banner */}
         {activeTimer && activeTimerProcedureId && (
           <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-3 flex items-center gap-2">
@@ -530,6 +591,7 @@ export default function WorkProjectDetailPage() {
                 editMode={editMode}
                 onDelete={() => deleteItemMutation.mutate(item.id)}
                 onColorChange={(color) => updateItemColorMutation.mutate({ itemId: item.id, paintColor: color })}
+                inboundStatus={project.inbound?.status ?? null}
               />
             ))
           )}
