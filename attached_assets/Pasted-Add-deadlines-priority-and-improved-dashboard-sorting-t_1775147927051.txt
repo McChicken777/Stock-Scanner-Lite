@@ -1,0 +1,100 @@
+Add deadlines, priority, and improved dashboard sorting to the production system.
+
+IMPORTANT:
+- Build on existing tasks, READY/BLOCKED logic, and dashboards
+- Keep logic simple and clear
+- Must respect multi-company setup
+
+--------------------------------------------------
+1. PROJECT DEADLINE
+--------------------------------------------------
+
+Extend projects:
+
+- deadline (date)
+
+Allow admin to:
+- set and edit deadline
+
+--------------------------------------------------
+2. PROJECT PRIORITY
+--------------------------------------------------
+
+Add priority field to projects:
+
+- priority ("low", "normal", "high", "urgent")
+
+Default = "normal"
+
+Allow admin to edit.
+
+--------------------------------------------------
+3. TASK INHERITANCE
+--------------------------------------------------
+
+Tasks should inherit:
+
+- deadline from project
+- priority from project
+
+(No need to store separately, can be computed)
+
+--------------------------------------------------
+4. DASHBOARD DISPLAY (UPDATED LOGIC)
+--------------------------------------------------
+
+Dashboard must show ALL tasks for the user (based on role).
+
+Tasks should be ordered as follows:
+
+1. READY tasks first
+2. BLOCKED tasks below
+
+Within BOTH groups (READY and BLOCKED), sort by:
+- priority (urgent → low)
+- closest deadline first
+
+This means:
+- Workers always see all tasks
+- READY tasks naturally rise to the top
+- BLOCKED tasks stay visible but lower
+
+--------------------------------------------------
+5. VISUAL INDICATORS
+--------------------------------------------------
+
+Display clearly for each task:
+
+- status (READY or BLOCKED)
+- deadline date
+- priority label
+
+For BLOCKED tasks:
+- show reason (already implemented)
+
+Optional:
+- highlight urgent tasks visually
+
+--------------------------------------------------
+6. OVERDUE LOGIC
+--------------------------------------------------
+
+If current date > deadline:
+
+- mark task/project as "OVERDUE"
+
+Show this clearly in both READY and BLOCKED tasks.
+
+--------------------------------------------------
+7. NO FUNCTIONAL CHANGES
+--------------------------------------------------
+
+- Do NOT hide blocked tasks
+- Do NOT change existing READY/BLOCKED logic
+- Only improve sorting and visibility
+
+--------------------------------------------------
+8. MULTI-COMPANY
+--------------------------------------------------
+
+Ensure all data is filtered by company_id

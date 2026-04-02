@@ -3,7 +3,7 @@ import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 
-export const workPriorityEnum = pgEnum("work_priority", ["low", "medium", "high"]);
+export const workPriorityEnum = pgEnum("work_priority", ["low", "normal", "high", "urgent"]);
 export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress", "completed"]);
 export const workProcedureStatusEnum = pgEnum("work_procedure_status", ["not_started", "in_progress", "completed"]);
 
@@ -29,7 +29,7 @@ export const workProjectsTable = pgTable("work_projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   deadline: timestamp("deadline").notNull(),
-  priority: workPriorityEnum("priority").notNull().default("medium"),
+  priority: workPriorityEnum("priority").notNull().default("normal"),
   status: workProjectStatusEnum("status").notNull().default("in_progress"),
   paintColor: text("paint_color"),
   requiresExternalParts: boolean("requires_external_parts").notNull().default(false),

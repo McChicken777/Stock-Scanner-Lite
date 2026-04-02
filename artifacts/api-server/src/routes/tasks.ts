@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, rolesTable, userRolesTable, proceduresTable, itemProceduresTable, tasksTable, workProjectItemsTable, inboundTable, procedureInputsTable, productsTable, stockTable } from "@workspace/db";
+import { db, rolesTable, userRolesTable, proceduresTable, itemProceduresTable, tasksTable, workProjectItemsTable, inboundTable, procedureInputsTable, productsTable, stockTable, workProjectsTable } from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -283,10 +283,13 @@ router.get("/tasks", requireAuth, async (req, res) => {
       itemName: workProjectItemsTable.name,
       roleName: rolesTable.name,
       roleId: rolesTable.id,
+      projectDeadline: workProjectsTable.deadline,
+      projectPriority: workProjectsTable.priority,
     }).from(tasksTable)
       .innerJoin(proceduresTable, eq(tasksTable.procedureId, proceduresTable.id))
       .innerJoin(workProjectItemsTable, eq(tasksTable.itemId, workProjectItemsTable.id))
       .innerJoin(rolesTable, eq(proceduresTable.roleId, rolesTable.id))
+      .innerJoin(workProjectsTable, eq(tasksTable.projectId, workProjectsTable.id))
       .where(
         isAdmin
           ? eq(tasksTable.companyId, companyId)
@@ -368,25 +371,31 @@ router.get("/tasks", requireAuth, async (req, res) => {
       };
     }));
 
-    // Sort by role priority (for workers), then READY first, then status, then createdAt
-    const sorted = tasksWithStatus.sort((a, b) => {
-      if (!isAdmin) {
-        const aPriority = priorityMap.get(a.roleId) ?? 999;
-        const bPriority = priorityMap.get(b.roleId) ?? 999;
-        if (aPriority !== bPriority) return aPriority - bPriority;
-      }
-      
+    // Add deadline and priority to tasks, compute overdue
+    const now = new Date();
+    const tasksWithDeadline = tasksWithStatus.map((t) => ({
+      ...t,
+      deadline: t.projectDeadline,
+      priority: t.projectPriority,
+      isOverdue: new Date(t.projectDeadline) < now,
+    }));
+
+    // Sort: READY first, BLOCKED below. Within each: by priority (urgent→high→normal→low), then by deadline (closest first)
+    const taskPriorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
+    const sorted = tasksWithDeadline.sort((a, b) => {
+      // Group by READY/BLOCKED
       const readyOrder = { READY: 0, BLOCKED: 1 };
       const aReadyOrder = readyOrder[a.readyStatus as keyof typeof readyOrder];
       const bReadyOrder = readyOrder[b.readyStatus as keyof typeof readyOrder];
       if (aReadyOrder !== bReadyOrder) return aReadyOrder - bReadyOrder;
       
-      const statusOrder = { not_started: 0, in_progress: 1, completed: 2 };
-      const aStatusOrder = statusOrder[a.task.status as keyof typeof statusOrder];
-      const bStatusOrder = statusOrder[b.task.status as keyof typeof statusOrder];
-      if (aStatusOrder !== bStatusOrder) return aStatusOrder - bStatusOrder;
+      // Within same group, sort by priority (urgent first)
+      const aPriorityOrder = taskPriorityOrder[a.priority as keyof typeof taskPriorityOrder] ?? 999;
+      const bPriorityOrder = taskPriorityOrder[b.priority as keyof typeof taskPriorityOrder] ?? 999;
+      if (aPriorityOrder !== bPriorityOrder) return aPriorityOrder - bPriorityOrder;
       
-      return new Date(a.task.createdAt).getTime() - new Date(b.task.createdAt).getTime();
+      // Then by deadline (closest first)
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
 
     res.json(sorted.map((t) => ({
@@ -396,6 +405,9 @@ router.get("/tasks", requireAuth, async (req, res) => {
       roleName: t.roleName,
       readyStatus: t.readyStatus,
       blockedReason: t.blockedReason,
+      deadline: t.deadline,
+      priority: t.priority,
+      isOverdue: t.isOverdue,
     })));
   } catch (err) {
     req.log.error({ err }, "Failed to list tasks");

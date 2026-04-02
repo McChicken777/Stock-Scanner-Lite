@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Play, CheckCircle2, Circle, AlertCircle } from "lucide-react";
+import { Play, CheckCircle2, Circle, AlertCircle, Calendar, Flag } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Task {
@@ -18,6 +18,9 @@ interface Task {
   roleName: string;
   readyStatus: "READY" | "BLOCKED";
   blockedReason: string;
+  deadline: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  isOverdue: boolean;
 }
 
 async function fetchTasks(): Promise<Task[]> {
@@ -113,9 +116,43 @@ export default function TasksDashboardPage() {
             <div className="space-y-2">
               <h2 className="text-sm font-bold uppercase text-green-600">Ready to Start</h2>
               {ready.map((task) => (
-                <div key={task.id} className="bg-green-50 border-2 border-green-200 rounded-lg p-3 space-y-2">
-                  <p className="font-bold">{task.procedureName}</p>
-                  <p className="text-sm text-muted-foreground">{task.itemName}</p>
+                <div
+                  key={task.id}
+                  className={`rounded-lg p-3 space-y-2 border-2 ${
+                    task.isOverdue
+                      ? "bg-red-50 border-red-200"
+                      : task.priority === "urgent"
+                        ? "bg-orange-50 border-orange-200"
+                        : "bg-green-50 border-green-200"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold">{task.procedureName}</p>
+                      <p className="text-sm text-muted-foreground">{task.itemName}</p>
+                    </div>
+                    {task.priority === "urgent" && (
+                      <Flag className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <span className={task.isOverdue ? "text-red-700 font-bold" : "text-muted-foreground"}>
+                        {new Date(task.deadline).toLocaleDateString()}
+                        {task.isOverdue ? " - OVERDUE" : ""}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                      task.priority === "urgent"
+                        ? "bg-red-200 text-red-700"
+                        : task.priority === "high"
+                          ? "bg-orange-200 text-orange-700"
+                          : "bg-blue-100 text-blue-700"
+                    }`}>
+                      {task.priority}
+                    </span>
+                  </div>
                   <Button
                     size="sm"
                     onClick={() => startMutation.mutate(task.id)}
@@ -133,14 +170,42 @@ export default function TasksDashboardPage() {
             <div className="space-y-2">
               <h2 className="text-sm font-bold uppercase text-red-600">Blocked</h2>
               {blocked.map((task) => (
-                <div key={task.id} className="bg-red-50 border-2 border-red-200 rounded-lg p-3 space-y-2">
+                <div
+                  key={task.id}
+                  className={`rounded-lg p-3 space-y-2 border-2 ${
+                    task.isOverdue ? "bg-red-100 border-red-400" : "bg-red-50 border-red-200"
+                  }`}
+                >
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-                    <div>
+                    <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${task.isOverdue ? "text-red-700" : "text-red-600"}`} />
+                    <div className="flex-1 min-w-0">
                       <p className="font-bold">{task.procedureName}</p>
                       <p className="text-sm text-muted-foreground">{task.itemName}</p>
-                      <p className="text-xs text-red-700 mt-1 font-medium">{task.blockedReason}</p>
+                      <p className={`text-xs font-medium mt-1 ${task.isOverdue ? "text-red-700" : "text-red-600"}`}>
+                        {task.blockedReason}
+                      </p>
                     </div>
+                    {task.priority === "urgent" && (
+                      <Flag className="h-4 w-4 text-red-700 flex-shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <span className={task.isOverdue ? "text-red-700 font-bold" : "text-muted-foreground"}>
+                        {new Date(task.deadline).toLocaleDateString()}
+                        {task.isOverdue ? " - OVERDUE" : ""}
+                      </span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                      task.priority === "urgent"
+                        ? "bg-red-300 text-red-700"
+                        : task.priority === "high"
+                          ? "bg-orange-200 text-orange-700"
+                          : "bg-blue-100 text-blue-700"
+                    }`}>
+                      {task.priority}
+                    </span>
                   </div>
                 </div>
               ))}
