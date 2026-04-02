@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable } from "@workspace/db";
+import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable, productsTable } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -32,8 +32,23 @@ router.post("/templates", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
-    const [t] = await db.insert(workTemplatesTable).values({ name: parsed.data.name, companyId }).returning();
-    res.status(201).json({ ...t, procedures: [] });
+
+    // Auto-create a matching product as manufactured_part
+    const [product] = await db.insert(productsTable).values({
+      name: parsed.data.name,
+      category: "",
+      itemType: "manufactured_part",
+      bufferStock: 0,
+      targetStock: 0,
+      companyId,
+    }).returning();
+
+    const [t] = await db.insert(workTemplatesTable).values({
+      name: parsed.data.name,
+      companyId,
+      productId: product.id,
+    }).returning();
+    res.status(201).json({ ...t, procedures: [], productId: product.id });
   } catch (err) {
     req.log.error({ err }, "Failed to create template");
     res.status(500).json({ error: "Failed to create template" });

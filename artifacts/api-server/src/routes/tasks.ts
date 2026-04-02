@@ -6,6 +6,16 @@ import { requireAuth, requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+// Helper: check if item type is a purchased/stocked item
+function isPurchasedType(itemType: string | null) {
+  return itemType === "purchase" || itemType === "purchased_part";
+}
+
+// Helper: check if item type is a manufactured/production item
+function isManufacturedType(itemType: string | null) {
+  return itemType === "production" || itemType === "manufactured_part";
+}
+
 // GET /api/roles
 router.get("/roles", requireAuth, async (req, res) => {
   try {
@@ -129,6 +139,7 @@ router.post("/procedures", requireAdmin, async (req, res) => {
       roleId: z.number().int(),
       orderIndex: z.number().int().optional(),
       requiresInbound: z.boolean().optional(),
+      requiresComponents: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [proc] = await db.insert(proceduresTable).values({
@@ -151,6 +162,7 @@ router.put("/procedures/:id", requireAdmin, async (req, res) => {
       roleId: z.number().int().optional(),
       orderIndex: z.number().int().optional(),
       requiresInbound: z.boolean().optional(),
+      requiresComponents: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [proc] = await db.update(proceduresTable).set(parsed.data)
@@ -250,12 +262,80 @@ router.delete("/procedures/inputs/:inputId", requireAdmin, async (req, res) => {
   }
 });
 
+// Shared helper: compute blocked reason for a task
+async function computeBlockedReason(
+  task: { id: number; status: string; itemId: number; procedureId: number; projectId: number },
+  companyId: number,
+  proc: { requiresComponents: boolean },
+): Promise<string> {
+  if (task.status !== "not_started") return "";
+
+  // Check previous procedures in item order
+  const itemProcs = await db.select().from(itemProceduresTable)
+    .where(eq(itemProceduresTable.itemId, task.itemId))
+    .orderBy(itemProceduresTable.orderIndex);
+  
+  const currentOrder = itemProcs.find((ip) => ip.procedureId === task.procedureId)?.orderIndex ?? 999;
+  const previousProcs = itemProcs.filter((ip) => ip.orderIndex < currentOrder);
+  
+  if (previousProcs.length > 0) {
+    const prevTasks = await db.select().from(tasksTable)
+      .where(and(
+        eq(tasksTable.itemId, task.itemId),
+        inArray(tasksTable.procedureId, previousProcs.map((p) => p.procedureId)),
+      ));
+    
+    const incompleteProc = prevTasks.find((pt) => pt.status !== "completed");
+    if (incompleteProc) {
+      return "Waiting for previous procedures";
+    }
+  }
+
+  // Check required components (only if procedure.requiresComponents = true)
+  if (proc.requiresComponents) {
+    const inputs = await db.select({
+      input: procedureInputsTable,
+      product: productsTable,
+    }).from(procedureInputsTable)
+      .innerJoin(productsTable, eq(procedureInputsTable.itemId, productsTable.id))
+      .where(and(
+        eq(procedureInputsTable.procedureId, task.procedureId),
+        eq(procedureInputsTable.companyId, companyId),
+      ));
+    
+    for (const inp of inputs) {
+      if (isPurchasedType(inp.product.itemType)) {
+        // Check stock for purchased parts
+        const [stock] = await db.select().from(stockTable)
+          .where(eq(stockTable.productId, inp.input.itemId));
+        
+        if (!stock || stock.quantity < inp.input.quantityRequired) {
+          return `Missing stock: ${inp.product.name} (need ${inp.input.quantityRequired}, have ${stock?.quantity ?? 0})`;
+        }
+      } else if (isManufacturedType(inp.product.itemType)) {
+        // Check if related task is completed
+        const relatedTask = await db.select().from(tasksTable)
+          .where(and(
+            eq(tasksTable.procedureId, inp.input.itemId),
+            eq(tasksTable.projectId, task.projectId),
+          ));
+        
+        if (relatedTask.length === 0 || relatedTask[0].status !== "completed") {
+          return `Waiting for: ${inp.product.name}`;
+        }
+      }
+    }
+  }
+
+  return "";
+}
+
 // GET /api/tasks
 router.get("/tasks", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const userId = req.session.userId!;
-    const isAdmin = req.session.role === "admin";
+    const isAdmin = req.session.role === "admin" || req.session.role === "owner";
     
     // Get user's roles with priority
     const userRoles = await db.select({ roleId: userRolesTable.roleId, priority: userRolesTable.priority })
@@ -280,6 +360,7 @@ router.get("/tasks", requireAuth, async (req, res) => {
     const tasks = await db.select({
       task: tasksTable,
       procedureName: proceduresTable.name,
+      requiresComponents: proceduresTable.requiresComponents,
       itemName: workProjectItemsTable.name,
       roleName: rolesTable.name,
       roleId: rolesTable.id,
@@ -301,68 +382,11 @@ router.get("/tasks", requireAuth, async (req, res) => {
 
     // Compute READY/BLOCKED status for each task
     const tasksWithStatus = await Promise.all(tasks.map(async (t) => {
-      let blockedReason = "";
-      
-      // Check previous procedures
-      if (t.task.status === "not_started") {
-        const itemProcs = await db.select().from(itemProceduresTable)
-          .where(eq(itemProceduresTable.itemId, t.task.itemId))
-          .orderBy(itemProceduresTable.orderIndex);
-        
-        const currentOrder = itemProcs.find((ip) => ip.procedureId === t.task.procedureId)?.orderIndex ?? 999;
-        const previousProcs = itemProcs.filter((ip) => ip.orderIndex < currentOrder);
-        
-        if (previousProcs.length > 0) {
-          const prevTasks = await db.select().from(tasksTable)
-            .where(and(
-              eq(tasksTable.itemId, t.task.itemId),
-              inArray(tasksTable.procedureId, previousProcs.map((p) => p.procedureId)),
-            ));
-          
-          const incompleteProc = prevTasks.find((pt) => pt.status !== "completed");
-          if (incompleteProc) {
-            blockedReason = "Waiting for previous procedures";
-          }
-        }
-      }
-      
-      // Check required inputs
-      if (!blockedReason && t.task.status === "not_started") {
-        const inputs = await db.select({
-          input: procedureInputsTable,
-          product: productsTable,
-        }).from(procedureInputsTable)
-          .innerJoin(productsTable, eq(procedureInputsTable.itemId, productsTable.id))
-          .where(and(
-            eq(procedureInputsTable.procedureId, t.task.procedureId),
-            eq(procedureInputsTable.companyId, companyId),
-          ));
-        
-        for (const inp of inputs) {
-          if (inp.product.itemType === "purchase") {
-            // Check stock
-            const [stock] = await db.select().from(stockTable)
-              .where(eq(stockTable.productId, inp.input.itemId));
-            
-            if (!stock || stock.quantity < inp.input.quantityRequired) {
-              blockedReason = `Missing: ${inp.product.name} (need ${inp.input.quantityRequired})`;
-              break;
-            }
-          } else if (inp.product.itemType === "production") {
-            // Check if related task is completed (simplified: just one level)
-            const relatedTask = await db.select().from(tasksTable)
-              .where(and(
-                eq(tasksTable.procedureId, inp.input.itemId),
-                eq(tasksTable.projectId, t.task.projectId),
-              ));
-            
-            if (relatedTask.length === 0 || relatedTask[0].status !== "completed") {
-              blockedReason = `Waiting for ${inp.product.name} production`;
-              break;
-            }
-          }
-        }
-      }
+      const blockedReason = await computeBlockedReason(
+        { ...t.task },
+        companyId,
+        { requiresComponents: t.requiresComponents },
+      );
       
       return {
         ...t,
@@ -380,27 +404,25 @@ router.get("/tasks", requireAuth, async (req, res) => {
       isOverdue: new Date(t.projectDeadline) < now,
     }));
 
-    // Sort: READY first, BLOCKED below. Within each: by priority (urgent→high→normal→low), then by deadline (closest first)
+    // Sort: READY first, BLOCKED below. Within each: by priority (urgent→high→normal→low), then by deadline
     const taskPriorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
     const sorted = tasksWithDeadline.sort((a, b) => {
-      // Group by READY/BLOCKED
       const readyOrder = { READY: 0, BLOCKED: 1 };
       const aReadyOrder = readyOrder[a.readyStatus as keyof typeof readyOrder];
       const bReadyOrder = readyOrder[b.readyStatus as keyof typeof readyOrder];
       if (aReadyOrder !== bReadyOrder) return aReadyOrder - bReadyOrder;
       
-      // Within same group, sort by priority (urgent first)
       const aPriorityOrder = taskPriorityOrder[a.priority as keyof typeof taskPriorityOrder] ?? 999;
       const bPriorityOrder = taskPriorityOrder[b.priority as keyof typeof taskPriorityOrder] ?? 999;
       if (aPriorityOrder !== bPriorityOrder) return aPriorityOrder - bPriorityOrder;
       
-      // Then by deadline (closest first)
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
 
     res.json(sorted.map((t) => ({
       ...t.task,
       procedureName: t.procedureName,
+      requiresComponents: t.requiresComponents,
       itemName: t.itemName,
       roleName: t.roleName,
       readyStatus: t.readyStatus,
@@ -421,74 +443,26 @@ router.put("/tasks/:id/start", requireAuth, async (req, res) => {
     const id = Number(req.params.id);
     const companyId = req.session.companyId!;
 
-    // Get task with procedure info
     const [task] = await db.select().from(tasksTable)
       .where(and(eq(tasksTable.id, id), eq(tasksTable.companyId, companyId)));
     if (!task) { res.status(404).json({ error: "Not found" }); return; }
     
-    // Check READY status
-    if (task.status === "not_started") {
-      // Check previous procedures
-      const itemProcs = await db.select().from(itemProceduresTable)
-        .where(eq(itemProceduresTable.itemId, task.itemId))
-        .orderBy(itemProceduresTable.orderIndex);
-      
-      const currentOrder = itemProcs.find((ip) => ip.procedureId === task.procedureId)?.orderIndex ?? 999;
-      const previousProcs = itemProcs.filter((ip) => ip.orderIndex < currentOrder);
-      
-      if (previousProcs.length > 0) {
-        const prevTasks = await db.select().from(tasksTable)
-          .where(and(
-            eq(tasksTable.itemId, task.itemId),
-            inArray(tasksTable.procedureId, previousProcs.map((p) => p.procedureId)),
-          ));
-        
-        const incompleteSome = prevTasks.some((pt) => pt.status !== "completed");
-        if (incompleteSome) {
-          res.status(403).json({ error: "Cannot start: waiting for previous procedures" });
-          return;
-        }
-      }
-      
-      // Check required inputs
-      const inputs = await db.select({
-        input: procedureInputsTable,
-        product: productsTable,
-      }).from(procedureInputsTable)
-        .innerJoin(productsTable, eq(procedureInputsTable.itemId, productsTable.id))
-        .where(and(
-          eq(procedureInputsTable.procedureId, task.procedureId),
-          eq(procedureInputsTable.companyId, companyId),
-        ));
-      
-      for (const inp of inputs) {
-        if (inp.product.itemType === "purchase") {
-          const [stock] = await db.select().from(stockTable)
-            .where(eq(stockTable.productId, inp.input.itemId));
-          
-          if (!stock || stock.quantity < inp.input.quantityRequired) {
-            res.status(403).json({ error: `Cannot start: missing ${inp.product.name} (need ${inp.input.quantityRequired})` });
-            return;
-          }
-        } else if (inp.product.itemType === "production") {
-          const relatedTask = await db.select().from(tasksTable)
-            .where(and(
-              eq(tasksTable.procedureId, inp.input.itemId),
-              eq(tasksTable.projectId, task.projectId),
-            ));
-          
-          if (relatedTask.length === 0 || relatedTask[0].status !== "completed") {
-            res.status(403).json({ error: `Cannot start: waiting for ${inp.product.name} production` });
-            return;
-          }
-        }
-      }
-    }
-
-    // Get procedure with inbound check
+    // Get procedure (for requiresComponents and requiresInbound)
     const [proc] = await db.select().from(proceduresTable)
       .where(eq(proceduresTable.id, task.procedureId));
     if (!proc) { res.status(404).json({ error: "Procedure not found" }); return; }
+
+    // Compute blocked reason
+    const blockedReason = await computeBlockedReason(
+      { ...task },
+      companyId,
+      { requiresComponents: proc.requiresComponents },
+    );
+    
+    if (blockedReason) {
+      res.status(403).json({ error: `Cannot start: ${blockedReason}` });
+      return;
+    }
 
     // Check inbound if required
     if (proc.requiresInbound) {
@@ -497,31 +471,6 @@ router.put("/tasks/:id/start", requireAuth, async (req, res) => {
       if (inbound && inbound.status === "expected") {
         res.status(403).json({ error: "Cannot start: waiting for inbound parts" });
         return;
-      }
-    }
-
-    // Check if previous procedures are completed
-    const [item] = await db.select().from(workProjectItemsTable)
-      .where(eq(workProjectItemsTable.id, task.itemId));
-    if (item) {
-      const itemProcs = await db.select().from(itemProceduresTable)
-        .where(eq(itemProceduresTable.itemId, task.itemId))
-        .orderBy(itemProceduresTable.orderIndex);
-      
-      const currentProcOrder = itemProcs.find((ip) => ip.procedureId === task.procedureId)?.orderIndex ?? 999;
-      const previousProcs = itemProcs.filter((ip) => ip.orderIndex < currentProcOrder);
-      
-      if (previousProcs.length > 0) {
-        const previousTasks = await db.select().from(tasksTable)
-          .where(and(
-            eq(tasksTable.itemId, task.itemId),
-            inArray(tasksTable.procedureId, previousProcs.map((p) => p.procedureId)),
-          ));
-        const allPreviousDone = previousTasks.every((t) => t.status === "completed");
-        if (!allPreviousDone) {
-          res.status(403).json({ error: "Cannot start: previous procedures not completed" });
-          return;
-        }
       }
     }
 

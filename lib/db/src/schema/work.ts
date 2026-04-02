@@ -11,6 +11,7 @@ export const workProcedureStatusEnum = pgEnum("work_procedure_status", ["not_sta
 export const workTemplatesTable = pgTable("work_templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -90,6 +91,7 @@ export const proceduresTable = pgTable("procedures", {
   roleId: integer("role_id").notNull().references(() => rolesTable.id, { onDelete: "cascade" }),
   orderIndex: integer("order_index").notNull().default(0),
   requiresInbound: boolean("requires_inbound").notNull().default(false),
+  requiresComponents: boolean("requires_components").notNull().default(false),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

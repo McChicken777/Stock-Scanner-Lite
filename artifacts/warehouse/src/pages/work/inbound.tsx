@@ -20,6 +20,8 @@ interface InboundRecord {
   locationId: string | null;
   locationName: string | null;
   assignedProcedure: string | null;
+  procedureId: number | null;
+  procedureName: string | null;
   receivedAt: string | null;
   notes: string | null;
   companyId: number;
@@ -31,6 +33,18 @@ interface Location {
   description: string | null;
 }
 
+interface Procedure {
+  id: number;
+  name: string;
+  roleName: string;
+}
+
+interface WorkProject {
+  id: number;
+  name: string;
+  status: string;
+}
+
 async function fetchInbound(): Promise<InboundRecord[]> {
   const res = await fetch("/api/inbound", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load inbound");
@@ -40,6 +54,18 @@ async function fetchInbound(): Promise<InboundRecord[]> {
 async function fetchLocations(): Promise<Location[]> {
   const res = await fetch("/api/locations", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load locations");
+  return res.json();
+}
+
+async function fetchProcedures(): Promise<Procedure[]> {
+  const res = await fetch("/api/tasks/procedures", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load procedures");
+  return res.json();
+}
+
+async function fetchProjects(): Promise<WorkProject[]> {
+  const res = await fetch("/api/work/projects", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load projects");
   return res.json();
 }
 
@@ -89,10 +115,10 @@ function InboundCard({
           <span className="font-medium">{record.locationName || record.locationId}</span>
         </div>
       )}
-      {record.status === "in_production" && record.assignedProcedure && (
+      {record.status === "in_production" && (record.procedureName || record.assignedProcedure) && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Wrench className="h-3.5 w-3.5" />
-          <span className="font-medium">{record.assignedProcedure}</span>
+          <span className="font-medium">{record.procedureName || record.assignedProcedure}</span>
         </div>
       )}
       {record.receivedAt && (
@@ -196,9 +222,10 @@ export default function InboundPage() {
   const [routeRecord, setRouteRecord] = useState<InboundRecord | null>(null);
   const [routeDest, setRouteDest] = useState<"store" | "production">("store");
   const [routeLocation, setRouteLocation] = useState("");
-  const [routeProcedure, setRouteProcedure] = useState("");
+  const [routeProcedureId, setRouteProcedureId] = useState<number | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newNotes, setNewNotes] = useState("");
+  const [newProjectId, setNewProjectId] = useState<string>("");
 
   const { data: inbound = [], isLoading } = useQuery({
     queryKey: ["/api/inbound"],
@@ -210,6 +237,18 @@ export default function InboundPage() {
     queryKey: ["/api/locations"],
     queryFn: fetchLocations,
     enabled: !!routeRecord && routeDest === "store",
+  });
+
+  const { data: procedures = [] } = useQuery({
+    queryKey: ["/api/tasks/procedures"],
+    queryFn: fetchProcedures,
+    enabled: !!routeRecord && routeDest === "production",
+  });
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ["/api/work/projects"],
+    queryFn: fetchProjects,
+    enabled: createOpen,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/inbound"] });
@@ -227,13 +266,13 @@ export default function InboundPage() {
   });
 
   const routeMutation = useMutation({
-    mutationFn: async ({ id, destination, locationId, assignedProcedure }: {
-      id: number; destination: "store" | "production"; locationId?: string; assignedProcedure?: string;
+    mutationFn: async ({ id, destination, locationId, procedureId }: {
+      id: number; destination: "store" | "production"; locationId?: string; procedureId?: number;
     }) => {
       const res = await fetch(`/api/inbound/${id}/route`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination, locationId, assignedProcedure }),
+        body: JSON.stringify({ destination, locationId, procedureId }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -244,7 +283,7 @@ export default function InboundPage() {
       invalidate();
       setRouteRecord(null);
       setRouteLocation("");
-      setRouteProcedure("");
+      setRouteProcedureId(null);
       toast({ title: "Pallet routed successfully" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
@@ -263,7 +302,10 @@ export default function InboundPage() {
       const res = await fetch("/api/inbound", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: newNotes || undefined }),
+        body: JSON.stringify({
+          notes: newNotes || undefined,
+          projectId: newProjectId ? Number(newProjectId) : undefined,
+        }),
       });
       if (!res.ok) throw new Error("Failed");
     },
@@ -271,6 +313,7 @@ export default function InboundPage() {
       invalidate();
       setCreateOpen(false);
       setNewNotes("");
+      setNewProjectId("");
       toast({ title: "Inbound record created" });
     },
     onError: () => toast({ title: "Failed to create", variant: "destructive" }),
@@ -286,15 +329,15 @@ export default function InboundPage() {
       toast({ title: "Select a location", variant: "destructive" });
       return;
     }
-    if (routeDest === "production" && !routeProcedure.trim()) {
-      toast({ title: "Enter a procedure name", variant: "destructive" });
+    if (routeDest === "production" && !routeProcedureId) {
+      toast({ title: "Select a procedure", variant: "destructive" });
       return;
     }
     routeMutation.mutate({
       id: routeRecord.id,
       destination: routeDest,
       locationId: routeDest === "store" ? routeLocation : undefined,
-      assignedProcedure: routeDest === "production" ? routeProcedure.trim() : undefined,
+      procedureId: routeDest === "production" ? routeProcedureId! : undefined,
     });
   };
 
@@ -324,7 +367,6 @@ export default function InboundPage() {
           </div>
         ) : (
           <>
-            {/* Arrived section first — needs attention */}
             {arrived.length > 0 && (
               <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
@@ -371,7 +413,13 @@ export default function InboundPage() {
       </div>
 
       {/* Route Dialog */}
-      <Dialog open={!!routeRecord} onOpenChange={(o) => { if (!o) setRouteRecord(null); }}>
+      <Dialog open={!!routeRecord} onOpenChange={(o) => {
+        if (!o) {
+          setRouteRecord(null);
+          setRouteLocation("");
+          setRouteProcedureId(null);
+        }
+      }}>
         <DialogContent className="w-[90vw] max-w-sm rounded-xl">
           <DialogHeader>
             <DialogTitle>Route Pallet</DialogTitle>
@@ -440,14 +488,29 @@ export default function InboundPage() {
 
             {routeDest === "production" && (
               <div className="space-y-2">
-                <label className="text-sm font-bold">Procedure / Process</label>
-                <input
-                  type="text"
-                  value={routeProcedure}
-                  onChange={(e) => setRouteProcedure(e.target.value)}
-                  placeholder="e.g. Sandblasting, CNC, Welding..."
-                  className="w-full px-3 py-2.5 h-11 border-2 border-border rounded-lg text-sm bg-background outline-none focus:border-primary"
-                />
+                <label className="text-sm font-bold">Select Procedure</label>
+                {procedures.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No procedures configured. Add them in Admin → Procedures.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {procedures.map((proc) => (
+                      <button
+                        key={proc.id}
+                        type="button"
+                        onClick={() => setRouteProcedureId(proc.id)}
+                        className={cn(
+                          "w-full text-left px-3 py-2.5 rounded-lg border-2 text-sm font-medium transition-all",
+                          routeProcedureId === proc.id
+                            ? "border-purple-500 bg-purple-50 text-purple-700"
+                            : "border-border bg-card hover:border-primary/50"
+                        )}
+                      >
+                        <span className="font-bold">{proc.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{proc.roleName}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -470,9 +533,19 @@ export default function InboundPage() {
               <DialogTitle>Add Inbound Record</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Create an inbound record for a pallet not linked to a project.
-              </p>
+              <div className="space-y-1.5">
+                <label className="text-sm font-bold">Link to Work Order (optional)</label>
+                <select
+                  value={newProjectId}
+                  onChange={(e) => setNewProjectId(e.target.value)}
+                  className="w-full px-3 py-2.5 h-11 border-2 border-border rounded-lg text-sm bg-background outline-none focus:border-primary"
+                >
+                  <option value="">No work order</option>
+                  {projects.filter((p) => p.status === "in_progress").map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-bold">Notes (optional)</label>
                 <input

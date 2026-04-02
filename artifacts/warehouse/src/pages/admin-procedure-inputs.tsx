@@ -15,10 +15,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Link } from "wouter";
 
+type AnyItemType = "purchase" | "production" | "purchased_part" | "manufactured_part" | "final_product";
+
 interface Product {
   id: number;
   name: string;
-  itemType: "purchase" | "production";
+  itemType: AnyItemType;
 }
 
 interface ProcedureInput {
@@ -26,7 +28,7 @@ interface ProcedureInput {
   itemId: number;
   quantityRequired: number;
   productName: string;
-  itemType: "purchase" | "production";
+  itemType: AnyItemType;
 }
 
 interface Procedure {
@@ -151,7 +153,8 @@ export default function AdminProcedureInputsPage() {
                 <div>
                   <p className="font-medium">{input.productName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {input.itemType === "purchase" ? "📦 Purchase" : "⚙️ Production"} · Qty: {input.quantityRequired}
+                    {input.itemType === "purchased_part" || input.itemType === "purchase" ? "📦 Purchased Part" :
+                     input.itemType === "final_product" ? "✅ Final Product" : "⚙️ Manufactured Part"} · Qty: {input.quantityRequired}
                   </p>
                 </div>
                 <Button
@@ -178,7 +181,7 @@ export default function AdminProcedureInputsPage() {
           <SelectContent>
             {products.map((p) => (
               <SelectItem key={p.id} value={String(p.id)}>
-                {p.name} {p.itemType === "purchase" ? "(📦)" : "(⚙️)"}
+                {p.name} {p.itemType === "purchased_part" || p.itemType === "purchase" ? "(📦)" : p.itemType === "final_product" ? "(✅)" : "(⚙️)"}
               </SelectItem>
             ))}
           </SelectContent>

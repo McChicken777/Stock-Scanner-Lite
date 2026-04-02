@@ -3,7 +3,7 @@ import { useRoute, useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, ShoppingCart, Factory, Package } from "lucide-react";
 import { useCreateProduct, useUpdateProduct, useGetProduct } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,35 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
 
+const ITEM_TYPES = [
+  {
+    value: "purchased_part",
+    label: "Purchased Part",
+    description: "Sourced from external suppliers, tracked in stock",
+    icon: ShoppingCart,
+    color: "border-blue-500 bg-blue-50 text-blue-700",
+  },
+  {
+    value: "manufactured_part",
+    label: "Manufactured Part",
+    description: "Made in-house as a sub-component for final products",
+    icon: Factory,
+    color: "border-orange-500 bg-orange-50 text-orange-700",
+  },
+  {
+    value: "final_product",
+    label: "Final Product",
+    description: "Finished goods delivered to customers",
+    icon: Package,
+    color: "border-green-500 bg-green-50 text-green-700",
+  },
+] as const;
+
+type ItemType = "purchased_part" | "manufactured_part" | "final_product";
+
 const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
-  category: z.string().min(2, "Category is required"),
-  itemType: z.enum(["purchase", "production"]).default("purchase"),
+  itemType: z.enum(["purchased_part", "manufactured_part", "final_product"]).default("purchased_part"),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
   supplierId: z.coerce.number().optional().or(z.literal("")),
@@ -36,6 +61,14 @@ async function fetchSuppliers(): Promise<Supplier[]> {
   const res = await fetch("/api/suppliers", { credentials: "include" });
   if (!res.ok) throw new Error("Failed");
   return res.json();
+}
+
+// Map legacy item types to new ones for display
+function normalizeItemType(raw: string | undefined | null): ItemType {
+  if (raw === "purchase") return "purchased_part";
+  if (raw === "production") return "manufactured_part";
+  if (raw === "purchased_part" || raw === "manufactured_part" || raw === "final_product") return raw;
+  return "purchased_part";
 }
 
 export default function ProductFormPage() {
@@ -64,8 +97,7 @@ export default function ProductFormPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      category: "",
-      itemType: "purchase",
+      itemType: "purchased_part",
       bufferStock: 0,
       targetStock: 0,
       supplierId: "",
@@ -75,12 +107,14 @@ export default function ProductFormPage() {
     },
   });
 
+  const watchedItemType = form.watch("itemType");
+  const isPurchased = watchedItemType === "purchased_part";
+
   useEffect(() => {
     if (product && isEdit) {
       form.reset({
         name: product.name,
-        category: product.category,
-        itemType: (product as any).itemType || "purchase",
+        itemType: normalizeItemType((product as any).itemType),
         bufferStock: product.bufferStock,
         targetStock: (product as any).targetStock || 0,
         supplierId: (product as any).supplierId ? String((product as any).supplierId) : "",
@@ -94,9 +128,10 @@ export default function ProductFormPage() {
   const onSubmit = (data: FormValues) => {
     const payload = {
       ...data,
-      supplierId: data.supplierId ? parseInt(String(data.supplierId)) : null,
-      supplierProductName: data.supplierProductName || null,
-      supplierSku: data.supplierSku || null,
+      category: "",
+      supplierId: isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null,
+      supplierProductName: isPurchased ? (data.supplierProductName || null) : null,
+      supplierSku: isPurchased ? (data.supplierSku || null) : null,
       alertEmail: data.alertEmail || null,
     };
 
@@ -163,6 +198,42 @@ export default function ProductFormPage() {
       <div className="p-4 flex-1">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+
+            {/* Item Type Selector */}
+            <FormField
+              control={form.control}
+              name="itemType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Item Type</FormLabel>
+                  <div className="grid grid-cols-1 gap-2">
+                    {ITEM_TYPES.map((type) => {
+                      const Icon = type.icon;
+                      const selected = field.value === type.value;
+                      return (
+                        <button
+                          key={type.value}
+                          type="button"
+                          onClick={() => field.onChange(type.value)}
+                          className={`flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                            selected ? type.color + " border-opacity-100" : "border-border bg-muted/20 text-muted-foreground"
+                          }`}
+                        >
+                          <Icon className="h-5 w-5 flex-shrink-0" />
+                          <div>
+                            <p className="font-bold text-sm">{type.label}</p>
+                            <p className="text-xs opacity-80">{type.description}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Product Name */}
             <FormField
               control={form.control}
               name="name"
@@ -177,118 +248,95 @@ export default function ProductFormPage() {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Category</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Hardware" className="h-14 text-lg border-2 shadow-sm" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Stock levels */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="bufferStock"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Min Stock</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">Alert threshold</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="targetStock"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Target Stock</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">Restock to this level</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-            <FormField
-              control={form.control}
-              name="itemType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Item Type</FormLabel>
-                  <FormControl>
-                    <select className="w-full h-14 px-3 border-2 rounded-lg text-lg shadow-sm bg-background" {...field}>
-                      <option value="purchase">Purchase (sourced from suppliers)</option>
-                      <option value="production">Production (produced in-house)</option>
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Supplier fields — only for purchased_part */}
+            {isPurchased && (
+              <div className="space-y-4 p-4 bg-blue-50/50 border-2 border-blue-100 rounded-xl">
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Supplier Information</p>
 
-            <FormField
-              control={form.control}
-              name="bufferStock"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Minimum Stock Level (Buffer)</FormLabel>
-                  <FormControl>
-                    <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">Triggers restock alert when stock drops below this level</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="supplierId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier</FormLabel>
+                      <FormControl>
+                        <select className="w-full h-12 px-3 border-2 rounded-lg text-base shadow-sm bg-background" {...field}>
+                          <option value="">No supplier linked</option>
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="targetStock"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Target Stock Level</FormLabel>
-                  <FormControl>
-                    <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">Desired stock level for restocking calculations</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="supplierProductName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="supplierId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier (Purchase Items Only)</FormLabel>
-                  <FormControl>
-                    <select className="w-full h-14 px-3 border-2 rounded-lg text-lg shadow-sm bg-background" {...field}>
-                      <option value="">No supplier</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="supplierSku"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
-            <FormField
-              control={form.control}
-              name="supplierProductName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier Product Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-14 text-lg border-2 shadow-sm" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">The product name as listed by the supplier</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="supplierSku"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Supplier SKU</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. MB-2024-001" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">The supplier's part/SKU number</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+            {/* Alert email */}
             <FormField
               control={form.control}
               name="alertEmail"
@@ -299,8 +347,7 @@ export default function ProductFormPage() {
                     <Input type="email" placeholder="manager@warehouse.com" className="h-14 text-lg border-2 shadow-sm" {...field} />
                   </FormControl>
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    When stock drops below the minimum, an email is sent here:<br />
-                    <span className="font-mono">LOW STOCK! [item] - you have [n] left</span>
+                    Receive an email when stock drops below the minimum level
                   </p>
                   <FormMessage />
                 </FormItem>

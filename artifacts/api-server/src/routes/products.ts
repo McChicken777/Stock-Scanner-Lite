@@ -2,11 +2,11 @@ import { Router, type IRouter } from "express";
 import { db, productsTable, stockTable, insertProductSchema } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
-import { requireAdmin } from "../middlewares/auth";
+import { requireAdmin, requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const products = await db.select().from(productsTable)
@@ -36,7 +36,8 @@ router.get("/", async (req, res) => {
 router.post("/", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const parsed = insertProductSchema.safeParse({ ...req.body, companyId });
+    const body = { ...req.body, companyId, category: req.body.category ?? "" };
+    const parsed = insertProductSchema.safeParse(body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
       return;
@@ -49,7 +50,7 @@ router.post("/", requireAdmin, async (req, res) => {
   }
 });
 
-router.get("/:productId", async (req, res) => {
+router.get("/:productId", requireAuth, async (req, res) => {
   try {
     const productId = Number(req.params.productId);
     const companyId = req.session.companyId!;
@@ -74,8 +75,13 @@ router.get("/:productId", async (req, res) => {
 const updateProductSchema = z.object({
   name: z.string().optional(),
   category: z.string().optional(),
+  itemType: z.enum(["purchase", "production", "final_product", "manufactured_part", "purchased_part"]).optional(),
   bufferStock: z.number().int().min(0).optional(),
+  targetStock: z.number().int().min(0).optional(),
   alertEmail: z.string().email().nullable().optional(),
+  supplierId: z.number().int().nullable().optional(),
+  supplierProductName: z.string().nullable().optional(),
+  supplierSku: z.string().nullable().optional(),
 });
 
 router.put("/:productId", requireAdmin, async (req, res) => {

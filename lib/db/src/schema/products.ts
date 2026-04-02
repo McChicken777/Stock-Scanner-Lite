@@ -3,13 +3,19 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { companiesTable } from "./companies";
 
-export const itemTypeEnum = pgEnum("item_type", ["purchase", "production"]);
+export const itemTypeEnum = pgEnum("item_type", [
+  "purchase",
+  "production",
+  "final_product",
+  "manufactured_part",
+  "purchased_part",
+]);
 
 export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  category: text("category").notNull(),
-  itemType: itemTypeEnum("item_type").notNull().default("purchase"),
+  category: text("category").notNull().default(""),
+  itemType: itemTypeEnum("item_type").notNull().default("purchased_part"),
   bufferStock: integer("buffer_stock").notNull().default(0),
   targetStock: integer("target_stock").notNull().default(0),
   supplierId: integer("supplier_id"),

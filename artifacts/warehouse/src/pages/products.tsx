@@ -98,8 +98,18 @@ export default function ProductsPage() {
                       <Badge variant="secondary" className="font-medium bg-secondary/10 hover:bg-secondary/10 text-secondary border-none">
                         {product.category}
                       </Badge>
-                      <Badge className={`font-medium text-xs ${(product as any).itemType === "production" ? "bg-orange-100 text-orange-700 hover:bg-orange-100" : "bg-blue-100 text-blue-700 hover:bg-blue-100"}`} variant="outline">
-                        {(product as any).itemType === "production" ? "In-House" : "Purchase"}
+                      <Badge className={`font-medium text-xs ${
+                        (product as any).itemType === "manufactured_part" || (product as any).itemType === "production"
+                          ? "bg-orange-100 text-orange-700 hover:bg-orange-100"
+                          : (product as any).itemType === "final_product"
+                          ? "bg-green-100 text-green-700 hover:bg-green-100"
+                          : "bg-blue-100 text-blue-700 hover:bg-blue-100"
+                      }`} variant="outline">
+                        {(product as any).itemType === "manufactured_part" || (product as any).itemType === "production"
+                          ? "Manufactured"
+                          : (product as any).itemType === "final_product"
+                          ? "Final Product"
+                          : "Purchased"}
                       </Badge>
                     </div>
                   </div>

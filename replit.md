@@ -123,27 +123,49 @@ Set these environment variables to enable email alerts:
 - `work_time_logs` — id, procedure_id, user_id, start_time, end_time, duration_seconds
 - `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, received_at, notes, company_id, created_at
 
-### Flexible Tasks System (New)
+### Item Type System
+Three distinct item types replacing the old purchase/production binary:
+- **`purchased_part`** — sourced from suppliers; has supplier fields (supplierId, supplierProductName, supplierSku); stock tracked
+- **`manufactured_part`** — produced in-house as sub-components; no supplier fields; auto-created when a work template is created
+- **`final_product`** — finished goods; no supplier fields; stock tracked
+
+Old enum values `purchase` and `production` still exist in DB for backward compat; frontend normalises them on load.
+`category` column kept in DB but no longer required in forms (defaults to "").
+
+### Flexible Tasks System
 - **Roles**: Company-scoped production roles (Welding, CNC, Sandblasting, etc.). Users can have multiple roles with priority (primary/secondary/substitution).
-- **Procedures**: Admin-defined production procedures assigned to a role. Procedures are company-scoped with order_index to define sequence.
+- **Procedures**: Admin-defined production procedures assigned to a role. Each has two blocking flags:
+  - `requires_inbound` — blocked until linked inbound pallet arrives
+  - `requires_components` — blocked until all procedure_inputs stock is available
 - **Item Procedures**: Link procedures to project items. Each item can have different procedures in different orders.
 - **Tasks**: Generated when project is created. Each task = (item, procedure) pair with status tracking.
 - **Task Flow**: User sees only tasks for their assigned roles, sorted by role priority (primary first).
 - **Ready/Blocked Status**: Each task computes READY or BLOCKED status:
-  - **READY**: all previous procedures completed AND all required inputs available
-  - **BLOCKED**: waiting for previous procedures OR missing required inputs (shows reason)
-- **Procedure Inputs**: Define what each procedure needs (purchase items or production items)
-  - Purchase items: blocks task if stock < required quantity
-  - Production items: blocks task if related production task not completed
+  - **READY**: all previous procedures completed AND (requires_components=false OR all component stock satisfied)
+  - **BLOCKED**: waiting for previous procedures OR missing component stock (shows reason)
+- **Procedure Inputs**: Define what each procedure needs (purchased_part or manufactured_part items)
+  - `purchased_part`: blocks task if stock < required quantity
+  - `manufactured_part`: blocks task if related production task not completed
 - **Inbound Block**: If procedure.requires_inbound = true, task is blocked until inbound status != "expected".
+
+### Inbound Updates
+- Routing to Production now uses a **procedure dropdown** (from company procedures list) instead of free text
+- `procedure_id` FK column added to inbound table; `assigned_procedure` text kept for display fallback
+- Create dialog now shows a **work order (project) selector** to link the inbound record
+
+### Template Auto-Product
+- Creating a work template now automatically creates a matching `manufactured_part` product
+- `work_templates.product_id` FK links template to its product
+- This allows stock tracking for in-house manufactured items
 
 ### Tasks DB Tables
 - `roles` — id, name, company_id, created_at
 - `user_roles` — user_id, role_id, priority (primary/secondary/substitution)
-- `procedures` — id, name, role_id (FK), order_index, requires_inbound (bool), company_id, created_at
+- `procedures` — id, name, role_id (FK), order_index, requires_inbound (bool), requires_components (bool), company_id, created_at
 - `item_procedures` — item_id, procedure_id, order_index, company_id
 - `tasks` — id, project_id, item_id, procedure_id, status (not_started/in_progress/completed), company_id, created_at
 - `procedure_inputs` — id, procedure_id, item_id (FK to products), quantity_required, company_id, created_at
+- `inbound` — now has `procedure_id` integer FK to procedures
 
 ## TypeScript & Composite Projects
 

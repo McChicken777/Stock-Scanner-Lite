@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, inboundTable, workProjectsTable, locationsTable } from "@workspace/db";
+import { db, inboundTable, workProjectsTable, locationsTable, proceduresTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -17,10 +17,12 @@ router.get("/", requireAuth, async (req, res) => {
         inbound: inboundTable,
         projectName: workProjectsTable.name,
         locationName: locationsTable.description,
+        procedureName: proceduresTable.name,
       })
       .from(inboundTable)
       .leftJoin(workProjectsTable, eq(inboundTable.projectId, workProjectsTable.id))
       .leftJoin(locationsTable, eq(inboundTable.locationId, locationsTable.id))
+      .leftJoin(proceduresTable, eq(inboundTable.procedureId, proceduresTable.id))
       .where(eq(inboundTable.companyId, companyId))
       .orderBy(inboundTable.createdAt);
 
@@ -33,6 +35,7 @@ router.get("/", requireAuth, async (req, res) => {
         ...r.inbound,
         projectName: r.projectName ?? null,
         locationName: r.locationName ?? null,
+        procedureName: r.procedureName ?? r.inbound.assignedProcedure ?? null,
       })),
     );
   } catch (err) {
@@ -66,7 +69,7 @@ router.post("/", requireAdmin, async (req, res) => {
       })
       .returning();
 
-    res.status(201).json({ ...record, projectName: null, locationName: null });
+    res.status(201).json({ ...record, projectName: null, locationName: null, procedureName: null });
   } catch (err) {
     req.log.error({ err }, "Failed to create inbound");
     res.status(500).json({ error: "Failed to create inbound" });
@@ -107,6 +110,7 @@ router.put("/:id/route", requireAdmin, async (req, res) => {
       .object({
         destination: z.enum(["store", "production"]),
         locationId: z.string().optional(),
+        procedureId: z.number().int().optional(),
         assignedProcedure: z.string().optional(),
       })
       .safeParse(req.body);
@@ -116,21 +120,34 @@ router.put("/:id/route", requireAdmin, async (req, res) => {
       return;
     }
 
-    const { destination, locationId, assignedProcedure } = parsed.data;
+    const { destination, locationId, procedureId, assignedProcedure } = parsed.data;
 
     if (destination === "store" && !locationId) {
       res.status(400).json({ error: "locationId required for store destination" });
       return;
     }
-    if (destination === "production" && !assignedProcedure) {
-      res.status(400).json({ error: "assignedProcedure required for production destination" });
+    if (destination === "production" && !procedureId && !assignedProcedure) {
+      res.status(400).json({ error: "procedureId or assignedProcedure required for production destination" });
       return;
+    }
+
+    // Resolve procedure name if procedureId given
+    let resolvedProcedureName: string | null = assignedProcedure ?? null;
+    if (procedureId) {
+      const [proc] = await db.select().from(proceduresTable)
+        .where(and(eq(proceduresTable.id, procedureId), eq(proceduresTable.companyId, companyId)));
+      if (proc) resolvedProcedureName = proc.name;
     }
 
     const updates =
       destination === "store"
-        ? { status: "stored" as const, locationId: locationId!, assignedProcedure: null }
-        : { status: "in_production" as const, assignedProcedure: assignedProcedure!, locationId: null };
+        ? { status: "stored" as const, locationId: locationId!, assignedProcedure: null, procedureId: null }
+        : {
+            status: "in_production" as const,
+            assignedProcedure: resolvedProcedureName,
+            procedureId: procedureId ?? null,
+            locationId: null,
+          };
 
     const [record] = await db
       .update(inboundTable)
@@ -143,7 +160,7 @@ router.put("/:id/route", requireAdmin, async (req, res) => {
       return;
     }
 
-    res.json(record);
+    res.json({ ...record, procedureName: resolvedProcedureName });
   } catch (err) {
     req.log.error({ err }, "Failed to route inbound");
     res.status(500).json({ error: "Failed to route inbound" });
