@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -216,6 +216,10 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["product-categories"] });
       setImportResult(data);
       setCsvRows(null);
+      const desc = data.skipped.length > 0
+        ? `${data.created} created, ${data.skipped.length} skipped — see details below.`
+        : `${data.created} item${data.created !== 1 ? "s" : ""} created successfully.`;
+      toast({ title: "Import complete", description: desc });
     },
     onError: () => toast({ title: "Import failed", variant: "destructive" }),
   });
@@ -624,7 +628,7 @@ export default function ProductsPage() {
               </div>
 
               <div className="overflow-auto flex-1 rounded-lg border border-border">
-                <table className="w-full text-xs min-w-[500px]">
+                <table className="w-full text-xs min-w-[520px]">
                   <thead className="bg-muted/60 sticky top-0">
                     <tr>
                       <th className="text-left px-2 py-2 font-semibold">#</th>
@@ -638,31 +642,40 @@ export default function ProductsPage() {
                   </thead>
                   <tbody>
                     {csvRows.map((row, i) => (
-                      <tr
-                        key={i}
-                        className={`border-t border-border ${!row._valid ? "bg-red-50" : row._supplierWarning ? "bg-amber-50" : ""}`}
-                      >
-                        <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
-                        <td className="px-2 py-1.5 font-medium">
-                          {row.name || <span className="text-destructive italic">missing</span>}
-                        </td>
-                        <td className="px-2 py-1.5">
-                          <span className={!VALID_CSV_TYPES.includes(row.type as CsvItemType) ? "text-destructive" : ""}>
-                            {row.type || "—"}
-                          </span>
-                        </td>
-                        <td className="px-2 py-1.5 text-muted-foreground">{row.category || "—"}</td>
-                        <td className="px-2 py-1.5 font-mono">{row.min_stock || "0"}</td>
-                        <td className="px-2 py-1.5 font-mono">{row.target_stock || "0"}</td>
-                        <td className="px-2 py-1.5">
-                          {row.supplier_name ? (
-                            <span className={row._supplierWarning ? "text-amber-700" : ""}>
-                              {row.supplier_name}
-                              {row._supplierWarning && " ⚠"}
+                      <React.Fragment key={i}>
+                        <tr
+                          className={`border-t border-border ${!row._valid ? "bg-red-50" : row._supplierWarning ? "bg-amber-50" : ""}`}
+                        >
+                          <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                          <td className="px-2 py-1.5 font-medium">
+                            {row.name || <span className="text-destructive italic">missing</span>}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <span className={!VALID_CSV_TYPES.includes(row.type as CsvItemType) ? "text-destructive" : ""}>
+                              {row.type || "—"}
                             </span>
-                          ) : "—"}
-                        </td>
-                      </tr>
+                          </td>
+                          <td className="px-2 py-1.5 text-muted-foreground">{row.category || "—"}</td>
+                          <td className="px-2 py-1.5 font-mono">{row.min_stock || "0"}</td>
+                          <td className="px-2 py-1.5 font-mono">{row.target_stock || "0"}</td>
+                          <td className="px-2 py-1.5">
+                            {row.supplier_name ? (
+                              <span className={row._supplierWarning ? "text-amber-700" : ""}>
+                                {row.supplier_name}
+                                {row._supplierWarning && " ⚠"}
+                              </span>
+                            ) : "—"}
+                          </td>
+                        </tr>
+                        {!row._valid && (
+                          <tr className="bg-red-50">
+                            <td />
+                            <td colSpan={6} className="px-2 pb-1.5 text-destructive text-[11px]">
+                              {row._error}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

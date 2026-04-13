@@ -92,8 +92,8 @@ router.post("/import", requireAdmin, async (req, res) => {
       .where(eq(suppliersTable.companyId, companyId));
     const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.id]));
 
-    let created = 0;
     const skipped: { row: number; reason: string }[] = [];
+    const toInsert: { rowIndex: number; values: typeof productsTable.$inferInsert }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const parsed = importRowSchema.safeParse(rows[i]);
@@ -107,8 +107,9 @@ router.post("/import", requireAdmin, async (req, res) => {
         ? (supplierMap.get(d.supplier_name.toLowerCase().trim()) ?? null)
         : null;
 
-      try {
-        await db.insert(productsTable).values({
+      toInsert.push({
+        rowIndex: i + 1,
+        values: {
           name: d.name,
           itemType: d.type as ImportItemType,
           category: d.category,
@@ -118,10 +119,22 @@ router.post("/import", requireAdmin, async (req, res) => {
           supplierSku: d.supplier_sku || null,
           alertEmail: d.alert_email || null,
           companyId,
-        });
-        created++;
-      } catch (insertErr) {
-        skipped.push({ row: i + 1, reason: "Database insert failed" });
+        },
+      });
+    }
+
+    let created = 0;
+    if (toInsert.length > 0) {
+      try {
+        const inserted = await db
+          .insert(productsTable)
+          .values(toInsert.map((r) => r.values))
+          .returning({ id: productsTable.id });
+        created = inserted.length;
+      } catch (bulkErr) {
+        for (const r of toInsert) {
+          skipped.push({ row: r.rowIndex, reason: "Database insert failed" });
+        }
       }
     }
 
