@@ -135,6 +135,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/Product"
 
+  /products/categories:
+    get:
+      operationId: listProductCategories
+      tags: [products]
+      summary: List distinct non-empty product categories for the company
+      responses:
+        "200":
+          description: Sorted list of category strings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /products/import:
+    post:
+      operationId: importProducts
+      tags: [products]
+      summary: Bulk import products from CSV rows (admin/owner only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ImportProductRow"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportProductResult"
+
   /products/{productId}:
     get:
       operationId: getProduct
@@ -484,6 +520,53 @@ components:
         alertEmail:
           type: string
           nullable: true
+
+    ImportProductRow:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/ItemType"
+        category:
+          type: string
+        min_stock:
+          type: string
+        target_stock:
+          type: string
+        supplier_name:
+          type: string
+        supplier_sku:
+          type: string
+        alert_email:
+          type: string
+      required:
+        - name
+        - type
+
+    ImportSkippedRow:
+      type: object
+      properties:
+        row:
+          type: integer
+        reason:
+          type: string
+      required:
+        - row
+        - reason
+
+    ImportProductResult:
+      type: object
+      properties:
+        created:
+          type: integer
+        skipped:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportSkippedRow"
+      required:
+        - created
+        - skipped
 
     StockEntry:
       type: object

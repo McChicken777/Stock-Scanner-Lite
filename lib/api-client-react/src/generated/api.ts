@@ -23,6 +23,8 @@ import type {
   ErrorResponse,
   HealthStatus,
   HistoryEntry,
+  ImportProductResult,
+  ImportProductRow,
   ListHistoryParams,
   Location,
   LocationWithStock,
@@ -609,6 +611,167 @@ export const useCreateProduct = <
   TContext
 > => {
   return useMutation(getCreateProductMutationOptions(options));
+};
+
+/**
+ * @summary List distinct non-empty product categories for the company
+ */
+export const getListProductCategoriesUrl = () => {
+  return `/api/products/categories`;
+};
+
+export const listProductCategories = async (
+  options?: RequestInit,
+): Promise<string[]> => {
+  return customFetch<string[]>(getListProductCategoriesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListProductCategoriesQueryKey = () => {
+  return [`/api/products/categories`] as const;
+};
+
+export const getListProductCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listProductCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listProductCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListProductCategoriesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listProductCategories>>
+  > = ({ signal }) => listProductCategories({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listProductCategories>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListProductCategoriesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listProductCategories>>
+>;
+export type ListProductCategoriesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List distinct non-empty product categories for the company
+ */
+
+export function useListProductCategories<
+  TData = Awaited<ReturnType<typeof listProductCategories>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listProductCategories>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListProductCategoriesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Bulk import products from CSV rows (admin/owner only)
+ */
+export const getImportProductsUrl = () => {
+  return `/api/products/import`;
+};
+
+export const importProducts = async (
+  importProductRow: ImportProductRow[],
+  options?: RequestInit,
+): Promise<ImportProductResult> => {
+  return customFetch<ImportProductResult>(getImportProductsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(importProductRow),
+  });
+};
+
+export const getImportProductsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importProducts>>,
+    TError,
+    { data: BodyType<ImportProductRow[]> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof importProducts>>,
+  TError,
+  { data: BodyType<ImportProductRow[]> },
+  TContext
+> => {
+  const mutationKey = ["importProducts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof importProducts>>,
+    { data: BodyType<ImportProductRow[]> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return importProducts(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ImportProductsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof importProducts>>
+>;
+export type ImportProductsMutationBody = BodyType<ImportProductRow[]>;
+export type ImportProductsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk import products from CSV rows (admin/owner only)
+ */
+export const useImportProducts = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof importProducts>>,
+    TError,
+    { data: BodyType<ImportProductRow[]> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof importProducts>>,
+  TError,
+  { data: BodyType<ImportProductRow[]> },
+  TContext
+> => {
+  return useMutation(getImportProductsMutationOptions(options));
 };
 
 /**

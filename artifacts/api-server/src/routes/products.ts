@@ -68,7 +68,7 @@ const VALID_ITEM_TYPES = ["purchased_part", "manufactured_part", "final_product"
 type ImportItemType = (typeof VALID_ITEM_TYPES)[number];
 
 const importRowSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
   type: z.enum(VALID_ITEM_TYPES),
   category: z.string().default(""),
   min_stock: z.coerce.number().int().min(0).default(0),

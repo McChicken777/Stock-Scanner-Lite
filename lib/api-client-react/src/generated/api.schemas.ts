@@ -97,6 +97,27 @@ export interface UpdateProductRequest {
   alertEmail?: string | null;
 }
 
+export interface ImportProductRow {
+  name: string;
+  type: ItemType;
+  category?: string;
+  min_stock?: string;
+  target_stock?: string;
+  supplier_name?: string;
+  supplier_sku?: string;
+  alert_email?: string;
+}
+
+export interface ImportSkippedRow {
+  row: number;
+  reason: string;
+}
+
+export interface ImportProductResult {
+  created: number;
+  skipped: ImportSkippedRow[];
+}
+
 export interface UpdateStockRequest {
   /** New absolute quantity */
   quantity?: number;

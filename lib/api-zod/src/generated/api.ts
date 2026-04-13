@@ -99,6 +99,45 @@ export const CreateProductBody = zod.object({
 });
 
 /**
+ * @summary List distinct non-empty product categories for the company
+ */
+export const ListProductCategoriesResponseItem = zod.string();
+export const ListProductCategoriesResponse = zod.array(
+  ListProductCategoriesResponseItem,
+);
+
+/**
+ * @summary Bulk import products from CSV rows (admin/owner only)
+ */
+export const ImportProductsBodyItem = zod.object({
+  name: zod.string(),
+  type: zod.enum([
+    "purchased_part",
+    "manufactured_part",
+    "final_product",
+    "purchase",
+    "production",
+  ]),
+  category: zod.string().optional(),
+  min_stock: zod.string().optional(),
+  target_stock: zod.string().optional(),
+  supplier_name: zod.string().optional(),
+  supplier_sku: zod.string().optional(),
+  alert_email: zod.string().optional(),
+});
+export const ImportProductsBody = zod.array(ImportProductsBodyItem);
+
+export const ImportProductsResponse = zod.object({
+  created: zod.number(),
+  skipped: zod.array(
+    zod.object({
+      row: zod.number(),
+      reason: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Get a product by ID
  */
 export const GetProductParams = zod.object({
