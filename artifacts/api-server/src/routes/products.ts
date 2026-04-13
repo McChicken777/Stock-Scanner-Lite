@@ -56,8 +56,8 @@ router.get("/categories", requireAuth, async (req, res) => {
     const rows = await db
       .selectDistinct({ category: productsTable.category })
       .from(productsTable)
-      .where(and(eq(productsTable.companyId, companyId), sql`${productsTable.category} != ''`));
-    res.json(rows.map((r) => r.category).sort());
+      .where(and(eq(productsTable.companyId, companyId), sql`TRIM(${productsTable.category}) != ''`));
+    res.json(rows.map((r) => r.category.trim()).filter(Boolean).sort());
   } catch (err) {
     req.log.error({ err }, "Failed to list categories");
     res.status(500).json({ error: "Failed to list categories" });
@@ -112,7 +112,7 @@ router.post("/import", requireAdmin, async (req, res) => {
         values: {
           name: d.name,
           itemType: d.type as ImportItemType,
-          category: d.category,
+          category: d.category.trim(),
           bufferStock: d.min_stock,
           targetStock: d.target_stock,
           supplierId,

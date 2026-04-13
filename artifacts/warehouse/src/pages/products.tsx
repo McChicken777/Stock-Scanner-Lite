@@ -116,10 +116,10 @@ function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): 
     if (!name) errors.push("Name is required");
     if (!VALID_CSV_TYPES.includes(type as CsvItemType))
       errors.push(`Type must be one of: ${VALID_CSV_TYPES.join(", ")}`);
-    if (minStockRaw && (isNaN(Number(minStockRaw)) || Number(minStockRaw) < 0))
-      errors.push("min_stock must be a non-negative number");
-    if (targetStockRaw && (isNaN(Number(targetStockRaw)) || Number(targetStockRaw) < 0))
-      errors.push("target_stock must be a non-negative number");
+    if (minStockRaw && (isNaN(Number(minStockRaw)) || Number(minStockRaw) < 0 || !Number.isInteger(Number(minStockRaw))))
+      errors.push("min_stock must be a non-negative integer");
+    if (targetStockRaw && (isNaN(Number(targetStockRaw)) || Number(targetStockRaw) < 0 || !Number.isInteger(Number(targetStockRaw))))
+      errors.push("target_stock must be a non-negative integer");
     if (alertEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertEmailRaw))
       errors.push("alert_email must be a valid email or blank");
 
@@ -613,7 +613,7 @@ export default function ProductsPage() {
                 <p><span className="font-mono bg-muted px-1 rounded">name</span> — required. Product name.</p>
                 <p><span className="font-mono bg-muted px-1 rounded">type</span> — required. One of: <span className="font-mono">purchased_part</span>, <span className="font-mono">manufactured_part</span>, <span className="font-mono">final_product</span></p>
                 <p><span className="font-mono bg-muted px-1 rounded">category</span> — optional. Groups items (e.g. Fasteners, Hydraulics).</p>
-                <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional numbers.</p>
+                <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional whole numbers (integers).</p>
                 <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly.</p>
               </div>
             </div>
