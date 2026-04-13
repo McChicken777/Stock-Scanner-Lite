@@ -57,7 +57,13 @@ router.get("/categories", requireAuth, async (req, res) => {
       .selectDistinct({ category: productsTable.category })
       .from(productsTable)
       .where(and(eq(productsTable.companyId, companyId), sql`TRIM(${productsTable.category}) != ''`));
-    res.json(rows.map((r) => r.category.trim()).filter(Boolean).sort());
+    const trimmed = rows.map((r) => r.category.trim()).filter(Boolean);
+    const seen = new Map<string, string>();
+    for (const c of trimmed) {
+      const key = c.toLowerCase();
+      if (!seen.has(key)) seen.set(key, c);
+    }
+    res.json(Array.from(seen.values()).sort((a, b) => a.localeCompare(b)));
   } catch (err) {
     req.log.error({ err }, "Failed to list categories");
     res.status(500).json({ error: "Failed to list categories" });

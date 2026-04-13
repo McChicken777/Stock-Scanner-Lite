@@ -141,13 +141,6 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-function normalizeItemType(raw: string | undefined | null): FilterType {
-  if (raw === "purchased_part" || raw === "purchase") return "purchased";
-  if (raw === "manufactured_part" || raw === "production") return "manufactured";
-  if (raw === "final_product") return "final";
-  return "purchased";
-}
-
 function typeLabel(raw: string | undefined | null): string {
   if (raw === "manufactured_part" || raw === "production") return "Manufactured";
   if (raw === "final_product") return "Final Product";
