@@ -1,40 +1,215 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, AlertTriangle, Edit2, Trash2, MapPin, RefreshCw } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus, Search, AlertTriangle, Edit2, Trash2, MapPin, RefreshCw,
+  Download, Upload, ChevronDown, ChevronRight, X, FileText, CheckCircle2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ProductLocationsDialog } from "@/components/product-locations-dialog";
 import { useAuth } from "@/contexts/auth";
+import { useToast } from "@/hooks/use-toast";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+
+type FilterType = "all" | "purchased" | "manufactured" | "final";
+
+const FILTER_LABELS: Record<FilterType, string> = {
+  all: "All",
+  purchased: "Purchased",
+  manufactured: "Manufactured",
+  final: "Final Products",
+};
+
+const VALID_CSV_TYPES = ["purchased_part", "manufactured_part", "final_product"] as const;
+type CsvItemType = (typeof VALID_CSV_TYPES)[number];
+
+interface CsvRow {
+  name: string;
+  type: string;
+  category: string;
+  min_stock: string;
+  target_stock: string;
+  supplier_name: string;
+  supplier_sku: string;
+  alert_email: string;
+  _valid: boolean;
+  _error: string;
+  _supplierWarning?: string;
+}
+
+function parseCSV(text: string): Record<string, string>[] {
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length < 2) return [];
+  const headers = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const values = parseCsvLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, idx) => { row[h] = (values[idx] ?? "").trim(); });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else { inQuotes = !inQuotes; }
+    } else if (ch === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): CsvRow[] {
+  const supplierSet = new Set(knownSuppliers.map((s) => s.toLowerCase().trim()));
+  return raw.map((r) => {
+    const name = (r["name"] ?? "").trim();
+    const type = (r["type"] ?? "").trim();
+    let error = "";
+    let supplierWarning: string | undefined;
+
+    if (!name) error = "Name is required";
+    else if (!VALID_CSV_TYPES.includes(type as CsvItemType))
+      error = `Type must be one of: ${VALID_CSV_TYPES.join(", ")}`;
+
+    const supplierName = (r["supplier_name"] ?? "").trim();
+    if (supplierName && !supplierSet.has(supplierName.toLowerCase()))
+      supplierWarning = `Supplier "${supplierName}" not found — will import without supplier link`;
+
+    return {
+      name,
+      type,
+      category: (r["category"] ?? "").trim(),
+      min_stock: (r["min_stock"] ?? "0").trim(),
+      target_stock: (r["target_stock"] ?? "0").trim(),
+      supplier_name: supplierName,
+      supplier_sku: (r["supplier_sku"] ?? "").trim(),
+      alert_email: (r["alert_email"] ?? "").trim(),
+      _valid: !error,
+      _error: error,
+      _supplierWarning: supplierWarning,
+    };
+  });
+}
+
+function downloadTemplate() {
+  const headers = "name,type,category,min_stock,target_stock,supplier_name,supplier_sku,alert_email";
+  const ex1 = "M10 Hex Bolts,purchased_part,Fasteners,50,200,Acme Hardware,ACM-M10-HB,";
+  const ex2 = "Side Panel Bracket,manufactured_part,Frames,5,20,,,";
+  const content = [headers, ex1, ex2].join("\n");
+  const blob = new Blob([content], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "inventory_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function normalizeItemType(raw: string | undefined | null): FilterType {
+  if (raw === "purchased_part" || raw === "purchase") return "purchased";
+  if (raw === "manufactured_part" || raw === "production") return "manufactured";
+  if (raw === "final_product") return "final";
+  return "purchased";
+}
+
+function typeLabel(raw: string | undefined | null): string {
+  if (raw === "manufactured_part" || raw === "production") return "Manufactured";
+  if (raw === "final_product") return "Final Product";
+  return "Purchased";
+}
+
+function typeBadgeClass(raw: string | undefined | null): string {
+  if (raw === "manufactured_part" || raw === "production") return "bg-orange-100 text-orange-700 hover:bg-orange-100";
+  if (raw === "final_product") return "bg-green-100 text-green-700 hover:bg-green-100";
+  return "bg-blue-100 text-blue-700 hover:bg-blue-100";
+}
+
+async function fetchSuppliers(): Promise<{ id: number; name: string }[]> {
+  const res = await fetch("/api/suppliers", { credentials: "include" });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function importProducts(rows: CsvRow[]): Promise<{ created: number; skipped: { row: number; reason: string }[] }> {
+  const payload = rows.filter((r) => r._valid).map((r) => ({
+    name: r.name,
+    type: r.type,
+    category: r.category,
+    min_stock: Number(r.min_stock) || 0,
+    target_stock: Number(r.target_stock) || 0,
+    supplier_name: r.supplier_name,
+    supplier_sku: r.supplier_sku,
+    alert_email: r.alert_email,
+  }));
+  const res = await fetch("/api/products/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Import failed");
+  return res.json();
+}
 
 export default function ProductsPage() {
   const { data: products, isLoading } = useListProducts();
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const { toast } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
+
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [showLocationsDialog, setShowLocationsDialog] = useState(false);
-  
-  const filteredProducts = products?.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const [showImport, setShowImport] = useState(false);
+  const [csvRows, setCsvRows] = useState<CsvRow[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: fetchSuppliers,
+  });
+
+  const importMutation = useMutation({
+    mutationFn: importProducts,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-categories"] });
+      const msg = `${data.created} item${data.created !== 1 ? "s" : ""} imported${data.skipped.length > 0 ? `, ${data.skipped.length} skipped` : ""}.`;
+      toast({ title: "Import complete", description: msg });
+      setShowImport(false);
+      setCsvRows(null);
+    },
+    onError: () => toast({ title: "Import failed", variant: "destructive" }),
+  });
 
   const handleDelete = (id: number) => {
     deleteProduct.mutate({ productId: id }, {
@@ -44,17 +219,200 @@ export default function ProductsPage() {
     });
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const raw = parseCSV(text);
+      if (raw.length === 0) {
+        toast({ title: "No rows found in file", variant: "destructive" });
+        return;
+      }
+      setCsvRows(validateRows(raw, suppliers.map((s) => s.name)));
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const toggleCategory = (key: string) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const allFiltered = products?.filter((p) => {
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) || (p.category ?? "").toLowerCase().includes(q);
+  }) ?? [];
+
+  const byType = (filter: FilterType) => {
+    if (filter === "all") return allFiltered;
+    if (filter === "purchased") return allFiltered.filter((p) => {
+      const t = (p as any).itemType;
+      return t === "purchased_part" || t === "purchase";
+    });
+    if (filter === "manufactured") return allFiltered.filter((p) => {
+      const t = (p as any).itemType;
+      return t === "manufactured_part" || t === "production";
+    });
+    return allFiltered.filter((p) => (p as any).itemType === "final_product");
+  };
+
+  const visibleProducts = byType(search ? "all" : activeFilter);
+
+  const groupedProducts = () => {
+    if (search || activeFilter === "all" || activeFilter === "final") {
+      return [{ key: "__flat__", label: null, items: visibleProducts }];
+    }
+    const groups = new Map<string, typeof visibleProducts>();
+    for (const p of visibleProducts) {
+      const cat = (p.category ?? "").trim() || "Uncategorised";
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat)!.push(p);
+    }
+    const sorted = Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === "Uncategorised") return 1;
+      if (b === "Uncategorised") return -1;
+      return a.localeCompare(b);
+    });
+    return sorted.map(([key, items]) => ({ key, label: key, items }));
+  };
+
+  const groups = groupedProducts();
+  const validCsvRows = csvRows?.filter((r) => r._valid) ?? [];
+  const invalidCsvRows = csvRows?.filter((r) => !r._valid) ?? [];
+
+  const ProductCard = ({ product }: { product: any }) => (
+    <div
+      className={`bg-card rounded-xl p-4 border-2 shadow-sm relative overflow-hidden ${
+        product.isLowStock ? "border-destructive/40" : "border-border"
+      }`}
+    >
+      {product.isLowStock && (
+        <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] font-bold px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" /> LOW STOCK
+        </div>
+      )}
+
+      <div className="flex justify-between items-start mb-3">
+        <div>
+          <h3 className="font-bold text-lg leading-tight pr-16">{product.name}</h3>
+          <div className="flex gap-1.5 mt-1.5 flex-wrap">
+            <Badge
+              className={`font-medium text-xs ${typeBadgeClass((product as any).itemType)}`}
+              variant="outline"
+            >
+              {typeLabel((product as any).itemType)}
+            </Badge>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className={`text-2xl font-black leading-none ${product.isLowStock ? "text-destructive" : ""}`}>
+            {product.totalStock}
+          </p>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">
+            Total
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3 mt-4 pt-4 border-t border-border/50">
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <p className="text-muted-foreground">Buffer</p>
+            <p className="font-bold text-sm text-foreground">{product.bufferStock}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Target</p>
+            <p className="font-bold text-sm text-foreground">{(product as any).targetStock || 0}</p>
+          </div>
+          {product.totalStock < product.bufferStock && (
+            <div className="bg-red-50 rounded p-2 col-span-3">
+              <div className="flex items-center gap-1 text-red-700">
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span className="font-bold text-xs">
+                  Restock: +{((product as any).targetStock || 0) - product.totalStock}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={() => { setSelectedProduct(product.id); setShowLocationsDialog(true); }}
+            variant="outline"
+            size="sm"
+            className="flex-1 h-10 font-bold text-sm"
+          >
+            <MapPin className="h-4 w-4 mr-1" /> Locations
+          </Button>
+
+          {isAdmin && (
+            <>
+              <Link href={`/products/${product.id}/edit`}>
+                <Button variant="outline" size="icon" className="h-10 w-10">
+                  <Edit2 className="h-4 w-4" />
+                </Button>
+              </Link>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete {product.name} and remove it from all locations. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
+                    <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleDelete(product.id)}
+                      className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between px-1 pt-2">
+      <div className="flex items-center justify-between px-1 pt-2 gap-2">
         <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-        {isAdmin && (
-          <Link href="/products/new">
-            <Button size="sm" className="font-bold">
-              <Plus className="h-4 w-4 mr-1" /> New
-            </Button>
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <>
+              <Button size="sm" variant="outline" className="font-bold" onClick={downloadTemplate}>
+                <Download className="h-4 w-4 mr-1" /> Template
+              </Button>
+              <Button size="sm" variant="outline" className="font-bold" onClick={() => { setShowImport(true); setCsvRows(null); }}>
+                <Upload className="h-4 w-4 mr-1" /> Import
+              </Button>
+              <Link href="/products/new">
+                <Button size="sm" className="font-bold">
+                  <Plus className="h-4 w-4 mr-1" /> New
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="relative">
@@ -67,136 +425,76 @@ export default function ProductsPage() {
         />
       </div>
 
+      {!search && (
+        <div className="flex gap-2 flex-wrap">
+          {(Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setActiveFilter(f)}
+              className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+                activeFilter === f
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {FILTER_LABELS[f]}
+              {f !== "all" && products && (
+                <span className="ml-1.5 opacity-70 text-xs">
+                  ({byType(f).length})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+        </div>
+      ) : visibleProducts.length === 0 ? (
+        <div className="text-center py-12 px-4 bg-muted/30 rounded-xl border border-dashed">
+          <p className="text-muted-foreground">No products found.</p>
         </div>
       ) : (
-        <div className="space-y-3 pb-8">
-          {filteredProducts?.length === 0 ? (
-            <div className="text-center py-12 px-4 bg-muted/30 rounded-xl border border-dashed">
-              <p className="text-muted-foreground">No products found matching your search.</p>
-            </div>
-          ) : (
-            filteredProducts?.map((product) => (
-              <div 
-                key={product.id} 
-                className={`bg-card rounded-xl p-4 border-2 shadow-sm relative overflow-hidden ${
-                  product.isLowStock ? 'border-destructive/40' : 'border-border'
-                }`}
-              >
-                {product.isLowStock && (
-                  <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] font-bold px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" /> LOW STOCK
+        <div className="space-y-4 pb-8">
+          {groups.map((group) => {
+            if (group.label === null) {
+              return (
+                <div key="flat" className="space-y-3">
+                  {group.items.map((p) => <ProductCard key={p.id} product={p} />)}
+                </div>
+              );
+            }
+            const isCollapsed = collapsedCategories.has(group.key);
+            const lowCount = group.items.filter((p) => p.isLowStock).length;
+            return (
+              <div key={group.key} className="rounded-xl border-2 border-border overflow-hidden">
+                <button
+                  className="w-full flex items-center justify-between px-4 py-3 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+                  onClick={() => toggleCategory(group.key)}
+                >
+                  <div className="flex items-center gap-2">
+                    {isCollapsed
+                      ? <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                    <span className="font-bold text-sm">{group.label}</span>
+                    <span className="text-xs text-muted-foreground font-medium">({group.items.length})</span>
+                    {lowCount > 0 && (
+                      <span className="text-[10px] font-bold bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full">
+                        {lowCount} low
+                      </span>
+                    )}
+                  </div>
+                </button>
+                {!isCollapsed && (
+                  <div className="p-3 space-y-3">
+                    {group.items.map((p) => <ProductCard key={p.id} product={p} />)}
                   </div>
                 )}
-                
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="font-bold text-lg leading-tight pr-16">{product.name}</h3>
-                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                      <Badge variant="secondary" className="font-medium bg-secondary/10 hover:bg-secondary/10 text-secondary border-none">
-                        {product.category}
-                      </Badge>
-                      <Badge className={`font-medium text-xs ${
-                        (product as any).itemType === "manufactured_part" || (product as any).itemType === "production"
-                          ? "bg-orange-100 text-orange-700 hover:bg-orange-100"
-                          : (product as any).itemType === "final_product"
-                          ? "bg-green-100 text-green-700 hover:bg-green-100"
-                          : "bg-blue-100 text-blue-700 hover:bg-blue-100"
-                      }`} variant="outline">
-                        {(product as any).itemType === "manufactured_part" || (product as any).itemType === "production"
-                          ? "Manufactured"
-                          : (product as any).itemType === "final_product"
-                          ? "Final Product"
-                          : "Purchased"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-2xl font-black leading-none ${product.isLowStock ? 'text-destructive' : ''}`}>
-                      {product.totalStock}
-                    </p>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">
-                      Total
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 mt-4 pt-4 border-t border-border/50">
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <p className="text-muted-foreground">Buffer</p>
-                      <p className="font-bold text-sm text-foreground">{product.bufferStock}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Target</p>
-                      <p className="font-bold text-sm text-foreground">{(product as any).targetStock || 0}</p>
-                    </div>
-                    {product.totalStock < product.bufferStock && (
-                      <div className="bg-red-50 rounded p-2 col-span-3">
-                        <div className="flex items-center gap-1 text-red-700">
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          <span className="font-bold text-xs">
-                            Restock: +{((product as any).targetStock || 0) - product.totalStock}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => {
-                        setSelectedProduct(product.id);
-                        setShowLocationsDialog(true);
-                      }}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 h-10 font-bold text-sm"
-                    >
-                      <MapPin className="h-4 w-4 mr-1" /> Locations
-                    </Button>
-
-                    {isAdmin && (
-                      <>
-                        <Link href={`/products/${product.id}/edit`}>
-                          <Button variant="outline" size="icon" className="h-10 w-10">
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        </Link>
-                        
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Product?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This will permanently delete {product.name} and remove it from all locations. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
-                              <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
-                              <AlertDialogAction 
-                                onClick={() => handleDelete(product.id)}
-                                className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    )}
-                  </div>
-                </div>
               </div>
-            ))
-          )}
+            );
+          })}
         </div>
       )}
 
@@ -205,10 +503,147 @@ export default function ProductsPage() {
           open={showLocationsDialog}
           onOpenChange={setShowLocationsDialog}
           productId={selectedProduct}
-          productName={filteredProducts?.find((p) => p.id === selectedProduct)?.name || ""}
-          totalStock={filteredProducts?.find((p) => p.id === selectedProduct)?.totalStock || 0}
+          productName={products?.find((p) => p.id === selectedProduct)?.name || ""}
+          totalStock={products?.find((p) => p.id === selectedProduct)?.totalStock || 0}
         />
       )}
+
+      <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) setCsvRows(null); }}>
+        <DialogContent className="w-[95vw] max-w-2xl rounded-xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Import Products from CSV</DialogTitle>
+          </DialogHeader>
+
+          {!csvRows ? (
+            <div className="space-y-4 flex-1">
+              <div className="rounded-lg border-2 border-dashed border-border p-6 text-center space-y-3">
+                <FileText className="h-10 w-10 mx-auto text-muted-foreground" />
+                <div>
+                  <p className="font-semibold">Select your CSV file</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Use the template (download it from the Products page) to prepare your data.
+                  </p>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" onClick={downloadTemplate}>
+                    <Download className="h-4 w-4 mr-1" /> Download Template
+                  </Button>
+                  <Button onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="h-4 w-4 mr-1" /> Choose File
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-semibold text-foreground">CSV columns</p>
+                <p><span className="font-mono bg-muted px-1 rounded">name</span> — required. Product name.</p>
+                <p><span className="font-mono bg-muted px-1 rounded">type</span> — required. One of: <span className="font-mono">purchased_part</span>, <span className="font-mono">manufactured_part</span>, <span className="font-mono">final_product</span></p>
+                <p><span className="font-mono bg-muted px-1 rounded">category</span> — optional. Groups items (e.g. Fasteners, Hydraulics).</p>
+                <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional numbers.</p>
+                <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-hidden flex flex-col gap-3 min-h-0">
+              <div className="flex items-center justify-between flex-shrink-0">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="flex items-center gap-1 text-green-700 font-semibold">
+                    <CheckCircle2 className="h-4 w-4" /> {validCsvRows.length} ready
+                  </span>
+                  {invalidCsvRows.length > 0 && (
+                    <span className="flex items-center gap-1 text-destructive font-semibold">
+                      <X className="h-4 w-4" /> {invalidCsvRows.length} invalid (will be skipped)
+                    </span>
+                  )}
+                </div>
+                <button
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => { setCsvRows(null); fileInputRef.current?.click(); }}
+                >
+                  Change file
+                </button>
+              </div>
+
+              <div className="overflow-auto flex-1 rounded-lg border border-border">
+                <table className="w-full text-xs min-w-[500px]">
+                  <thead className="bg-muted/60 sticky top-0">
+                    <tr>
+                      <th className="text-left px-2 py-2 font-semibold">#</th>
+                      <th className="text-left px-2 py-2 font-semibold">Name</th>
+                      <th className="text-left px-2 py-2 font-semibold">Type</th>
+                      <th className="text-left px-2 py-2 font-semibold">Category</th>
+                      <th className="text-left px-2 py-2 font-semibold">Min</th>
+                      <th className="text-left px-2 py-2 font-semibold">Target</th>
+                      <th className="text-left px-2 py-2 font-semibold">Supplier</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvRows.map((row, i) => (
+                      <tr
+                        key={i}
+                        className={`border-t border-border ${!row._valid ? "bg-red-50" : row._supplierWarning ? "bg-amber-50" : ""}`}
+                      >
+                        <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                        <td className="px-2 py-1.5 font-medium">
+                          {row.name || <span className="text-destructive italic">missing</span>}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <span className={!VALID_CSV_TYPES.includes(row.type as CsvItemType) ? "text-destructive" : ""}>
+                            {row.type || "—"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5 text-muted-foreground">{row.category || "—"}</td>
+                        <td className="px-2 py-1.5 font-mono">{row.min_stock || "0"}</td>
+                        <td className="px-2 py-1.5 font-mono">{row.target_stock || "0"}</td>
+                        <td className="px-2 py-1.5">
+                          {row.supplier_name ? (
+                            <span className={row._supplierWarning ? "text-amber-700" : ""}>
+                              {row.supplier_name}
+                              {row._supplierWarning && " ⚠"}
+                            </span>
+                          ) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {csvRows.some((r) => r._supplierWarning) && (
+                <p className="text-xs text-amber-700 flex-shrink-0">
+                  ⚠ Highlighted rows have unrecognised supplier names — those items will still import without a supplier link.
+                </p>
+              )}
+
+              <div className="flex gap-2 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => { setShowImport(false); setCsvRows(null); }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={validCsvRows.length === 0 || importMutation.isPending}
+                  onClick={() => importMutation.mutate(csvRows)}
+                >
+                  {importMutation.isPending
+                    ? "Importing…"
+                    : `Import ${validCsvRows.length} item${validCsvRows.length !== 1 ? "s" : ""}`}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

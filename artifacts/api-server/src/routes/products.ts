@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable } from "@workspace/db";
+import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable, suppliersTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
@@ -47,6 +47,88 @@ router.post("/", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to create product");
     res.status(500).json({ error: "Failed to create product" });
+  }
+});
+
+router.get("/categories", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const rows = await db
+      .selectDistinct({ category: productsTable.category })
+      .from(productsTable)
+      .where(and(eq(productsTable.companyId, companyId), sql`${productsTable.category} != ''`));
+    res.json(rows.map((r) => r.category).sort());
+  } catch (err) {
+    req.log.error({ err }, "Failed to list categories");
+    res.status(500).json({ error: "Failed to list categories" });
+  }
+});
+
+const VALID_ITEM_TYPES = ["purchased_part", "manufactured_part", "final_product"] as const;
+type ImportItemType = (typeof VALID_ITEM_TYPES)[number];
+
+const importRowSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(VALID_ITEM_TYPES),
+  category: z.string().default(""),
+  min_stock: z.coerce.number().int().min(0).default(0),
+  target_stock: z.coerce.number().int().min(0).default(0),
+  supplier_name: z.string().default(""),
+  supplier_sku: z.string().default(""),
+  alert_email: z.string().email().or(z.literal("")).default(""),
+});
+
+router.post("/import", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const rows = req.body;
+    if (!Array.isArray(rows)) {
+      res.status(400).json({ error: "Body must be an array of rows" });
+      return;
+    }
+
+    const suppliers = await db.select({ id: suppliersTable.id, name: suppliersTable.name })
+      .from(suppliersTable)
+      .where(eq(suppliersTable.companyId, companyId));
+    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.id]));
+
+    let created = 0;
+    const skipped: { row: number; reason: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const parsed = importRowSchema.safeParse(rows[i]);
+      if (!parsed.success) {
+        skipped.push({ row: i + 1, reason: parsed.error.issues.map((e) => e.message).join("; ") });
+        continue;
+      }
+
+      const d = parsed.data;
+      const supplierId = d.supplier_name
+        ? (supplierMap.get(d.supplier_name.toLowerCase().trim()) ?? null)
+        : null;
+
+      try {
+        await db.insert(productsTable).values({
+          name: d.name,
+          itemType: d.type as ImportItemType,
+          category: d.category,
+          bufferStock: d.min_stock,
+          targetStock: d.target_stock,
+          supplierId,
+          supplierSku: d.supplier_sku || null,
+          alertEmail: d.alert_email || null,
+          companyId,
+        });
+        created++;
+      } catch (insertErr) {
+        skipped.push({ row: i + 1, reason: "Database insert failed" });
+      }
+    }
+
+    res.json({ created, skipped });
+  } catch (err) {
+    req.log.error({ err }, "Failed to import products");
+    res.status(500).json({ error: "Failed to import products" });
   }
 });
 

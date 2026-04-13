@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -42,6 +42,7 @@ type ItemType = "purchased_part" | "manufactured_part" | "final_product";
 const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   itemType: z.enum(["purchased_part", "manufactured_part", "final_product"]).default("purchased_part"),
+  category: z.string().default(""),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
   supplierId: z.coerce.number().optional().or(z.literal("")),
@@ -63,7 +64,12 @@ async function fetchSuppliers(): Promise<Supplier[]> {
   return res.json();
 }
 
-// Map legacy item types to new ones for display
+async function fetchCategories(): Promise<string[]> {
+  const res = await fetch("/api/products/categories", { credentials: "include" });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 function normalizeItemType(raw: string | undefined | null): ItemType {
   if (raw === "purchase") return "purchased_part";
   if (raw === "production") return "manufactured_part";
@@ -80,6 +86,7 @@ export default function ProductFormPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const categoryListId = useRef(`cat-list-${Math.random().toString(36).slice(2)}`).current;
 
   const { data: product, isLoading: isProductLoading } = useGetProduct(productId, {
     query: { enabled: isEdit, queryKey: [`/api/products/${productId}`] }
@@ -90,6 +97,11 @@ export default function ProductFormPage() {
     queryFn: fetchSuppliers,
   });
 
+  const { data: categories = [] } = useQuery({
+    queryKey: ["product-categories"],
+    queryFn: fetchCategories,
+  });
+
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
 
@@ -98,6 +110,7 @@ export default function ProductFormPage() {
     defaultValues: {
       name: "",
       itemType: "purchased_part",
+      category: "",
       bufferStock: 0,
       targetStock: 0,
       supplierId: "",
@@ -115,6 +128,7 @@ export default function ProductFormPage() {
       form.reset({
         name: product.name,
         itemType: normalizeItemType((product as any).itemType),
+        category: (product as any).category || "",
         bufferStock: product.bufferStock,
         targetStock: (product as any).targetStock || 0,
         supplierId: (product as any).supplierId ? String((product as any).supplierId) : "",
@@ -128,7 +142,7 @@ export default function ProductFormPage() {
   const onSubmit = (data: FormValues) => {
     const payload = {
       ...data,
-      category: "",
+      category: data.category || "",
       supplierId: isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null,
       supplierProductName: isPurchased ? (data.supplierProductName || null) : null,
       supplierSku: isPurchased ? (data.supplierSku || null) : null,
@@ -141,6 +155,7 @@ export default function ProductFormPage() {
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+            queryClient.invalidateQueries({ queryKey: ["product-categories"] });
             toast({ title: "Product updated successfully" });
             setLocation("/products");
           },
@@ -153,6 +168,7 @@ export default function ProductFormPage() {
         {
           onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+            queryClient.invalidateQueries({ queryKey: ["product-categories"] });
             toast({ title: "Product created successfully" });
             setLocation("/products");
           },
@@ -199,7 +215,6 @@ export default function ProductFormPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-            {/* Item Type Selector */}
             <FormField
               control={form.control}
               name="itemType"
@@ -233,7 +248,6 @@ export default function ProductFormPage() {
               )}
             />
 
-            {/* Product Name */}
             <FormField
               control={form.control}
               name="name"
@@ -248,7 +262,29 @@ export default function ProductFormPage() {
               )}
             />
 
-            {/* Stock levels */}
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Category</FormLabel>
+                  <datalist id={categoryListId}>
+                    {categories.map((c) => <option key={c} value={c} />)}
+                  </datalist>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g. Fasteners, Hydraulics, Welding Consumables"
+                      className="h-12 border-2 shadow-sm"
+                      list={categoryListId}
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1">Groups items together on the products page</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -280,7 +316,6 @@ export default function ProductFormPage() {
               />
             </div>
 
-            {/* Supplier fields — only for purchased_part */}
             {isPurchased && (
               <div className="space-y-4 p-4 bg-blue-50/50 border-2 border-blue-100 rounded-xl">
                 <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Supplier Information</p>
@@ -336,7 +371,6 @@ export default function ProductFormPage() {
               </div>
             )}
 
-            {/* Alert email */}
             <FormField
               control={form.control}
               name="alertEmail"
