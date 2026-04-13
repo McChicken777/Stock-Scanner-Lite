@@ -85,7 +85,7 @@ export default function ProductFormPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
   const categoryListId = useRef(`cat-list-${Math.random().toString(36).slice(2)}`).current;
 
   const { data: product, isLoading: isProductLoading } = useGetProduct(productId, {

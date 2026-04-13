@@ -89,27 +89,37 @@ function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): 
   return raw.map((r) => {
     const name = (r["name"] ?? "").trim();
     const type = (r["type"] ?? "").trim();
-    let error = "";
+    const minStockRaw = (r["min_stock"] ?? "0").trim();
+    const targetStockRaw = (r["target_stock"] ?? "0").trim();
+    const alertEmailRaw = (r["alert_email"] ?? "").trim();
+    const errors: string[] = [];
     let supplierWarning: string | undefined;
 
-    if (!name) error = "Name is required";
-    else if (!VALID_CSV_TYPES.includes(type as CsvItemType))
-      error = `Type must be one of: ${VALID_CSV_TYPES.join(", ")}`;
+    if (!name) errors.push("Name is required");
+    if (!VALID_CSV_TYPES.includes(type as CsvItemType))
+      errors.push(`Type must be one of: ${VALID_CSV_TYPES.join(", ")}`);
+    if (minStockRaw && (isNaN(Number(minStockRaw)) || Number(minStockRaw) < 0))
+      errors.push("min_stock must be a non-negative number");
+    if (targetStockRaw && (isNaN(Number(targetStockRaw)) || Number(targetStockRaw) < 0))
+      errors.push("target_stock must be a non-negative number");
+    if (alertEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertEmailRaw))
+      errors.push("alert_email must be a valid email or blank");
 
     const supplierName = (r["supplier_name"] ?? "").trim();
     if (supplierName && !supplierSet.has(supplierName.toLowerCase()))
       supplierWarning = `Supplier "${supplierName}" not found — will import without supplier link`;
 
+    const error = errors.join("; ");
     return {
       name,
       type,
       category: (r["category"] ?? "").trim(),
-      min_stock: (r["min_stock"] ?? "0").trim(),
-      target_stock: (r["target_stock"] ?? "0").trim(),
+      min_stock: minStockRaw || "0",
+      target_stock: targetStockRaw || "0",
       supplier_name: supplierName,
       supplier_sku: (r["supplier_sku"] ?? "").trim(),
-      alert_email: (r["alert_email"] ?? "").trim(),
-      _valid: !error,
+      alert_email: alertEmailRaw,
+      _valid: errors.length === 0,
       _error: error,
       _supplierWarning: supplierWarning,
     };
@@ -156,12 +166,12 @@ async function fetchSuppliers(): Promise<{ id: number; name: string }[]> {
 }
 
 async function importProducts(rows: CsvRow[]): Promise<{ created: number; skipped: { row: number; reason: string }[] }> {
-  const payload = rows.filter((r) => r._valid).map((r) => ({
+  const payload = rows.map((r) => ({
     name: r.name,
     type: r.type,
     category: r.category,
-    min_stock: Number(r.min_stock) || 0,
-    target_stock: Number(r.target_stock) || 0,
+    min_stock: r.min_stock,
+    target_stock: r.target_stock,
     supplier_name: r.supplier_name,
     supplier_sku: r.supplier_sku,
     alert_email: r.alert_email,
@@ -191,6 +201,7 @@ export default function ProductsPage() {
   const [showLocationsDialog, setShowLocationsDialog] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [csvRows, setCsvRows] = useState<CsvRow[] | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: { row: number; reason: string }[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: suppliers = [] } = useQuery({
@@ -203,9 +214,7 @@ export default function ProductsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["product-categories"] });
-      const msg = `${data.created} item${data.created !== 1 ? "s" : ""} imported${data.skipped.length > 0 ? `, ${data.skipped.length} skipped` : ""}.`;
-      toast({ title: "Import complete", description: msg });
-      setShowImport(false);
+      setImportResult(data);
       setCsvRows(null);
     },
     onError: () => toast({ title: "Import failed", variant: "destructive" }),
@@ -508,13 +517,56 @@ export default function ProductsPage() {
         />
       )}
 
-      <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) setCsvRows(null); }}>
+      <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) { setCsvRows(null); setImportResult(null); } }}>
         <DialogContent className="w-[95vw] max-w-2xl rounded-xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Import Products from CSV</DialogTitle>
           </DialogHeader>
 
-          {!csvRows ? (
+          {importResult ? (
+            <div className="flex-1 space-y-4">
+              <div className={`rounded-lg p-4 border-2 ${importResult.skipped.length === 0 ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+                <p className="font-bold text-lg">
+                  {importResult.created} item{importResult.created !== 1 ? "s" : ""} imported
+                  {importResult.skipped.length > 0 && `, ${importResult.skipped.length} skipped`}
+                </p>
+                {importResult.created > 0 && importResult.skipped.length === 0 && (
+                  <p className="text-sm text-green-700 mt-1">All items were imported successfully.</p>
+                )}
+              </div>
+
+              {importResult.skipped.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-destructive">Skipped rows (with reasons):</p>
+                  <div className="overflow-auto max-h-48 rounded-lg border border-border">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/60 sticky top-0">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-semibold">Row #</th>
+                          <th className="text-left px-3 py-2 font-semibold">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResult.skipped.map((s) => (
+                          <tr key={s.row} className="border-t border-border bg-red-50">
+                            <td className="px-3 py-1.5 font-mono font-bold text-destructive">{s.row}</td>
+                            <td className="px-3 py-1.5 text-destructive">{s.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                className="w-full"
+                onClick={() => { setShowImport(false); setImportResult(null); }}
+              >
+                Done
+              </Button>
+            </div>
+          ) : !csvRows ? (
             <div className="space-y-4 flex-1">
               <div className="rounded-lg border-2 border-dashed border-border p-6 text-center space-y-3">
                 <FileText className="h-10 w-10 mx-auto text-muted-foreground" />
@@ -626,17 +678,19 @@ export default function ProductsPage() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => { setShowImport(false); setCsvRows(null); }}
+                  onClick={() => { setShowImport(false); setCsvRows(null); setImportResult(null); }}
                 >
                   Cancel
                 </Button>
                 <Button
                   className="flex-1"
                   disabled={validCsvRows.length === 0 || importMutation.isPending}
-                  onClick={() => importMutation.mutate(csvRows)}
+                  onClick={() => importMutation.mutate(csvRows!)}
                 >
                   {importMutation.isPending
                     ? "Importing…"
+                    : invalidCsvRows.length > 0
+                    ? `Import ${validCsvRows.length} valid, skip ${invalidCsvRows.length}`
                     : `Import ${validCsvRows.length} item${validCsvRows.length !== 1 ? "s" : ""}`}
                 </Button>
               </div>
