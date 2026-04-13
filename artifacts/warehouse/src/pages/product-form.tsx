@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Save, ShoppingCart, Factory, Package } from "lucide-react";
 import { useCreateProduct, useUpdateProduct, useGetProduct } from "@workspace/api-client-react";
+import type { Product } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,21 +13,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
-
-interface ProductDetail {
-  id: number;
-  name: string;
-  category: string;
-  bufferStock: number;
-  targetStock: number;
-  alertEmail?: string | null;
-  itemType: string;
-  supplierId?: number | null;
-  supplierProductName?: string | null;
-  supplierSku?: string | null;
-  totalStock?: number;
-  isLowStock?: boolean;
-}
 
 const ITEM_TYPES = [
   {
@@ -140,7 +126,7 @@ export default function ProductFormPage() {
 
   useEffect(() => {
     if (product && isEdit) {
-      const p = product as unknown as ProductDetail;
+      const p = product as Product;
       form.reset({
         name: p.name,
         itemType: normalizeItemType(p.itemType),

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Link } from "wouter";
 import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
+import type { ProductWithStock } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, AlertTriangle, Edit2, Trash2, MapPin, RefreshCw,
@@ -23,24 +24,6 @@ import {
 } from "@/components/ui/dialog";
 
 type FilterType = "all" | "purchased" | "manufactured" | "final";
-
-type ItemType = "purchased_part" | "manufactured_part" | "final_product" | "purchase" | "production";
-
-interface ProductFull {
-  id: number;
-  name: string;
-  category: string;
-  bufferStock: number;
-  targetStock: number;
-  alertEmail?: string | null;
-  createdAt: Date;
-  totalStock: number;
-  isLowStock: boolean;
-  itemType: ItemType;
-  supplierId?: number | null;
-  supplierSku?: string | null;
-  supplierProductName?: string | null;
-}
 
 const FILTER_LABELS: Record<FilterType, string> = {
   all: "All",
@@ -205,8 +188,7 @@ async function importProducts(rows: CsvRow[]): Promise<{ created: number; skippe
 }
 
 export default function ProductsPage() {
-  const { data: rawProducts, isLoading } = useListProducts();
-  const products = rawProducts as ProductFull[] | undefined;
+  const { data: products, isLoading } = useListProducts();
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -316,7 +298,7 @@ export default function ProductsPage() {
   const validCsvRows = csvRows?.filter((r) => r._valid) ?? [];
   const invalidCsvRows = csvRows?.filter((r) => !r._valid) ?? [];
 
-  const ProductCard = ({ product }: { product: ProductFull }) => (
+  const ProductCard = ({ product }: { product: ProductWithStock }) => (
     <div
       className={`bg-card rounded-xl p-4 border-2 shadow-sm relative overflow-hidden ${
         product.isLowStock ? "border-destructive/40" : "border-border"

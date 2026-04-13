@@ -41,13 +41,28 @@ export interface LocationWithStock {
   stock: StockEntry[];
 }
 
+export type ItemType = (typeof ItemType)[keyof typeof ItemType];
+
+export const ItemType = {
+  purchased_part: "purchased_part",
+  manufactured_part: "manufactured_part",
+  final_product: "final_product",
+  purchase: "purchase",
+  production: "production",
+} as const;
+
 export interface Product {
   id: number;
   name: string;
   category: string;
+  itemType: ItemType;
   /** Minimum required quantity */
   bufferStock: number;
+  targetStock: number;
   alertEmail?: string | null;
+  supplierId?: number | null;
+  supplierSku?: string | null;
+  supplierProductName?: string | null;
   createdAt: string;
 }
 
@@ -55,8 +70,13 @@ export interface ProductWithStock {
   id: number;
   name: string;
   category: string;
+  itemType: ItemType;
   bufferStock: number;
+  targetStock: number;
   alertEmail?: string | null;
+  supplierId?: number | null;
+  supplierSku?: string | null;
+  supplierProductName?: string | null;
   createdAt: string;
   /** Total quantity across all locations */
   totalStock: number;

@@ -360,6 +360,15 @@ components:
         - createdAt
         - stock
 
+    ItemType:
+      type: string
+      enum:
+        - purchased_part
+        - manufactured_part
+        - final_product
+        - purchase
+        - production
+
     Product:
       type: object
       properties:
@@ -369,10 +378,23 @@ components:
           type: string
         category:
           type: string
+        itemType:
+          $ref: "#/components/schemas/ItemType"
         bufferStock:
           type: integer
           description: Minimum required quantity
+        targetStock:
+          type: integer
         alertEmail:
+          type: string
+          nullable: true
+        supplierId:
+          type: integer
+          nullable: true
+        supplierSku:
+          type: string
+          nullable: true
+        supplierProductName:
           type: string
           nullable: true
         createdAt:
@@ -382,7 +404,9 @@ components:
         - id
         - name
         - category
+        - itemType
         - bufferStock
+        - targetStock
         - createdAt
 
     ProductWithStock:
@@ -394,9 +418,22 @@ components:
           type: string
         category:
           type: string
+        itemType:
+          $ref: "#/components/schemas/ItemType"
         bufferStock:
           type: integer
+        targetStock:
+          type: integer
         alertEmail:
+          type: string
+          nullable: true
+        supplierId:
+          type: integer
+          nullable: true
+        supplierSku:
+          type: string
+          nullable: true
+        supplierProductName:
           type: string
           nullable: true
         createdAt:
@@ -411,7 +448,9 @@ components:
         - id
         - name
         - category
+        - itemType
         - bufferStock
+        - targetStock
         - createdAt
         - totalStock
         - isLowStock

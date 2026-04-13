@@ -5,13 +5,19 @@
  * Warehouse Stock Management API
  * OpenAPI spec version: 0.1.0
  */
+import type { ItemType } from "./itemType";
 
 export interface Product {
   id: number;
   name: string;
   category: string;
+  itemType: ItemType;
   /** Minimum required quantity */
   bufferStock: number;
+  targetStock: number;
   alertEmail?: string | null;
+  supplierId?: number | null;
+  supplierSku?: string | null;
+  supplierProductName?: string | null;
   createdAt: Date;
 }

@@ -13,6 +13,7 @@ export * from "./dashboardSummary";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./historyEntry";
+export * from "./itemType";
 export * from "./listHistoryParams";
 export * from "./location";
 export * from "./locationWithStock";
