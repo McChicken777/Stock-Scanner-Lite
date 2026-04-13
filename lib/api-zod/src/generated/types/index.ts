@@ -13,6 +13,7 @@ export * from "./dashboardSummary";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./historyEntry";
+export * from "./importItemType";
 export * from "./importProductResult";
 export * from "./importProductRow";
 export * from "./importSkippedRow";

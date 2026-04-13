@@ -97,9 +97,18 @@ export interface UpdateProductRequest {
   alertEmail?: string | null;
 }
 
+export type ImportItemType =
+  (typeof ImportItemType)[keyof typeof ImportItemType];
+
+export const ImportItemType = {
+  purchased_part: "purchased_part",
+  manufactured_part: "manufactured_part",
+  final_product: "final_product",
+} as const;
+
 export interface ImportProductRow {
   name: string;
-  type: ItemType;
+  type: ImportItemType;
   category?: string;
   min_stock?: string;
   target_stock?: string;

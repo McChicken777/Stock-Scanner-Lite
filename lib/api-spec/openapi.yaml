@@ -521,13 +521,20 @@ components:
           type: string
           nullable: true
 
+    ImportItemType:
+      type: string
+      enum:
+        - purchased_part
+        - manufactured_part
+        - final_product
+
     ImportProductRow:
       type: object
       properties:
         name:
           type: string
         type:
-          $ref: "#/components/schemas/ItemType"
+          $ref: "#/components/schemas/ImportItemType"
         category:
           type: string
         min_stock:

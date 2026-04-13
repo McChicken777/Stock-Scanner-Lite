@@ -111,13 +111,7 @@ export const ListProductCategoriesResponse = zod.array(
  */
 export const ImportProductsBodyItem = zod.object({
   name: zod.string(),
-  type: zod.enum([
-    "purchased_part",
-    "manufactured_part",
-    "final_product",
-    "purchase",
-    "production",
-  ]),
+  type: zod.enum(["purchased_part", "manufactured_part", "final_product"]),
   category: zod.string().optional(),
   min_stock: zod.string().optional(),
   target_stock: zod.string().optional(),

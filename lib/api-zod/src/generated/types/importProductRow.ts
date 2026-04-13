@@ -5,11 +5,11 @@
  * Warehouse Stock Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ItemType } from "./itemType";
+import type { ImportItemType } from "./importItemType";
 
 export interface ImportProductRow {
   name: string;
-  type: ItemType;
+  type: ImportItemType;
   category?: string;
   min_stock?: string;
   target_stock?: string;
