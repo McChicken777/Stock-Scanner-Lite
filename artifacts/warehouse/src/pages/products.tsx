@@ -235,10 +235,13 @@ export default function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ["product-categories"] });
       setImportResult(data);
       setCsvRows(null);
-      const desc = data.skipped.length > 0
-        ? `${data.created} created, ${data.skipped.length} skipped — see details below.`
-        : `${data.created} item${data.created !== 1 ? "s" : ""} created successfully.`;
-      toast({ title: "Import complete", description: desc });
+      if (data.skipped.length > 0) {
+        const preview = data.skipped.slice(0, 3).map((s) => `Row ${s.row}: ${s.reason}`).join("; ");
+        const more = data.skipped.length > 3 ? ` …and ${data.skipped.length - 3} more` : "";
+        toast({ title: `Import complete: ${data.created} created, ${data.skipped.length} skipped`, description: preview + more });
+      } else {
+        toast({ title: "Import complete", description: `${data.created} item${data.created !== 1 ? "s" : ""} created successfully.` });
+      }
     },
     onError: () => toast({ title: "Import failed", variant: "destructive" }),
   });
@@ -292,7 +295,7 @@ export default function ProductsPage() {
   const visibleProducts = byType(activeFilter);
 
   const groupedProducts = () => {
-    if (search || activeFilter === "all" || activeFilter === "final") {
+    if (activeFilter === "all" || activeFilter === "final") {
       return [{ key: "__flat__", label: null, items: visibleProducts }];
     }
     const groups = new Map<string, typeof visibleProducts>();
