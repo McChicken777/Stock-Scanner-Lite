@@ -131,9 +131,15 @@ router.post("/import", requireAdmin, async (req, res) => {
           .values(toInsert.map((r) => r.values))
           .returning({ id: productsTable.id });
         created = inserted.length;
-      } catch (bulkErr) {
+      } catch (_bulkErr) {
         for (const r of toInsert) {
-          skipped.push({ row: r.rowIndex, reason: "Database insert failed" });
+          try {
+            await db.insert(productsTable).values(r.values);
+            created++;
+          } catch (rowErr) {
+            const msg = rowErr instanceof Error ? rowErr.message : "Database insert failed";
+            skipped.push({ row: r.rowIndex, reason: msg });
+          }
         }
       }
     }

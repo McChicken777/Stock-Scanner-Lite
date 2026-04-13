@@ -13,6 +13,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
 
+interface ProductDetail {
+  id: number;
+  name: string;
+  category: string;
+  bufferStock: number;
+  targetStock: number;
+  alertEmail?: string | null;
+  itemType: string;
+  supplierId?: number | null;
+  supplierProductName?: string | null;
+  supplierSku?: string | null;
+  totalStock?: number;
+  isLowStock?: boolean;
+}
+
 const ITEM_TYPES = [
   {
     value: "purchased_part",
@@ -125,16 +140,17 @@ export default function ProductFormPage() {
 
   useEffect(() => {
     if (product && isEdit) {
+      const p = product as unknown as ProductDetail;
       form.reset({
-        name: product.name,
-        itemType: normalizeItemType((product as any).itemType),
-        category: (product as any).category || "",
-        bufferStock: product.bufferStock,
-        targetStock: (product as any).targetStock || 0,
-        supplierId: (product as any).supplierId ? String((product as any).supplierId) : "",
-        supplierProductName: (product as any).supplierProductName || "",
-        supplierSku: (product as any).supplierSku || "",
-        alertEmail: product.alertEmail || "",
+        name: p.name,
+        itemType: normalizeItemType(p.itemType),
+        category: p.category || "",
+        bufferStock: p.bufferStock,
+        targetStock: p.targetStock || 0,
+        supplierId: p.supplierId ? String(p.supplierId) : "",
+        supplierProductName: p.supplierProductName || "",
+        supplierSku: p.supplierSku || "",
+        alertEmail: p.alertEmail || "",
       });
     }
   }, [product, isEdit, form]);

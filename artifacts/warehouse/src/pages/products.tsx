@@ -24,6 +24,24 @@ import {
 
 type FilterType = "all" | "purchased" | "manufactured" | "final";
 
+type ItemType = "purchased_part" | "manufactured_part" | "final_product" | "purchase" | "production";
+
+interface ProductFull {
+  id: number;
+  name: string;
+  category: string;
+  bufferStock: number;
+  targetStock: number;
+  alertEmail?: string | null;
+  createdAt: Date;
+  totalStock: number;
+  isLowStock: boolean;
+  itemType: ItemType;
+  supplierId?: number | null;
+  supplierSku?: string | null;
+  supplierProductName?: string | null;
+}
+
 const FILTER_LABELS: Record<FilterType, string> = {
   all: "All",
   purchased: "Purchased",
@@ -187,7 +205,8 @@ async function importProducts(rows: CsvRow[]): Promise<{ created: number; skippe
 }
 
 export default function ProductsPage() {
-  const { data: products, isLoading } = useListProducts();
+  const { data: rawProducts, isLoading } = useListProducts();
+  const products = rawProducts as ProductFull[] | undefined;
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -265,18 +284,12 @@ export default function ProductsPage() {
 
   const byType = (filter: FilterType) => {
     if (filter === "all") return allFiltered;
-    if (filter === "purchased") return allFiltered.filter((p) => {
-      const t = (p as any).itemType;
-      return t === "purchased_part" || t === "purchase";
-    });
-    if (filter === "manufactured") return allFiltered.filter((p) => {
-      const t = (p as any).itemType;
-      return t === "manufactured_part" || t === "production";
-    });
-    return allFiltered.filter((p) => (p as any).itemType === "final_product");
+    if (filter === "purchased") return allFiltered.filter((p) => p.itemType === "purchased_part" || p.itemType === "purchase");
+    if (filter === "manufactured") return allFiltered.filter((p) => p.itemType === "manufactured_part" || p.itemType === "production");
+    return allFiltered.filter((p) => p.itemType === "final_product");
   };
 
-  const visibleProducts = byType(search ? "all" : activeFilter);
+  const visibleProducts = byType(activeFilter);
 
   const groupedProducts = () => {
     if (search || activeFilter === "all" || activeFilter === "final") {
@@ -300,7 +313,7 @@ export default function ProductsPage() {
   const validCsvRows = csvRows?.filter((r) => r._valid) ?? [];
   const invalidCsvRows = csvRows?.filter((r) => !r._valid) ?? [];
 
-  const ProductCard = ({ product }: { product: any }) => (
+  const ProductCard = ({ product }: { product: ProductFull }) => (
     <div
       className={`bg-card rounded-xl p-4 border-2 shadow-sm relative overflow-hidden ${
         product.isLowStock ? "border-destructive/40" : "border-border"
@@ -317,10 +330,10 @@ export default function ProductsPage() {
           <h3 className="font-bold text-lg leading-tight pr-16">{product.name}</h3>
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             <Badge
-              className={`font-medium text-xs ${typeBadgeClass((product as any).itemType)}`}
+              className={`font-medium text-xs ${typeBadgeClass(product.itemType)}`}
               variant="outline"
             >
-              {typeLabel((product as any).itemType)}
+              {typeLabel(product.itemType)}
             </Badge>
           </div>
         </div>
@@ -342,14 +355,14 @@ export default function ProductsPage() {
           </div>
           <div>
             <p className="text-muted-foreground">Target</p>
-            <p className="font-bold text-sm text-foreground">{(product as any).targetStock || 0}</p>
+            <p className="font-bold text-sm text-foreground">{product.targetStock || 0}</p>
           </div>
           {product.totalStock < product.bufferStock && (
             <div className="bg-red-50 rounded p-2 col-span-3">
               <div className="flex items-center gap-1 text-red-700">
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span className="font-bold text-xs">
-                  Restock: +{((product as any).targetStock || 0) - product.totalStock}
+                  Restock: +{(product.targetStock || 0) - product.totalStock}
                 </span>
               </div>
             </div>
@@ -438,28 +451,26 @@ export default function ProductsPage() {
         />
       </div>
 
-      {!search && (
-        <div className="flex gap-2 flex-wrap">
-          {(Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
-                activeFilter === f
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-border text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              {FILTER_LABELS[f]}
-              {f !== "all" && products && (
-                <span className="ml-1.5 opacity-70 text-xs">
-                  ({byType(f).length})
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-2 flex-wrap">
+        {(Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (
+          <button
+            key={f}
+            onClick={() => setActiveFilter(f)}
+            className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+              activeFilter === f
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border text-muted-foreground hover:border-primary/40"
+            }`}
+          >
+            {FILTER_LABELS[f]}
+            {f !== "all" && products && (
+              <span className="ml-1.5 opacity-70 text-xs">
+                ({byType(f).length})
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {isLoading ? (
         <div className="space-y-3">
