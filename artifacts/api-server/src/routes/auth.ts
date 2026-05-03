@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, companiesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, companiesTable, workTemplatesTable } from "@workspace/db";
+import { eq, count } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import type { CompanyFeatures } from "@workspace/db";
+import { seedStarterPack } from "../lib/seedStarterPack";
 
 const router: IRouter = Router();
 
@@ -59,6 +60,18 @@ router.post("/login", async (req, res) => {
       companyId: user.companyId,
       features,
     });
+
+    // Auto-seed starter pack on first admin login if company has zero templates
+    if (user.role === "admin" && user.companyId) {
+      const [{ value: templateCount }] = await db.select({ value: count() })
+        .from(workTemplatesTable)
+        .where(eq(workTemplatesTable.companyId, user.companyId));
+      if (templateCount === 0) {
+        seedStarterPack(user.companyId).catch((e: unknown) => {
+          req.log.warn({ err: e }, "Auto starter pack seed failed");
+        });
+      }
+    }
   } catch (err) {
     req.log.error({ err }, "Login failed");
     res.status(500).json({ error: "Login failed" });

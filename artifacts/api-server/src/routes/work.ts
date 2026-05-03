@@ -9,6 +9,7 @@ import { eq, and, isNull, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
+import { seedStarterPack, STARTER_PACK_COUNT } from "../lib/seedStarterPack";
 
 const router: IRouter = Router();
 
@@ -22,134 +23,6 @@ const procSchema = z.object({
   batchMode: z.string().optional(),
   durationEstimate: z.number().int().nullable().optional(),
 });
-
-// ─── STARTER PACK ─────────────────────────────────────────────────────────────
-
-const STARTER_PACK_TEMPLATES = [
-  {
-    name: "Welded Frame",
-    parts: [
-      { name: "Main Frame Rails", procs: [
-        { name: "Cut to length", roleId: null },
-        { name: "Weld assembly", roleId: null },
-        { name: "Grind welds", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Sandblast", roleId: null },
-      { name: "Prime & paint", roleId: null },
-    ],
-  },
-  {
-    name: "CNC Machined Part",
-    parts: [
-      { name: "CNC Body", procs: [
-        { name: "Program setup", roleId: null },
-        { name: "CNC machine", roleId: null },
-        { name: "Deburr & inspect", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Final inspection", roleId: null },
-    ],
-  },
-  {
-    name: "Sheet Metal Assembly",
-    parts: [
-      { name: "Sheet Metal Panel", procs: [
-        { name: "Laser cut", roleId: null },
-        { name: "Form / press brake", roleId: null },
-        { name: "Hardware insert", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Powder coat", roleId: null },
-      { name: "Final assembly", roleId: null },
-    ],
-  },
-  {
-    name: "Structural Bracket",
-    parts: [
-      { name: "Bracket Plate", procs: [
-        { name: "Cut & drill", roleId: null },
-        { name: "Weld gussets", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Sandblast", roleId: null },
-      { name: "Prime", roleId: null },
-    ],
-  },
-  {
-    name: "Pipe / Tube Assembly",
-    parts: [
-      { name: "Tube Sections", procs: [
-        { name: "Cut to spec", roleId: null },
-        { name: "End prep / bevel", roleId: null },
-        { name: "Weld joints", roleId: null },
-        { name: "Pressure test", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Coating / galvanise", roleId: null },
-    ],
-  },
-  {
-    name: "Custom Enclosure",
-    parts: [
-      { name: "Enclosure Shell", procs: [
-        { name: "Cut sheet", roleId: null },
-        { name: "Punch holes", roleId: null },
-        { name: "Fold / form", roleId: null },
-        { name: "Weld corners", roleId: null },
-      ]},
-    ],
-    topProcs: [
-      { name: "Sandblast", roleId: null },
-      { name: "Paint", roleId: null },
-      { name: "Install hardware", roleId: null },
-    ],
-  },
-];
-
-async function seedStarterPack(companyId: number) {
-  for (const tmpl of STARTER_PACK_TEMPLATES) {
-    const [product] = await db.insert(productsTable).values({
-      name: tmpl.name, category: "Template", itemType: "final_product",
-      bufferStock: 0, targetStock: 0, companyId,
-    }).returning();
-
-    const [template] = await db.insert(workTemplatesTable).values({
-      name: tmpl.name, companyId, productId: product.id,
-    }).returning();
-
-    // Top-level steps
-    for (let i = 0; i < tmpl.topProcs.length; i++) {
-      await db.insert(workTemplateProceduresTable).values({
-        templateId: template.id, name: tmpl.topProcs[i].name, sortOrder: i,
-        roleId: null, batchMode: "individual",
-      });
-    }
-
-    // BOM sub-parts
-    for (const part of tmpl.parts) {
-      const [partProduct] = await db.insert(productsTable).values({
-        name: part.name, category: "Component", itemType: "manufactured_part",
-        bufferStock: 0, targetStock: 0, companyId,
-      }).returning();
-
-      await db.insert(productComponentsTable).values({
-        parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: 0,
-      });
-
-      for (let j = 0; j < part.procs.length; j++) {
-        await db.insert(productProceduresTable).values({
-          productId: partProduct.id, name: part.procs[j].name, sortOrder: j, roleId: null, batchMode: "individual",
-        });
-      }
-    }
-  }
-}
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
@@ -171,7 +44,7 @@ router.post("/templates/seed-starter-pack", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     await seedStarterPack(companyId);
-    res.status(201).json({ seeded: STARTER_PACK_TEMPLATES.length });
+    res.status(201).json({ seeded: STARTER_PACK_COUNT });
   } catch (err) {
     req.log.error({ err }, "Failed to seed starter pack");
     res.status(500).json({ error: "Failed to seed starter pack" });
@@ -509,6 +382,14 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
 
     if (!snapshot) { res.status(404).json({ error: "No snapshot to undo" }); return; }
 
+    // Enforce 10-minute expiry
+    const snapshotAge = Date.now() - new Date(snapshot.createdAt).getTime();
+    if (snapshotAge > 10 * 60 * 1000) {
+      await db.delete(aiSnapshotsTable).where(eq(aiSnapshotsTable.id, snapshot.id));
+      res.status(410).json({ error: "Undo window has expired (10 minutes)" });
+      return;
+    }
+
     const procs = snapshot.snapshot as { name: string; sortOrder: number; requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
     await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
     for (const p of procs) {
@@ -533,14 +414,29 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
   }
 });
 
-// Get template procedures
+// Get template procedures (includes hasSnapshot flag for undo button visibility)
 router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
     const procs = await db.select().from(workTemplateProceduresTable)
       .where(eq(workTemplateProceduresTable.templateId, templateId))
       .orderBy(workTemplateProceduresTable.sortOrder);
-    res.json(procs);
+
+    // Check if a valid (non-expired) snapshot exists for the undo button
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const [snapshot] = await db.select({ id: aiSnapshotsTable.id, createdAt: aiSnapshotsTable.createdAt })
+      .from(aiSnapshotsTable)
+      .where(and(
+        eq(aiSnapshotsTable.entityType, "template_procs"),
+        eq(aiSnapshotsTable.entityId, templateId),
+        eq(aiSnapshotsTable.companyId, companyId),
+        sql`${aiSnapshotsTable.createdAt} > ${tenMinAgo}`,
+      ))
+      .orderBy(sql`${aiSnapshotsTable.createdAt} DESC`)
+      .limit(1);
+
+    res.json({ procedures: procs, hasSnapshot: !!snapshot });
   } catch (err) {
     req.log.error({ err }, "Failed to list template procedures");
     res.status(500).json({ error: "Failed to list template procedures" });

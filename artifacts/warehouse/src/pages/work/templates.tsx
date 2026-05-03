@@ -78,10 +78,17 @@ function TemplateProceduresEditor({ template, roles, presets }: {
   const [savingPresetName, setSavingPresetName] = useState("");
   const [showSavePreset, setShowSavePreset] = useState(false);
 
-  const { data: procs = [], isLoading } = useQuery<TemplateProcedure[]>({
+  const { data: procsData, isLoading } = useQuery<{ procedures: TemplateProcedure[]; hasSnapshot: boolean }>({
     queryKey: key,
     queryFn: () => apiFetch(`/api/work/templates/${template.id}/procedures`),
+    select: (data) => {
+      if (Array.isArray(data)) return { procedures: data, hasSnapshot: false };
+      return data as { procedures: TemplateProcedure[]; hasSnapshot: boolean };
+    },
   });
+  const procs = procsData?.procedures ?? [];
+  const hasServerSnapshot = procsData?.hasSnapshot ?? false;
+  const showUndo = canUndo || hasServerSnapshot;
 
   const addProc = useMutation({
     mutationFn: (name: string) => apiFetch(`/api/work/templates/${template.id}/procedures`, {
@@ -337,7 +344,7 @@ function TemplateProceduresEditor({ template, roles, presets }: {
           >
             {aiEdit.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
           </Button>
-          {canUndo && (
+          {showUndo && (
             <Button size="sm" variant="outline" className="h-8 px-2 flex-shrink-0 border-orange-300 text-orange-700"
               disabled={undoEdit.isPending} onClick={() => undoEdit.mutate()}>
               {undoEdit.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
