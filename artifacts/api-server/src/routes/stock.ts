@@ -26,6 +26,7 @@ router.get("/valuation", async (req, res) => {
       name: p.name,
       category: p.category,
       unitCost: p.unitCost,
+      salePrice: (p as typeof p & { salePrice?: number }).salePrice ?? 0,
       totalQty: totalsMap.get(p.id) ?? 0,
     }));
 
@@ -34,31 +35,44 @@ router.get("/valuation", async (req, res) => {
       productCount: number;
       totalQty: number;
       totalValue: number;
-      products: { productId: number; name: string; totalQty: number; unitCost: number; totalValue: number }[];
+      totalRevenue: number;
+      totalMargin: number;
+      products: { productId: number; name: string; totalQty: number; unitCost: number; salePrice: number; totalValue: number; totalRevenue: number; totalMargin: number }[];
     }>();
     let totalValue = 0;
+    let totalRevenue = 0;
+    let totalMargin = 0;
     let totalQty = 0;
     let productsWithoutCost = 0;
+    let productsWithoutSalePrice = 0;
     for (const r of rows) {
       const qty = Number(r.totalQty ?? 0);
       const cost = Number(r.unitCost ?? 0);
+      const price = Number(r.salePrice ?? 0);
       const value = qty * cost;
+      const revenue = qty * price;
+      const margin = revenue - value;
       totalQty += qty;
       totalValue += value;
+      totalRevenue += revenue;
+      totalMargin += margin;
       if (cost <= 0) productsWithoutCost += 1;
+      if (price <= 0) productsWithoutSalePrice += 1;
       const cat = r.category || "Uncategorised";
-      const entry = catMap.get(cat) ?? { category: cat, productCount: 0, totalQty: 0, totalValue: 0, products: [] };
+      const entry = catMap.get(cat) ?? { category: cat, productCount: 0, totalQty: 0, totalValue: 0, totalRevenue: 0, totalMargin: 0, products: [] };
       entry.productCount += 1;
       entry.totalQty += qty;
       entry.totalValue += value;
-      entry.products.push({ productId: r.productId, name: r.name, totalQty: qty, unitCost: cost, totalValue: value });
+      entry.totalRevenue += revenue;
+      entry.totalMargin += margin;
+      entry.products.push({ productId: r.productId, name: r.name, totalQty: qty, unitCost: cost, salePrice: price, totalValue: value, totalRevenue: revenue, totalMargin: margin });
       catMap.set(cat, entry);
     }
     const categories = Array.from(catMap.values())
       .map((c) => ({ ...c, products: c.products.sort((a, b) => b.totalValue - a.totalValue) }))
       .sort((a, b) => b.totalValue - a.totalValue);
 
-    res.json({ totalValue, totalQty, totalProducts: rows.length, productsWithoutCost, categories });
+    res.json({ totalValue, totalRevenue, totalMargin, totalQty, totalProducts: rows.length, productsWithoutCost, productsWithoutSalePrice, categories });
   } catch (err) {
     req.log.error({ err }, "Failed to get stock valuation");
     res.status(500).json({ error: "Failed to get stock valuation" });

@@ -48,6 +48,7 @@ const formSchema = z.object({
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
   unitCost: z.coerce.number().min(0, "Must be positive").default(0),
+  salePrice: z.coerce.number().min(0, "Must be positive").default(0),
   supplierId: z.coerce.number().optional().or(z.literal("")),
   supplierProductName: z.string().optional().or(z.literal("")),
   supplierSku: z.string().optional().or(z.literal("")),
@@ -118,6 +119,7 @@ export default function ProductFormPage() {
       bufferStock: 0,
       targetStock: 0,
       unitCost: 0,
+      salePrice: 0,
       supplierId: "",
       supplierProductName: "",
       supplierSku: "",
@@ -139,6 +141,7 @@ export default function ProductFormPage() {
         bufferStock: p.bufferStock,
         targetStock: p.targetStock || 0,
         unitCost: (p as Product & { unitCost?: number }).unitCost ?? 0,
+        salePrice: (p as Product & { salePrice?: number }).salePrice ?? 0,
         supplierId: p.supplierId ?? "",
         supplierProductName: p.supplierProductName || "",
         supplierSku: p.supplierSku || "",
@@ -157,6 +160,7 @@ export default function ProductFormPage() {
       supplierSku: isPurchased ? (data.supplierSku || null) : null,
       alertEmail: data.alertEmail || null,
       unitCost: data.unitCost ?? 0,
+      salePrice: data.salePrice ?? 0,
     };
 
     if (isEdit) {
@@ -395,27 +399,64 @@ export default function ProductFormPage() {
               </div>
             )}
 
-            <FormField
-              control={form.control}
-              name="unitCost"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Unit Cost</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="h-12 text-base border-2 shadow-sm font-mono"
-                      {...field}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1">Per-unit cost — used for inventory valuation</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="unitCost"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Unit Cost</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="h-12 text-base border-2 shadow-sm font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">Inventory valuation</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="salePrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Sale Price</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="h-12 text-base border-2 shadow-sm font-mono"
+                        {...field}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground mt-1">Customer price — for margin</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {(() => {
+              const cost = Number(form.watch("unitCost") || 0);
+              const price = Number(form.watch("salePrice") || 0);
+              if (price <= 0) return null;
+              const margin = price - cost;
+              const pct = price > 0 ? (margin / price) * 100 : 0;
+              return (
+                <div className="flex items-center justify-between p-3 bg-emerald-50 border-2 border-emerald-100 rounded-xl">
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Gross margin / unit</span>
+                  <span className="font-mono font-bold text-emerald-700">${margin.toFixed(2)} ({pct.toFixed(1)}%)</span>
+                </div>
+              );
+            })()}
 
             <FormField
               control={form.control}

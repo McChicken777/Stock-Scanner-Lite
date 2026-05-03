@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, numeric } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 
@@ -23,6 +23,8 @@ export const orderItemsTable = pgTable("order_items", {
     .notNull()
     .references(() => productsTable.id, { onDelete: "cascade" }),
   quantity: integer("quantity").notNull().default(0),
+  unitCost: numeric("unit_cost", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+  salePrice: numeric("sale_price", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   companyId: integer("company_id")
     .notNull()
     .references(() => companiesTable.id, { onDelete: "cascade" }),

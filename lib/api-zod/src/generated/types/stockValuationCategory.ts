@@ -12,5 +12,7 @@ export interface StockValuationCategory {
   productCount: number;
   totalQty: number;
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
   products: StockValuationProduct[];
 }

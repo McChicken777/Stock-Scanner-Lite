@@ -1,14 +1,17 @@
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, MapPin, AlertTriangle, Activity, DollarSign } from "lucide-react";
+import { Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 
 interface StockValuation {
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
   totalProducts: number;
   productsWithoutCost: number;
+  productsWithoutSalePrice: number;
 }
 
 export default function Dashboard() {
@@ -102,6 +105,41 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </Link>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="bg-secondary text-secondary-foreground border-none">
+          <CardContent className="p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <p className="text-xs font-bold uppercase tracking-wider text-secondary-foreground/70">Potential Revenue</p>
+            </div>
+            <p className="text-xl font-black font-mono">
+              {valuation ? `$${Number(valuation.totalRevenue).toFixed(2)}` : "—"}
+            </p>
+            {valuation && valuation.productsWithoutSalePrice > 0 && (
+              <p className="text-[10px] text-secondary-foreground/70 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> {valuation.productsWithoutSalePrice} missing price
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="bg-emerald-600 text-white border-none">
+          <CardContent className="p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Potential Margin</p>
+            </div>
+            <p className="text-xl font-black font-mono">
+              {valuation ? `$${Number(valuation.totalMargin).toFixed(2)}` : "—"}
+            </p>
+            {valuation && valuation.totalRevenue > 0 && (
+              <p className="text-[10px] opacity-80">
+                {((valuation.totalMargin / valuation.totalRevenue) * 100).toFixed(1)}% gross
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {summary.lowStockProducts.length > 0 && (
         <Card className="border-destructive/50 bg-destructive/5">

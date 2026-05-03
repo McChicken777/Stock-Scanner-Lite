@@ -12,7 +12,10 @@ interface ValuationProduct {
   category: string;
   totalQty: number;
   unitCost: number;
+  salePrice?: number;
   totalValue: number;
+  totalRevenue?: number;
+  totalMargin?: number;
 }
 
 interface ValuationCategory {
@@ -20,14 +23,19 @@ interface ValuationCategory {
   productCount: number;
   totalQty: number;
   totalValue: number;
+  totalRevenue?: number;
+  totalMargin?: number;
   products: ValuationProduct[];
 }
 
 interface StockValuation {
   totalValue: number;
+  totalRevenue?: number;
+  totalMargin?: number;
   totalProducts: number;
   totalQty: number;
   productsWithoutCost: number;
+  productsWithoutSalePrice?: number;
   categories: ValuationCategory[];
 }
 

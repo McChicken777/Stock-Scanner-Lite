@@ -21,5 +21,7 @@ export interface Product {
   supplierProductName?: string | null;
   /** Per-unit cost used for stock valuation */
   unitCost: number;
+  /** Per-unit sale price used for revenue and margin */
+  salePrice: number;
   createdAt: Date;
 }

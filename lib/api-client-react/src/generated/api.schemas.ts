@@ -65,6 +65,8 @@ export interface Product {
   supplierProductName?: string | null;
   /** Per-unit cost used for stock valuation */
   unitCost: number;
+  /** Per-unit sale price used for revenue and margin */
+  salePrice: number;
   createdAt: string;
 }
 
@@ -80,6 +82,7 @@ export interface ProductWithStock {
   supplierSku?: string | null;
   supplierProductName?: string | null;
   unitCost: number;
+  salePrice?: number;
   createdAt: string;
   /** Total quantity across all locations */
   totalStock: number;
@@ -100,6 +103,7 @@ export interface UpdateProductRequest {
   bufferStock?: number;
   alertEmail?: string | null;
   unitCost?: number;
+  salePrice?: number;
 }
 
 export type ImportItemType =
@@ -180,7 +184,10 @@ export interface StockValuationProduct {
   name: string;
   totalQty: number;
   unitCost: number;
+  salePrice: number;
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
 }
 
 export interface StockValuationCategory {
@@ -188,14 +195,19 @@ export interface StockValuationCategory {
   productCount: number;
   totalQty: number;
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
   products: StockValuationProduct[];
 }
 
 export interface StockValuation {
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
   totalQty: number;
   totalProducts: number;
   productsWithoutCost: number;
+  productsWithoutSalePrice: number;
   categories: StockValuationCategory[];
 }
 

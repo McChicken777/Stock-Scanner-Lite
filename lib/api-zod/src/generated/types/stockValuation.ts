@@ -9,8 +9,11 @@ import type { StockValuationCategory } from "./stockValuationCategory";
 
 export interface StockValuation {
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
   totalQty: number;
   totalProducts: number;
   productsWithoutCost: number;
+  productsWithoutSalePrice: number;
   categories: StockValuationCategory[];
 }

@@ -13,6 +13,8 @@ interface OrderItem {
   supplierProductName: string | null;
   supplierSku: string | null;
   quantity: number;
+  unitCost: number;
+  salePrice: number;
 }
 
 interface Order {
@@ -224,7 +226,36 @@ export default function OrdersPage() {
 
           {selectedOrderQuery.data.items && selectedOrderQuery.data.items.length > 0 ? (
             <div className="space-y-2">
-              {selectedOrderQuery.data.items.map((item) => (
+              {(() => {
+                const items = selectedOrderQuery.data.items;
+                const totalCost = items.reduce((sum, it) => sum + Number(it.unitCost ?? 0) * it.quantity, 0);
+                const totalRevenue = items.reduce((sum, it) => sum + Number(it.salePrice ?? 0) * it.quantity, 0);
+                const totalMargin = totalRevenue - totalCost;
+                if (totalRevenue <= 0 && totalCost <= 0) return null;
+                return (
+                  <div className="grid grid-cols-3 gap-2 mb-1">
+                    <div className="bg-white p-2 rounded border-2 border-blue-200 text-center">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Cost</p>
+                      <p className="font-mono font-bold text-sm">${totalCost.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-white p-2 rounded border-2 border-blue-200 text-center">
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Revenue</p>
+                      <p className="font-mono font-bold text-sm">${totalRevenue.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-emerald-50 p-2 rounded border-2 border-emerald-200 text-center">
+                      <p className="text-[10px] font-bold uppercase text-emerald-700">Margin</p>
+                      <p className="font-mono font-bold text-sm text-emerald-700">${totalMargin.toFixed(2)}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+              {selectedOrderQuery.data.items.map((item) => {
+                const cost = Number(item.unitCost ?? 0);
+                const price = Number(item.salePrice ?? 0);
+                const lineRevenue = price * item.quantity;
+                const lineMargin = (price - cost) * item.quantity;
+                const marginPct = price > 0 ? ((price - cost) / price) * 100 : 0;
+                return (
                 <div
                   key={item.id}
                   className="bg-white p-3 rounded border-l-4 border-blue-500 space-y-2"
@@ -241,6 +272,20 @@ export default function OrdersPage() {
                         <p className="text-xs text-muted-foreground font-mono">
                           SKU: {item.supplierSku}
                         </p>
+                      )}
+                      {(cost > 0 || price > 0) && (
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground mt-1 font-mono">
+                          <span>Cost: ${cost.toFixed(2)}</span>
+                          <span>Price: ${price.toFixed(2)}</span>
+                          {price > 0 && (
+                            <span className="text-emerald-700 font-bold">
+                              Margin: ${lineMargin.toFixed(2)} ({marginPct.toFixed(0)}%)
+                            </span>
+                          )}
+                          {price > 0 && (
+                            <span>Line revenue: ${lineRevenue.toFixed(2)}</span>
+                          )}
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -259,14 +304,14 @@ export default function OrdersPage() {
                           }}
                           disabled={
                             updateQuantityMutation.isPending ||
-                            selectedOrderQuery.data.status !== "draft"
+                            selectedOrderQuery.data?.status !== "draft"
                           }
                           className="w-16 px-2 py-1 border rounded text-sm text-center"
                         />
                       ) : (
                         <span className="w-16 px-2 py-1 text-sm text-center font-medium">{item.quantity}</span>
                       )}
-                      {canManage && selectedOrderQuery.data.status === "draft" && (
+                      {canManage && selectedOrderQuery.data?.status === "draft" && (
                         <button
                           onClick={() =>
                             removeMutation.mutate({
@@ -283,7 +328,8 @@ export default function OrdersPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No items in this order</p>

@@ -26,6 +26,7 @@ export const productsTable = pgTable("products", {
   supplierSku: text("supplier_sku"),
   alertEmail: text("alert_email"),
   unitCost: numeric("unit_cost", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+  salePrice: numeric("sale_price", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

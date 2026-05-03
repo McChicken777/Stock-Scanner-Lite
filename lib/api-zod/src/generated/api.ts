@@ -83,6 +83,7 @@ export const ListProductsResponseItem = zod.object({
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
   unitCost: zod.number(),
+  salePrice: zod.number().optional(),
   createdAt: zod.coerce.date(),
   totalStock: zod.number().describe("Total quantity across all locations"),
   isLowStock: zod.boolean(),
@@ -158,6 +159,7 @@ export const GetProductResponse = zod.object({
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
   unitCost: zod.number(),
+  salePrice: zod.number().optional(),
   createdAt: zod.coerce.date(),
   totalStock: zod.number().describe("Total quantity across all locations"),
   isLowStock: zod.boolean(),
@@ -176,6 +178,7 @@ export const UpdateProductBody = zod.object({
   bufferStock: zod.number().optional(),
   alertEmail: zod.string().nullish(),
   unitCost: zod.number().optional(),
+  salePrice: zod.number().optional(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -196,6 +199,9 @@ export const UpdateProductResponse = zod.object({
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
   unitCost: zod.number().describe("Per-unit cost used for stock valuation"),
+  salePrice: zod
+    .number()
+    .describe("Per-unit sale price used for revenue and margin"),
   createdAt: zod.coerce.date(),
 });
 
@@ -280,22 +286,30 @@ export const ListHistoryResponse = zod.array(ListHistoryResponseItem);
  */
 export const GetStockValuationResponse = zod.object({
   totalValue: zod.number(),
+  totalRevenue: zod.number(),
+  totalMargin: zod.number(),
   totalQty: zod.number(),
   totalProducts: zod.number(),
   productsWithoutCost: zod.number(),
+  productsWithoutSalePrice: zod.number(),
   categories: zod.array(
     zod.object({
       category: zod.string(),
       productCount: zod.number(),
       totalQty: zod.number(),
       totalValue: zod.number(),
+      totalRevenue: zod.number(),
+      totalMargin: zod.number(),
       products: zod.array(
         zod.object({
           productId: zod.number(),
           name: zod.string(),
           totalQty: zod.number(),
           unitCost: zod.number(),
+          salePrice: zod.number(),
           totalValue: zod.number(),
+          totalRevenue: zod.number(),
+          totalMargin: zod.number(),
         }),
       ),
     }),
@@ -327,6 +341,7 @@ export const GetDashboardSummaryResponse = zod.object({
       supplierSku: zod.string().nullish(),
       supplierProductName: zod.string().nullish(),
       unitCost: zod.number(),
+      salePrice: zod.number().optional(),
       createdAt: zod.coerce.date(),
       totalStock: zod.number().describe("Total quantity across all locations"),
       isLowStock: zod.boolean(),

@@ -55,6 +55,8 @@ router.get("/:id", requireAuth, async (req, res) => {
       orderId: orderItemsTable.orderId,
       productId: orderItemsTable.productId,
       quantity: orderItemsTable.quantity,
+      unitCost: orderItemsTable.unitCost,
+      salePrice: orderItemsTable.salePrice,
       productName: productsTable.name,
       supplierProductName: productsTable.supplierProductName,
       supplierSku: productsTable.supplierSku,
@@ -149,6 +151,8 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
               orderId,
               productId: item.product.id,
               quantity: restockAmount,
+              unitCost: Number(item.product.unitCost ?? 0),
+              salePrice: Number(item.product.salePrice ?? 0),
               companyId,
             });
           }

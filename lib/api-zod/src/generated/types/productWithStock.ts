@@ -19,6 +19,7 @@ export interface ProductWithStock {
   supplierSku?: string | null;
   supplierProductName?: string | null;
   unitCost: number;
+  salePrice?: number;
   createdAt: Date;
   /** Total quantity across all locations */
   totalStock: number;

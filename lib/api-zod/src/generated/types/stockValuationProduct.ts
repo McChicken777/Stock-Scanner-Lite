@@ -11,5 +11,8 @@ export interface StockValuationProduct {
   name: string;
   totalQty: number;
   unitCost: number;
+  salePrice: number;
   totalValue: number;
+  totalRevenue: number;
+  totalMargin: number;
 }
