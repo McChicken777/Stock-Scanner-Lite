@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle2, Clock, Zap, Users, Wrench, Calendar, Flag, UserCheck } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Zap, Users, Wrench, Calendar, Flag, UserCheck, BookTemplate } from "lucide-react";
 import { Link } from "wouter";
 
 interface AttendanceLiveRow {
@@ -132,23 +132,29 @@ export default function AdminDashboardPage() {
       {/* Quick Actions */}
       <div className="bg-card border-2 border-border rounded-lg p-3 space-y-2">
         <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quick Access</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Link href="/admin/users">
-            <button className="flex items-center justify-center gap-1 p-2 bg-blue-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-colors text-center text-[11px] font-bold">
+            <button className="w-full flex items-center justify-center gap-1 p-2 bg-blue-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-colors text-center text-[11px] font-bold">
               <Users className="h-4 w-4 text-blue-600" />
               <span>Users</span>
             </button>
           </Link>
           <Link href="/admin/roles">
-            <button className="flex items-center justify-center gap-1 p-2 bg-purple-50 border-2 border-purple-200 rounded-lg hover:border-purple-400 transition-colors text-center text-[11px] font-bold">
+            <button className="w-full flex items-center justify-center gap-1 p-2 bg-purple-50 border-2 border-purple-200 rounded-lg hover:border-purple-400 transition-colors text-center text-[11px] font-bold">
               <Wrench className="h-4 w-4 text-purple-600" />
               <span>Roles</span>
             </button>
           </Link>
           <Link href="/admin/procedures">
-            <button className="flex items-center justify-center gap-1 p-2 bg-indigo-50 border-2 border-indigo-200 rounded-lg hover:border-indigo-400 transition-colors text-center text-[11px] font-bold">
+            <button className="w-full flex items-center justify-center gap-1 p-2 bg-indigo-50 border-2 border-indigo-200 rounded-lg hover:border-indigo-400 transition-colors text-center text-[11px] font-bold">
               <Wrench className="h-4 w-4 text-indigo-600" />
               <span>Procedures</span>
+            </button>
+          </Link>
+          <Link href="/work/templates">
+            <button className="w-full flex items-center justify-center gap-1 p-2 bg-emerald-50 border-2 border-emerald-200 rounded-lg hover:border-emerald-400 transition-colors text-center text-[11px] font-bold">
+              <BookTemplate className="h-4 w-4 text-emerald-600" />
+              <span>Templates</span>
             </button>
           </Link>
         </div>

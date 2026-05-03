@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { AiTipsPanel } from "@/components/ai-tips-panel";
 
 interface Role { id: number; name: string; }
 interface Product { id: number; name: string; itemType: string; }
@@ -352,6 +353,7 @@ function TemplateProceduresEditor({ template, roles, presets }: {
             </Button>
           )}
         </div>
+        <AiTipsPanel context="edit" />
       </div>
     </div>
   );
@@ -898,6 +900,7 @@ export default function WorkTemplatesPage() {
                       rows={4}
                     />
                   </div>
+                  <AiTipsPanel context="template" defaultOpen />
                   <p className="text-xs text-muted-foreground">
                     AI will generate a template with sub-parts and production steps for review before saving.
                   </p>
@@ -1024,6 +1027,12 @@ export default function WorkTemplatesPage() {
             <p className="text-sm text-muted-foreground mt-1">Create a template or start from our starter pack.</p>
           </div>
           <div className="flex flex-col gap-2 max-w-xs mx-auto">
+            <Button
+              className="w-full font-bold gap-2 bg-purple-600 hover:bg-purple-700"
+              onClick={() => setAiGenerateOpen(true)}
+            >
+              <Sparkles className="h-4 w-4" /> Create with AI
+            </Button>
             <Button
               className="w-full font-bold gap-2 bg-green-600 hover:bg-green-700"
               onClick={() => seedStarterPack.mutate()}

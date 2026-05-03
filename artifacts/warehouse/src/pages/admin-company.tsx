@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Users, Wrench } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Users, Wrench, BookTemplate } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -196,7 +196,14 @@ export default function AdminCompanyPage() {
               <button className="w-full p-4 rounded-lg border-2 border-border hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left">
                 <Wrench className="h-5 w-5 text-purple-600 mb-1" />
                 <p className="font-bold text-sm">Procedures</p>
-                <p className="text-xs text-muted-foreground">Define production steps</p>
+                <p className="text-xs text-muted-foreground">Reusable steps for quick jobs</p>
+              </button>
+            </Link>
+            <Link href="/work/templates" className="block col-span-2">
+              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left">
+                <BookTemplate className="h-5 w-5 text-emerald-600 mb-1" />
+                <p className="font-bold text-sm">Item Templates</p>
+                <p className="text-xs text-muted-foreground">Define products with steps & sub-parts. Generate with AI or start from a starter pack.</p>
               </button>
             </Link>
           </div>

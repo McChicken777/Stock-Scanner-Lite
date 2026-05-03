@@ -76,6 +76,108 @@ router.post("/templates/seed-starter-pack", requireAdmin, async (req, res) => {
   }
 });
 
+// Friendly wrapper for AI calls — turns integration errors into a user-readable message
+function friendlyAiError(err: unknown): { status: number; message: string } {
+  const raw = err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+  if (lower.includes("timeout") || lower.includes("timed out") || lower.includes("etimedout")) {
+    return { status: 504, message: "The AI took too long to respond. Please try again." };
+  }
+  if (lower.includes("api key") || lower.includes("unauthorized") || lower.includes("401") || lower.includes("not configured") || lower.includes("missing")) {
+    return { status: 503, message: "AI is not available right now. Please ask your admin to check the AI integration." };
+  }
+  if (lower.includes("rate") || lower.includes("429")) {
+    return { status: 429, message: "AI is busy right now. Please try again in a moment." };
+  }
+  if (lower.includes("invalid json") || lower.includes("unexpected token")) {
+    return { status: 502, message: "AI returned an unexpected response. Please try rewording your description." };
+  }
+  return { status: 500, message: "AI couldn't process that right now. Please try again." };
+}
+
+// AI generate steps for a quick job — returns suggested steps WITHOUT persisting
+router.post("/quick-steps/generate", requireAdmin, async (req, res) => {
+  try {
+    const parsed = z.object({
+      description: z.string().min(3).max(2000),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Description required (3-2000 characters)" }); return; }
+
+    const companyId = req.session.companyId!;
+    const { description } = parsed.data;
+    // Authoritative: load roles from DB for THIS company. Never trust client-supplied role IDs.
+    const companyRoles = await db.select({ id: rolesTable.id, name: rolesTable.name })
+      .from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleList = companyRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n");
+
+    let text: string;
+    try {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        messages: [{
+          role: "user",
+          content: `You are a production planning assistant for a custom fabrication shop. Generate the production steps for a one-off "quick job" based on this description:
+
+"${description}"
+
+Available roles (use their IDs if relevant, or null if uncertain):
+${roleList || "None defined yet"}
+
+Respond with ONLY a valid JSON array (no markdown, no explanation) of 2-8 steps:
+[
+  { "name": "Step name", "roleId": null }
+]
+
+Rules:
+- Keep step names short (2-5 words each)
+- roleId must be null or one of the IDs listed above
+- Order steps in the sequence they will be performed
+- Focus only on the physical fabrication/repair steps`,
+        }],
+      });
+      const block = message.content[0];
+      if (!block || block.type !== "text") throw new Error("AI returned no text response");
+      text = block.text;
+    } catch (aiErr) {
+      req.log.warn({ err: aiErr }, "AI call failed for quick-job generation");
+      const { status, message } = friendlyAiError(aiErr);
+      res.status(status).json({ error: message });
+      return;
+    }
+
+    let steps: { name: string; roleId: number | null }[];
+    try {
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      steps = JSON.parse(cleaned);
+      if (!Array.isArray(steps)) throw new Error("Not an array");
+    } catch {
+      res.status(502).json({ error: "AI returned an unexpected response. Please try rewording your description." });
+      return;
+    }
+
+    // Sanitize: keep only well-formed steps
+    const validRoleIds = new Set(companyRoles.map((r) => r.id));
+    const cleanSteps = steps
+      .filter((s) => s && typeof s.name === "string" && s.name.trim())
+      .slice(0, 12)
+      .map((s) => ({
+        name: String(s.name).trim().slice(0, 120),
+        roleId: typeof s.roleId === "number" && validRoleIds.has(s.roleId) ? s.roleId : null,
+      }));
+
+    if (cleanSteps.length === 0) {
+      res.status(502).json({ error: "AI didn't return any usable steps. Please try again with more detail." });
+      return;
+    }
+
+    res.json({ steps: cleanSteps });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate quick-job steps");
+    res.status(500).json({ error: "Couldn't generate steps right now. Please try again." });
+  }
+});
+
 // AI generate template preview — returns structured payload WITHOUT persisting (requires explicit confirm)
 router.post("/templates/generate", requireAdmin, async (req, res) => {
   try {
@@ -88,7 +190,9 @@ router.post("/templates/generate", requireAdmin, async (req, res) => {
     const { description, existingRoles = [] } = parsed.data;
     const roleList = existingRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n");
 
-    const message = await anthropic.messages.create({
+    let message;
+    try {
+      message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 8192,
       messages: [{
@@ -125,10 +229,19 @@ Rules:
 - Include 2-6 top procedures and 0-4 parts with 1-6 procedures each
 - Focus on the actual fabrication steps, not project management`,
       }],
-    });
+      });
+    } catch (aiErr) {
+      req.log.warn({ err: aiErr }, "AI call failed for template generate");
+      const { status, message: msg } = friendlyAiError(aiErr);
+      res.status(status).json({ error: msg });
+      return;
+    }
 
     const text = message.content[0];
-    if (text.type !== "text") throw new Error("No text response");
+    if (!text || text.type !== "text") {
+      res.status(502).json({ error: "AI returned an empty response. Please try again." });
+      return;
+    }
 
     let generated: {
       name: string;
@@ -138,14 +251,14 @@ Rules:
     try {
       generated = JSON.parse(text.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
     } catch {
-      res.status(500).json({ error: "AI returned invalid JSON" }); return;
+      res.status(502).json({ error: "AI returned an unexpected response. Please try rewording your description." }); return;
     }
 
     // Return the preview payload — nothing is saved to the database yet
     res.json({ preview: generated });
   } catch (err) {
     req.log.error({ err }, "Failed to generate template preview");
-    res.status(500).json({ error: "Failed to generate template" });
+    res.status(500).json({ error: "Couldn't generate template right now. Please try again." });
   }
 });
 
@@ -381,12 +494,14 @@ router.put("/templates/:id/ai-edit", requireAdmin, async (req, res) => {
     const roleList = existingRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n");
     const currentState = currentProcs.map((p, i) => `${i + 1}. "${p.name}" roleId:${p.roleId ?? "null"} batchMode:${p.batchMode} duration:${p.durationEstimate ?? "null"}`).join("\n");
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      messages: [{
-        role: "user",
-        content: `You are editing the top-level production steps for template "${template.name}".
+    let message;
+    try {
+      message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8192,
+        messages: [{
+          role: "user",
+          content: `You are editing the top-level production steps for template "${template.name}".
 
 Current steps:
 ${currentState || "(none)"}
@@ -406,17 +521,26 @@ Rules:
 - batchMode: "individual", "free_batch", or "type_batch"
 - durationEstimate: integer minutes or null
 - roleId: null or one of the IDs above`,
-      }],
-    });
+        }],
+      });
+    } catch (aiErr) {
+      req.log.warn({ err: aiErr }, "AI call failed for template ai-edit");
+      const { status, message: msg } = friendlyAiError(aiErr);
+      res.status(status).json({ error: msg });
+      return;
+    }
 
     const text = message.content[0];
-    if (text.type !== "text") throw new Error("No text response");
+    if (!text || text.type !== "text") {
+      res.status(502).json({ error: "AI returned an empty response. Please try again." });
+      return;
+    }
 
     let steps: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
     try {
       steps = JSON.parse(text.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
     } catch {
-      res.status(500).json({ error: "AI returned invalid JSON" }); return;
+      res.status(502).json({ error: "AI returned an unexpected response. Please try rewording your instruction." }); return;
     }
 
     // Replace all top-level template procedures (leave component steps untouched)
@@ -1600,10 +1724,15 @@ router.post("/projects", requireAdmin, async (req, res) => {
       }).returning();
 
       const steps = quickSteps ?? [];
+      // Validate any provided roleId belongs to THIS company; coerce unknown IDs to null.
+      const companyRoleRows = await db.select({ id: rolesTable.id }).from(rolesTable)
+        .where(eq(rolesTable.companyId, companyId));
+      const validRoleIds = new Set(companyRoleRows.map((r) => r.id));
       for (let i = 0; i < steps.length; i++) {
+        const rid = steps[i].roleId ?? null;
         await db.insert(workItemStepsTable).values({
           itemId: item.id, name: steps[i].name, sortOrder: i,
-          roleId: steps[i].roleId ?? null,
+          roleId: rid !== null && validRoleIds.has(rid) ? rid : null,
           batchMode: steps[i].batchMode ?? "individual",
           durationEstimate: steps[i].durationEstimate ?? null,
         });

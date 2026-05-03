@@ -6,9 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus, AlertTriangle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus, AlertTriangle, Sparkles, BookOpen, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { AiTipsPanel } from "@/components/ai-tips-panel";
 
 interface Template {
   id: number;
@@ -30,6 +35,13 @@ interface Role {
   name: string;
 }
 
+interface ProcedureOption {
+  id: number;
+  name: string;
+  roleId: number | null;
+  roleName: string | null;
+}
+
 async function fetchTemplates(): Promise<Template[]> {
   const res = await fetch("/api/work/templates", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load templates");
@@ -38,6 +50,12 @@ async function fetchTemplates(): Promise<Template[]> {
 
 async function fetchRoles(): Promise<Role[]> {
   const res = await fetch("/api/tasks/roles", { credentials: "include" });
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function fetchProcedures(): Promise<ProcedureOption[]> {
+  const res = await fetch("/api/tasks/procedures", { credentials: "include" });
   if (!res.ok) return [];
   return res.json();
 }
@@ -103,6 +121,11 @@ export default function WorkProjectFormPage() {
   const [quickJob, setQuickJob] = useState(false);
   const [quickSteps, setQuickSteps] = useState<QuickStep[]>([{ name: "", roleId: null }]);
   const [newStepName, setNewStepName] = useState("");
+  const [showProcedurePicker, setShowProcedurePicker] = useState(false);
+  const [procedureSearch, setProcedureSearch] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiDescription, setAiDescription] = useState("");
+  const [aiPreviewSteps, setAiPreviewSteps] = useState<QuickStep[] | null>(null);
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["/api/work/templates"],
@@ -112,6 +135,29 @@ export default function WorkProjectFormPage() {
   const { data: roles = [] } = useQuery<Role[]>({
     queryKey: ["/api/tasks/roles"],
     queryFn: fetchRoles,
+  });
+
+  const { data: procedures = [] } = useQuery<ProcedureOption[]>({
+    queryKey: ["/api/tasks/procedures"],
+    queryFn: fetchProcedures,
+    enabled: quickJob,
+  });
+
+  const aiGenerate = useMutation({
+    mutationFn: async (description: string) => {
+      const res = await fetch("/api/work/quick-steps/generate", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "AI couldn't generate steps. Please try again.");
+      }
+      return res.json() as Promise<{ steps: QuickStep[] }>;
+    },
+    onSuccess: (data) => setAiPreviewSteps(data.steps),
+    onError: (e) => toast({ title: e instanceof Error ? e.message : "Failed", variant: "destructive" }),
   });
 
   interface BomShortage { productId: number; productName: string; needed: number; have: number; shortfall: number }
@@ -373,9 +419,180 @@ export default function WorkProjectFormPage() {
               </Button>
             </div>
 
+            {/* Helpers: pick from procedures + AI generate */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button" size="sm" variant="outline"
+                className="h-10 gap-1.5 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                onClick={() => { setShowProcedurePicker((v) => !v); setProcedureSearch(""); }}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                {showProcedurePicker ? "Hide" : "Pick from procedures"}
+              </Button>
+              <Button
+                type="button" size="sm"
+                className="h-10 gap-1.5 bg-purple-600 hover:bg-purple-700"
+                onClick={() => { setAiOpen(true); setAiPreviewSteps(null); }}
+              >
+                <Sparkles className="h-3.5 w-3.5" /> Generate with AI
+              </Button>
+            </div>
+
+            {showProcedurePicker && (
+              <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Saved procedures</p>
+                  <Link href="/admin/procedures" className="text-[10px] font-bold text-indigo-700 hover:underline uppercase">
+                    Manage →
+                  </Link>
+                </div>
+                {procedures.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No saved procedures yet.{" "}
+                    <Link href="/admin/procedures" className="text-indigo-700 font-semibold underline">Create some first.</Link>
+                  </p>
+                ) : (
+                  <>
+                    <Input
+                      value={procedureSearch}
+                      onChange={(e) => setProcedureSearch(e.target.value)}
+                      placeholder="Search procedures…"
+                      className="h-9 border-2 text-sm bg-background"
+                    />
+                    <div className="max-h-56 overflow-y-auto space-y-1.5">
+                      {procedures
+                        .filter((p) => !procedureSearch || p.name.toLowerCase().includes(procedureSearch.toLowerCase()))
+                        .map((p) => {
+                          const alreadyAdded = quickSteps.some((s) => s.name.trim().toLowerCase() === p.name.toLowerCase());
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              disabled={alreadyAdded}
+                              onClick={() => {
+                                setQuickSteps((prev) => [
+                                  ...prev.filter((s) => s.name.trim()),
+                                  { name: p.name, roleId: p.roleId ?? null },
+                                ]);
+                              }}
+                              className={cn(
+                                "w-full text-left flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border bg-background transition-colors",
+                                alreadyAdded ? "opacity-50 cursor-not-allowed" : "hover:border-indigo-400 hover:bg-indigo-50",
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium truncate">{p.name}</p>
+                                {p.roleName && <p className="text-[10px] text-muted-foreground">{p.roleName}</p>}
+                              </div>
+                              {alreadyAdded ? (
+                                <span className="text-[10px] text-muted-foreground font-bold">ADDED</span>
+                              ) : (
+                                <Plus className="h-3.5 w-3.5 text-indigo-600 flex-shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <p className="text-xs text-muted-foreground">
               Quick jobs create a single item with the steps you define. Great for one-off repairs or small custom jobs.
             </p>
+
+            {/* AI generate dialog */}
+            <Dialog open={aiOpen} onOpenChange={(o) => { setAiOpen(o); if (!o) { setAiPreviewSteps(null); setAiDescription(""); } }}>
+              <DialogContent className="w-[90vw] max-w-md rounded-xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-600" /> Generate Steps with AI
+                  </DialogTitle>
+                </DialogHeader>
+
+                {!aiPreviewSteps ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-bold">Describe the job</label>
+                      <Textarea
+                        value={aiDescription}
+                        onChange={(e) => setAiDescription(e.target.value)}
+                        placeholder="e.g. Repair a damaged steel railing — sand rust, weld broken section, repaint black"
+                        className="border-2 min-h-[100px] text-sm"
+                        rows={4}
+                      />
+                    </div>
+                    <AiTipsPanel context="quick-job" defaultOpen />
+                    <p className="text-xs text-muted-foreground">
+                      AI will suggest a list of steps for you to review before they're added.
+                    </p>
+                    <Button
+                      className="w-full h-11 font-bold bg-purple-600 hover:bg-purple-700"
+                      disabled={!aiDescription.trim() || aiGenerate.isPending}
+                      onClick={() => aiGenerate.mutate(aiDescription.trim())}
+                    >
+                      {aiGenerate.isPending
+                        ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</>
+                        : <><Sparkles className="mr-2 h-4 w-4" /> Generate Preview</>}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2 max-h-72 overflow-y-auto">
+                      <p className="text-xs font-bold uppercase tracking-wider text-purple-700">Suggested steps</p>
+                      {aiPreviewSteps.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">No steps returned. Try again with more detail.</p>
+                      ) : (
+                        <ol className="space-y-1.5">
+                          {aiPreviewSteps.map((s, i) => (
+                            <li key={i} className="flex items-center gap-2 text-sm">
+                              <span className="text-muted-foreground font-mono text-xs">{i + 1}.</span>
+                              <span className="flex-1">{s.name}</span>
+                              {s.roleId && (
+                                <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
+                                  {roles.find((r) => r.id === s.roleId)?.name}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setAiPreviewSteps((prev) => prev?.filter((_, idx) => idx !== i) ?? null)}
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Review and remove any steps you don't want. Click Apply to add them to your job.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => setAiPreviewSteps(null)}>
+                        ← Edit description
+                      </Button>
+                      <Button
+                        className="flex-1 font-bold bg-purple-600 hover:bg-purple-700"
+                        disabled={aiPreviewSteps.length === 0}
+                        onClick={() => {
+                          setQuickSteps((prev) => [
+                            ...prev.filter((s) => s.name.trim()),
+                            ...aiPreviewSteps,
+                          ]);
+                          setAiOpen(false);
+                          setAiPreviewSteps(null);
+                          setAiDescription("");
+                          toast({ title: `${aiPreviewSteps.length} step${aiPreviewSteps.length !== 1 ? "s" : ""} added` });
+                        }}
+                      >
+                        <Check className="mr-1.5 h-4 w-4" /> Apply Steps
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
           </div>
         ) : (
           /* TEMPLATE MODE */
