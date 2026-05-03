@@ -695,42 +695,6 @@ export const ConvertQuoteToWorkProjectBody = zod.object({
   priority: zod.enum(["low", "normal", "high", "urgent"]).optional(),
 });
 
-export const ConvertQuoteToWorkProjectResponse = zod.object({
-  quote: zod
-    .object({
-      id: zod.number(),
-      quoteNumber: zod.string(),
-      status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
-      customerId: zod.number().nullish(),
-      customerName: zod.string().nullish(),
-      customerNameLookup: zod.string().nullish(),
-      customerDisplayName: zod.string().nullish(),
-      total: zod.number(),
-      validUntil: zod.coerce.date().nullish(),
-      workProjectId: zod.number().nullish(),
-      createdAt: zod.coerce.date(),
-      updatedAt: zod.coerce.date(),
-    })
-    .and(
-      zod.object({
-        customerContact: zod.string().nullish(),
-        customerEmail: zod.string().nullish(),
-        customerPhone: zod.string().nullish(),
-        customerAddress: zod.string().nullish(),
-        notes: zod.string().nullish(),
-        terms: zod.string().nullish(),
-        subtotal: zod.number().optional(),
-        discount: zod.number().optional(),
-        taxRate: zod.number().optional(),
-        taxAmount: zod.number().optional(),
-      }),
-    ),
-  project: zod.object({
-    id: zod.number(),
-    name: zod.string(),
-  }),
-});
-
 /**
  * @summary Download a PDF of the quote
  */

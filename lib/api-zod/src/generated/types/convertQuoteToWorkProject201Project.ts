@@ -6,7 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type ConvertQuoteToWorkProject200Project = {
+export type ConvertQuoteToWorkProject201Project = {
   id: number;
   name: string;
 };

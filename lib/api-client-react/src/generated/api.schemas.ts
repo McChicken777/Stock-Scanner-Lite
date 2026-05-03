@@ -383,12 +383,12 @@ export type DeleteQuote200 = {
   ok: boolean;
 };
 
-export type ConvertQuoteToWorkProject200Project = {
+export type ConvertQuoteToWorkProject201Project = {
   id: number;
   name: string;
 };
 
-export type ConvertQuoteToWorkProject200 = {
+export type ConvertQuoteToWorkProject201 = {
   quote: Quote;
-  project: ConvertQuoteToWorkProject200Project;
+  project: ConvertQuoteToWorkProject201Project;
 };

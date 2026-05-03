@@ -98,7 +98,7 @@ router.delete("/:id", requireAdmin, async (req, res) => {
       .where(and(eq(customersTable.id, id), eq(customersTable.companyId, companyId)))
       .returning();
     if (result.length === 0) { res.status(404).json({ error: "Not found" }); return; }
-    res.status(204).send();
+    res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete customer");
     res.status(500).json({ error: "Failed to delete customer" });

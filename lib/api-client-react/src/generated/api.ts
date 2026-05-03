@@ -18,7 +18,7 @@ import type {
 
 import type {
   ConvertQuoteRequest,
-  ConvertQuoteToWorkProject200,
+  ConvertQuoteToWorkProject201,
   CreateCustomerRequest,
   CreateLocationRequest,
   CreateProductRequest,
@@ -2359,8 +2359,8 @@ export const convertQuoteToWorkProject = async (
   quoteId: number,
   convertQuoteRequest: ConvertQuoteRequest,
   options?: RequestInit,
-): Promise<ConvertQuoteToWorkProject200> => {
-  return customFetch<ConvertQuoteToWorkProject200>(
+): Promise<ConvertQuoteToWorkProject201> => {
+  return customFetch<ConvertQuoteToWorkProject201>(
     getConvertQuoteToWorkProjectUrl(quoteId),
     {
       ...options,

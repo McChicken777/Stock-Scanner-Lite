@@ -5,10 +5,10 @@
  * Warehouse Stock Management API
  * OpenAPI spec version: 0.1.0
  */
-import type { ConvertQuoteToWorkProject200Project } from "./convertQuoteToWorkProject200Project";
+import type { ConvertQuoteToWorkProject201Project } from "./convertQuoteToWorkProject201Project";
 import type { Quote } from "./quote";
 
-export type ConvertQuoteToWorkProject200 = {
+export type ConvertQuoteToWorkProject201 = {
   quote: Quote;
-  project: ConvertQuoteToWorkProject200Project;
+  project: ConvertQuoteToWorkProject201Project;
 };

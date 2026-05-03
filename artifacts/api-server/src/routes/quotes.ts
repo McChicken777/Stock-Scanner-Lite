@@ -354,7 +354,7 @@ router.delete("/:id", requireAdmin, async (req, res) => {
       return;
     }
     await db.delete(quotesTable).where(eq(quotesTable.id, id));
-    res.status(204).send();
+    res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete quote");
     res.status(500).json({ error: "Failed to delete quote" });
@@ -503,7 +503,9 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
     return project;
     });
 
-    res.status(201).json({ project, quoteId: id });
+    const [updatedQuote] = await db.select().from(quotesTable)
+      .where(and(eq(quotesTable.id, id), eq(quotesTable.companyId, companyId)));
+    res.status(201).json({ quote: updatedQuote, project: { id: project.id, name: project.name } });
   } catch (err) {
     const msg = (err as Error).message;
     if (msg === "__notfound__") { res.status(404).json({ error: "Not found" }); return; }
