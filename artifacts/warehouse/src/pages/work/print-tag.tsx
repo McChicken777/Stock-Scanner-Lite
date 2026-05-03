@@ -4,9 +4,25 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Printer, ArrowLeft } from "lucide-react";
 
-interface ProjectItem { id: number; name: string; paintColor: string | null; sortOrder: number }
+interface ItemStep {
+  id: number;
+  name: string;
+  status: "not_started" | "in_progress" | "completed";
+  sortOrder: number;
+  roleName?: string | null;
+}
+
+interface ProjectItem {
+  id: number;
+  name: string;
+  paintColor: string | null;
+  sortOrder: number;
+  procedures: ItemStep[];
+  progress: number;
+}
+
 interface Project { id: number; name: string; deadline: string; priority: string }
-interface ProjectWithItems { project: Project; items: ProjectItem[] }
+interface ProjectWithItems extends Project { items: ProjectItem[] }
 
 async function apiFetch(url: string) {
   const res = await fetch(url, { credentials: "include" });
@@ -35,7 +51,8 @@ export default function PrintTagPage() {
     </div>
   );
 
-  const { project, items } = data;
+  const project = data;
+  const items = data.items;
   const appOrigin = window.location.origin;
 
   return (
@@ -67,6 +84,13 @@ export default function PrintTagPage() {
       <div className="tag-grid">
         {items.map((item) => {
           const deepLinkUrl = `${appOrigin}/work/projects/${project.id}?item=${item.id}`;
+          const activeStep = item.procedures?.find((s) => s.status === "in_progress");
+          const nextStep = item.procedures?.find((s) => s.status === "not_started");
+          const currentStep = activeStep ?? nextStep ?? null;
+          const completedCount = item.procedures?.filter((s) => s.status === "completed").length ?? 0;
+          const totalCount = item.procedures?.length ?? 0;
+          const deadline = new Date(project.deadline);
+          const deadlineStr = deadline.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
           return (
             <div key={item.id} className="tag space-y-3">
               <div>
@@ -75,14 +99,33 @@ export default function PrintTagPage() {
                 <p className="text-xs text-muted-foreground">{project.name}</p>
                 {item.paintColor && (
                   <p className="text-xs mt-0.5 font-medium text-muted-foreground">
-                    Color: {item.paintColor}
+                    Colour: {item.paintColor}
                   </p>
                 )}
               </div>
+
+              {currentStep && (
+                <div className="rounded border border-dashed border-gray-400 px-2 py-1.5">
+                  <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                    {activeStep ? "Current step (active)" : "Next step"}
+                  </p>
+                  <p className="text-xs font-bold leading-snug">{currentStep.name}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Step {(item.procedures?.indexOf(currentStep) ?? 0) + 1} of {totalCount}
+                    {completedCount > 0 && ` · ${completedCount} done`}
+                  </p>
+                </div>
+              )}
+              {!currentStep && totalCount > 0 && (
+                <div className="rounded border border-dashed border-green-400 px-2 py-1.5 text-center">
+                  <p className="text-xs font-bold text-green-700">All {totalCount} steps complete</p>
+                </div>
+              )}
+
               <div className="flex items-start gap-4">
                 <QRCodeSVG
                   value={deepLinkUrl}
-                  size={96}
+                  size={88}
                   level="M"
                   style={{ flexShrink: 0 }}
                 />
@@ -91,9 +134,12 @@ export default function PrintTagPage() {
                   <p>{deepLinkUrl}</p>
                 </div>
               </div>
-              <div className="border-t pt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-                <span>Priority: <strong className="capitalize">{project.priority}</strong></span>
-                <span>ID: #{item.id}</span>
+              <div className="border-t pt-2 grid grid-cols-3 text-[10px] text-muted-foreground gap-1">
+                <span>Due: <strong>{deadlineStr}</strong></span>
+                <span className="text-center capitalize">
+                  <strong>{project.priority}</strong>
+                </span>
+                <span className="text-right">ID: #{item.id}</span>
               </div>
             </div>
           );
