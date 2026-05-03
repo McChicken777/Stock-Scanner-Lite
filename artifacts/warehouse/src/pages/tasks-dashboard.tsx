@@ -223,11 +223,14 @@ function BatchQueueTab() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stepIds }),
     }),
-    onSuccess: (_, stepIds) => {
+    onSuccess: (data: { completed: number; alreadyDone: number }, stepIds) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/batch-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
       setSelectedIds((prev) => { const next = new Set(prev); stepIds.forEach((id) => next.delete(id)); return next; });
-      toast({ title: `${stepIds.length} step${stepIds.length !== 1 ? "s" : ""} marked complete` });
+      const msg = data.alreadyDone > 0
+        ? `${data.completed} done · ${data.alreadyDone} already complete`
+        : `${data.completed} step${data.completed !== 1 ? "s" : ""} marked complete`;
+      toast({ title: msg });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });

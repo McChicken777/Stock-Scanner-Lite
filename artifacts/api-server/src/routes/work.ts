@@ -1066,6 +1066,10 @@ router.get("/batch-queue", requireAuth, async (req, res) => {
 });
 
 // POST /work/batch-complete — bulk complete an array of step IDs
+// Batch steps skip individual timers (no start/stop required — by design for batch mode).
+// READY/BLOCKED for subsequent steps is recomputed at query time in /batch-queue and
+// /my-steps, so marking steps completed here immediately unblocks downstream steps on
+// the next query — consistent with the individual /procedures/:id/stop flow.
 router.post("/batch-complete", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
@@ -1073,25 +1077,39 @@ router.post("/batch-complete", requireAuth, async (req, res) => {
     if (!parsed.success) { res.status(400).json({ error: "stepIds required" }); return; }
     const { stepIds } = parsed.data;
 
-    // Verify all steps belong to this company
-    const verified = await db
-      .select({ id: workItemStepsTable.id })
-      .from(workItemStepsTable)
-      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
-      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
-      .where(and(inArray(workItemStepsTable.id, stepIds), eq(workProjectsTable.companyId, companyId)));
+    const result = await db.transaction(async (tx) => {
+      // Within the transaction: verify ownership and read current status atomically
+      const verified = await tx
+        .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+        .from(workItemStepsTable)
+        .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+        .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+        .where(and(inArray(workItemStepsTable.id, stepIds), eq(workProjectsTable.companyId, companyId)));
 
-    if (verified.length !== stepIds.length) {
-      res.status(403).json({ error: "One or more steps not found or unauthorized" });
+      if (verified.length !== stepIds.length) {
+        throw Object.assign(new Error("One or more steps not found or unauthorized"), { statusCode: 403 });
+      }
+
+      // Idempotent: only update steps not already completed
+      const toComplete = verified.filter((s) => s.status !== "completed").map((s) => s.id);
+      const alreadyDone = verified.length - toComplete.length;
+
+      if (toComplete.length > 0) {
+        await tx.update(workItemStepsTable)
+          .set({ status: "completed" })
+          .where(inArray(workItemStepsTable.id, toComplete));
+      }
+
+      return { completed: toComplete.length, alreadyDone };
+    });
+
+    res.json(result);
+  } catch (err: unknown) {
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode === 403) {
+      res.status(403).json({ error: (err as Error).message });
       return;
     }
-
-    await db.update(workItemStepsTable)
-      .set({ status: "completed" })
-      .where(inArray(workItemStepsTable.id, stepIds));
-
-    res.json({ completed: stepIds.length });
-  } catch (err) {
     req.log.error({ err }, "Failed to batch complete steps");
     res.status(500).json({ error: "Failed to batch complete steps" });
   }
