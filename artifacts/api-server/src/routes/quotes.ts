@@ -105,10 +105,14 @@ router.get("/", requireAuth, async (req, res) => {
     const companyId = req.session.companyId!;
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const customerId = req.query.customerId ? Number(req.query.customerId) : undefined;
+    const fromDate = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const toDate = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
 
     const conds = [eq(quotesTable.companyId, companyId)];
     if (status) conds.push(eq(quotesTable.status, status as "draft" | "sent" | "approved" | "rejected" | "converted"));
     if (customerId) conds.push(eq(quotesTable.customerId, customerId));
+    if (fromDate && !Number.isNaN(fromDate.getTime())) conds.push(sql`${quotesTable.createdAt} >= ${fromDate}`);
+    if (toDate && !Number.isNaN(toDate.getTime())) conds.push(sql`${quotesTable.createdAt} <= ${toDate}`);
 
     const rows = await db.select({
       id: quotesTable.id,
@@ -377,7 +381,13 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
       .where(eq(quoteItemsTable.quoteId, id))
       .orderBy(quoteItemsTable.sortOrder);
 
-    const projectName = `${quote.quoteNumber} — ${quote.customerName ?? "Quote"}`;
+    let resolvedCustomerName = quote.customerName;
+    if (!resolvedCustomerName && quote.customerId) {
+      const [c] = await tx.select({ name: customersTable.name }).from(customersTable)
+        .where(and(eq(customersTable.id, quote.customerId), eq(customersTable.companyId, companyId)));
+      resolvedCustomerName = c?.name ?? null;
+    }
+    const projectName = `${quote.quoteNumber} — ${resolvedCustomerName ?? "Quote"}`;
     const [project] = await tx.insert(workProjectsTable).values({
       name: projectName,
       deadline: new Date(parsed.data.deadline),
