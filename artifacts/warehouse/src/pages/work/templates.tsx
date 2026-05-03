@@ -876,8 +876,8 @@ export default function WorkTemplatesPage() {
           {/* AI Generate */}
           <Dialog open={aiGenerateOpen} onOpenChange={(o) => { setAiGenerateOpen(o); if (!o) setAiPreview(null); }}>
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="gap-1 border-purple-300 text-purple-700 hover:bg-purple-50">
-                <Sparkles className="h-3.5 w-3.5" /> AI
+              <Button size="sm" className="gap-1 bg-purple-600 hover:bg-purple-700 text-white font-bold">
+                <Sparkles className="h-3.5 w-3.5" /> Create with AI
               </Button>
             </DialogTrigger>
             <DialogContent className="w-[90vw] max-w-md rounded-xl">

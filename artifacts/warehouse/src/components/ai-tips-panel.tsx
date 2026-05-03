@@ -6,31 +6,50 @@ interface AiTipsPanelProps {
   defaultOpen?: boolean;
 }
 
-const COMMON_TIPS = [
-  "Name what you're making and what materials are involved (steel, aluminum, plywood…).",
-  "Mention key processes (welding, CNC, sandblasting, paint, assembly).",
-  "Say roughly how complex it is (a single bracket vs. a 5-part frame).",
-  "Skip project management chatter — focus on the physical work.",
-];
+const TIPS_BY_CONTEXT: Record<NonNullable<AiTipsPanelProps["context"]>, string[]> = {
+  template: [
+    "Name what you're making and the materials (steel, aluminum, plywood, fabric…).",
+    "List the production steps in order (cut → weld → sand → prime → paint).",
+    "Mention sub-parts or BOM components (frame, hinges, brackets) so the AI knows to break it down.",
+    "Call out which roles do the work (welder, painter, assembler) — AI will tag steps with them.",
+    "Include the finishing step (powder coat, paint color, polish, packaging).",
+    "Skip sales/PM chatter — focus on the physical work and quantities.",
+  ],
+  "quick-job": [
+    "Describe the actual job: what's broken, what needs to be made, or what gets repaired.",
+    "List the steps in the order you'd do them (e.g. sand → weld → prime → paint).",
+    "Mention which roles are involved (welder, painter) so steps are assigned correctly.",
+    "Note any finishing work (paint color, polish, drying time).",
+    "Keep it focused on the shop work — skip customer or scheduling details.",
+  ],
+  edit: [
+    "Be specific about which step to add, remove, rename, or move.",
+    "Reference existing steps by name (\"after welding\", \"before painting\").",
+    "If adding a step, mention the role it belongs to (welder, painter, etc.).",
+    "Edits affect only this template's procedure list — sub-parts/BOM are separate.",
+    "Avoid vague asks like \"make it better\" — say what should change and where.",
+  ],
+};
 
-const CONTEXT_TIPS: Record<NonNullable<AiTipsPanelProps["context"]>, { good: string; bad: string }> = {
+const CONTEXT_EXAMPLES: Record<NonNullable<AiTipsPanelProps["context"]>, { good: string; bad: string }> = {
   template: {
-    good: "Welded steel gate, 2m wide, with CNC-cut hinges and powder coat finish",
+    good: "Welded steel gate, 2m wide, with CNC-cut hinges and powder coat finish. Steps: cut, weld frame, attach hinges, sand, prime, powder coat. Roles: welder, painter.",
     bad: "We have a customer who wants something nice for their front yard",
   },
   "quick-job": {
-    good: "Repair a damaged steel railing — sand rust, weld broken section, repaint black",
+    good: "Repair a damaged steel railing — sand off rust, weld broken section, prime, paint black. Welder + painter.",
     bad: "Fix the thing for the client meeting tomorrow",
   },
   edit: {
-    good: "Add a sandblasting step before painting; remove the inspection step",
+    good: "Add a sandblasting step before painting; remove the inspection step at the end",
     bad: "Make it better and more efficient",
   },
 };
 
 export function AiTipsPanel({ context = "template", defaultOpen = false }: AiTipsPanelProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const examples = CONTEXT_TIPS[context];
+  const tips = TIPS_BY_CONTEXT[context];
+  const examples = CONTEXT_EXAMPLES[context];
 
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
@@ -41,12 +60,12 @@ export function AiTipsPanel({ context = "template", defaultOpen = false }: AiTip
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         <Lightbulb className="h-3.5 w-3.5" />
-        <span className="text-xs font-bold uppercase tracking-wider">Tips for describing your job</span>
+        <span className="text-xs font-bold uppercase tracking-wider">Tips for great AI results</span>
       </button>
       {open && (
         <div className="px-3 pb-3 pt-1 text-xs text-amber-900 space-y-2">
           <ul className="space-y-1 list-disc list-inside">
-            {COMMON_TIPS.map((tip) => (
+            {tips.map((tip) => (
               <li key={tip}>{tip}</li>
             ))}
           </ul>

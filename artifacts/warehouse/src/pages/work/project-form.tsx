@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus, AlertTriangle, Sparkles, BookOpen, Check } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus, AlertTriangle, Sparkles, BookOpen, Check, ArrowUp, ArrowDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { AiTipsPanel } from "@/components/ai-tips-panel";
@@ -539,34 +539,84 @@ export default function WorkProjectFormPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2 max-h-72 overflow-y-auto">
-                      <p className="text-xs font-bold uppercase tracking-wider text-purple-700">Suggested steps</p>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2 max-h-80 overflow-y-auto">
+                      <p className="text-xs font-bold uppercase tracking-wider text-purple-700">Review & edit suggested steps</p>
                       {aiPreviewSteps.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic">No steps returned. Try again with more detail.</p>
+                        <p className="text-xs text-muted-foreground italic">No steps left. Go back and try again.</p>
                       ) : (
                         <ol className="space-y-1.5">
                           {aiPreviewSteps.map((s, i) => (
-                            <li key={i} className="flex items-center gap-2 text-sm">
-                              <span className="text-muted-foreground font-mono text-xs">{i + 1}.</span>
-                              <span className="flex-1">{s.name}</span>
-                              {s.roleId && (
-                                <span className="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                                  {roles.find((r) => r.id === s.roleId)?.name}
-                                </span>
+                            <li key={i} className="bg-background border border-purple-200 rounded p-2 space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-muted-foreground font-mono text-xs w-5 flex-shrink-0">{i + 1}.</span>
+                                <Input
+                                  value={s.name}
+                                  onChange={(e) => setAiPreviewSteps((prev) =>
+                                    prev?.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x) ?? null,
+                                  )}
+                                  className="h-7 text-xs border-purple-200"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={i === 0}
+                                  onClick={() => setAiPreviewSteps((prev) => {
+                                    if (!prev) return prev;
+                                    const arr = [...prev];
+                                    [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                                    return arr;
+                                  })}
+                                  className="p-1 text-muted-foreground hover:text-purple-700 disabled:opacity-30"
+                                  title="Move up"
+                                >
+                                  <ArrowUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={i === aiPreviewSteps.length - 1}
+                                  onClick={() => setAiPreviewSteps((prev) => {
+                                    if (!prev) return prev;
+                                    const arr = [...prev];
+                                    [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+                                    return arr;
+                                  })}
+                                  className="p-1 text-muted-foreground hover:text-purple-700 disabled:opacity-30"
+                                  title="Move down"
+                                >
+                                  <ArrowDown className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAiPreviewSteps((prev) => prev?.filter((_, idx) => idx !== i) ?? null)}
+                                  className="p-1 text-muted-foreground hover:text-destructive"
+                                  title="Remove"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              {roles.length > 0 && (
+                                <div className="flex items-center gap-1.5 pl-7">
+                                  <span className="text-[10px] uppercase font-bold text-muted-foreground">Role:</span>
+                                  <select
+                                    value={s.roleId ?? ""}
+                                    onChange={(e) => setAiPreviewSteps((prev) =>
+                                      prev?.map((x, idx) => idx === i
+                                        ? { ...x, roleId: e.target.value ? Number(e.target.value) : null }
+                                        : x) ?? null,
+                                    )}
+                                    className="flex-1 text-xs rounded border border-purple-200 bg-background px-1.5 py-0.5"
+                                  >
+                                    <option value="">No role</option>
+                                    {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                  </select>
+                                </div>
                               )}
-                              <button
-                                onClick={() => setAiPreviewSteps((prev) => prev?.filter((_, idx) => idx !== i) ?? null)}
-                                className="text-muted-foreground hover:text-destructive"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
                             </li>
                           ))}
                         </ol>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Review and remove any steps you don't want. Click Apply to add them to your job.
+                      Edit names, change roles, reorder, or remove any step before applying.
                     </p>
                     <div className="flex gap-2">
                       <Button variant="outline" className="flex-1" onClick={() => setAiPreviewSteps(null)}>
