@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck, Printer,
+  PackageCheck, Truck, Printer, FileText,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -383,6 +383,17 @@ export default function WorkProjectDetailPage() {
     enabled: editMode,
   });
 
+  const { data: originQuotes = [] } = useQuery<Array<{ id: number; quoteNumber: string }>>({
+    queryKey: [`/api/quotes?workProjectId=${projectId}`],
+    queryFn: async () => {
+      const r = await fetch(`/api/quotes?workProjectId=${projectId}`, { credentials: "include" });
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!projectId,
+  });
+  const originQuote = originQuotes[0];
+
   const completeMutation = useMutation({
     mutationFn: () => fetch(`/api/work/projects/${projectId}`, {
       method: "PUT", credentials: "include",
@@ -482,6 +493,17 @@ export default function WorkProjectDetailPage() {
           </button>
         )}
       </div>
+
+      {originQuote && (
+        <Link href={`/quotes/${originQuote.id}`}>
+          <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 flex items-center gap-2 hover:bg-purple-100 transition-colors cursor-pointer">
+            <FileText className="h-4 w-4 text-purple-700 flex-shrink-0" />
+            <p className="text-xs text-purple-800">
+              From quote <span className="font-bold">{originQuote.quoteNumber}</span> — tap to view
+            </p>
+          </div>
+        </Link>
+      )}
 
       {editMode && (
         <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center justify-between gap-3">

@@ -105,12 +105,14 @@ router.get("/", requireAuth, async (req, res) => {
     const companyId = req.session.companyId!;
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const customerId = req.query.customerId ? Number(req.query.customerId) : undefined;
+    const workProjectId = req.query.workProjectId ? Number(req.query.workProjectId) : undefined;
     const fromDate = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
     const toDate = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
 
     const conds = [eq(quotesTable.companyId, companyId)];
     if (status) conds.push(eq(quotesTable.status, status as "draft" | "sent" | "approved" | "rejected" | "converted"));
     if (customerId) conds.push(eq(quotesTable.customerId, customerId));
+    if (workProjectId) conds.push(eq(quotesTable.workProjectId, workProjectId));
     if (fromDate && !Number.isNaN(fromDate.getTime())) conds.push(sql`${quotesTable.createdAt} >= ${fromDate}`);
     if (toDate && !Number.isNaN(toDate.getTime())) conds.push(sql`${quotesTable.createdAt} <= ${toDate}`);
 
