@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck, Printer, FileText,
+  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,18 @@ interface Procedure {
   sortOrder: number;
   totalTimeSeconds: number;
   requiresInbound: boolean;
+  roleId: number | null;
+  roleName: string | null;
+  batchMode: string;
+  durationEstimate: number | null;
+  activeStartTime: string | null;
+}
+
+interface NextUp {
+  id: number;
+  name: string;
+  roleName: string | null;
+  status: "not_started" | "in_progress" | "completed";
 }
 
 interface ProjectItem {
@@ -31,6 +43,7 @@ interface ProjectItem {
   progress: number;
   paintColor: string | null;
   procedures: Procedure[];
+  nextUp: NextUp | null;
 }
 
 interface InboundRecord {
@@ -94,6 +107,45 @@ function formatSeconds(seconds: number): string {
   return `${s}s`;
 }
 
+function useNow(intervalMs: number | null) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (intervalMs == null) return;
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
+const batchModeLabels: Record<string, string> = {
+  individual: "Individual",
+  free_batch: "Free batch",
+  type_batch: "Type batch",
+};
+
+function BatchModeBadge({ mode }: { mode: string }) {
+  if (!mode || mode === "individual") return null;
+  return (
+    <span className="text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 rounded px-1.5 py-0.5 flex items-center gap-0.5">
+      <Layers className="h-2.5 w-2.5" />
+      {batchModeLabels[mode] ?? mode}
+    </span>
+  );
+}
+
+function RoleBadge({ name }: { name: string | null }) {
+  if (!name) return (
+    <span className="text-[10px] font-bold bg-muted text-muted-foreground border border-border rounded px-1.5 py-0.5 flex items-center gap-0.5">
+      <User className="h-2.5 w-2.5" /> Unassigned
+    </span>
+  );
+  return (
+    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 flex items-center gap-0.5">
+      <User className="h-2.5 w-2.5" />{name}
+    </span>
+  );
+}
+
 const priorityColors: Record<string, string> = {
   high: "bg-red-100 text-red-700 border-red-200",
   medium: "bg-orange-100 text-orange-700 border-orange-200",
@@ -145,28 +197,49 @@ function ProcedureRow({
   }[proc.status];
 
   const inboundBlocked = proc.requiresInbound && inboundStatus === "expected";
+  const isRunning = proc.status === "in_progress" && proc.activeStartTime;
+  const now = useNow(isRunning ? 1000 : null);
+  const elapsedSeconds = isRunning
+    ? Math.max(0, Math.floor((now - new Date(proc.activeStartTime!).getTime()) / 1000))
+    : 0;
 
   return (
     <div className={cn(
       "flex items-center gap-3 p-3 rounded-lg border",
       inboundBlocked ? "bg-orange-50/60 border-orange-200 opacity-80" :
-      isActive ? "bg-orange-50 border-orange-300" : proc.status === "completed" ? "bg-green-50/50 border-green-200/50" : "bg-background border-border"
+      isActive ? "bg-orange-50 border-orange-300" :
+      proc.status === "in_progress" ? "bg-orange-50/40 border-orange-200" :
+      proc.status === "completed" ? "bg-green-50/50 border-green-200/50" : "bg-background border-border"
     )}>
       {statusIcon}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 space-y-1">
         <p className={cn("font-medium text-sm", proc.status === "completed" && "line-through text-muted-foreground")}>{proc.name}</p>
+        <div className="flex flex-wrap gap-1">
+          <RoleBadge name={proc.roleName} />
+          <BatchModeBadge mode={proc.batchMode} />
+          {proc.durationEstimate != null && (
+            <span className="text-[10px] font-bold bg-muted text-muted-foreground border border-border rounded px-1.5 py-0.5 flex items-center gap-0.5">
+              <Timer className="h-2.5 w-2.5" />~{proc.durationEstimate}m
+            </span>
+          )}
+        </div>
         {proc.requiresInbound && (
-          <p className={cn("text-[10px] font-bold flex items-center gap-0.5 mt-0.5",
+          <p className={cn("text-[10px] font-bold flex items-center gap-0.5",
             inboundBlocked ? "text-orange-600" : "text-green-600"
           )}>
             <PackageCheck className="h-3 w-3" />
             {inboundBlocked ? "Waiting for parts" : "Parts available"}
           </p>
         )}
-        {proc.totalTimeSeconds > 0 && (
+        {isRunning && (
+          <p className="text-xs text-orange-600 font-semibold flex items-center gap-1">
+            <span className="animate-pulse">●</span>
+            Running · {formatSeconds(elapsedSeconds)}
+          </p>
+        )}
+        {!isRunning && proc.totalTimeSeconds > 0 && (
           <p className="text-xs text-muted-foreground"><Clock className="inline h-3 w-3 mr-0.5" />{formatSeconds(proc.totalTimeSeconds)}</p>
         )}
-        {isActive && <p className="text-xs text-orange-600 font-semibold animate-pulse">Running…</p>}
       </div>
       <div className="flex items-center gap-1.5">
         {isActive ? (
@@ -260,15 +333,52 @@ function ItemCard({
         </div>
       )}
 
+      {!editMode && item.nextUp && item.progress < 100 && (
+        <div className="px-4 pb-3">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 flex items-center gap-2">
+            <ArrowRight className="h-3.5 w-3.5 text-orange-600 flex-shrink-0" />
+            <p className="text-xs text-orange-800 truncate">
+              <span className="font-bold uppercase tracking-wide text-[10px] mr-1">
+                {item.nextUp.status === "in_progress" ? "Now:" : "Next up:"}
+              </span>
+              <span className="font-bold">{item.nextUp.roleName ?? "Unassigned"}</span>
+              <span className="text-orange-600 mx-1">—</span>
+              <span>{item.nextUp.name}</span>
+            </p>
+          </div>
+        </div>
+      )}
+
       {!editMode && expanded && (
-        <div className="px-4 pb-4 space-y-2 border-t border-border pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
           {item.procedures.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">No procedures</p>
-          ) : item.procedures.map((proc) => (
-            <ProcedureRow key={proc.id} proc={proc} isAdmin={isAdmin}
-              activeTimerProcedureId={activeTimerProcedureId} hasAnyActiveTimer={hasActiveTimer}
-              projectId={projectId} inboundStatus={inboundStatus} />
-          ))}
+          ) : (() => {
+            const inProgress = item.procedures.filter((p) => p.status === "in_progress");
+            const notStarted = item.procedures.filter((p) => p.status === "not_started");
+            const completed = item.procedures.filter((p) => p.status === "completed");
+            const renderRow = (proc: Procedure) => (
+              <ProcedureRow key={proc.id} proc={proc} isAdmin={isAdmin}
+                activeTimerProcedureId={activeTimerProcedureId} hasAnyActiveTimer={hasActiveTimer}
+                projectId={projectId} inboundStatus={inboundStatus} />
+            );
+            const Section = ({ title, color, items: rows }: { title: string; color: string; items: Procedure[] }) =>
+              rows.length === 0 ? null : (
+                <div className="space-y-1.5">
+                  <p className={cn("text-[10px] font-black uppercase tracking-wider", color)}>
+                    {title} · {rows.length}
+                  </p>
+                  <div className="space-y-2">{rows.map(renderRow)}</div>
+                </div>
+              );
+            return (
+              <>
+                <Section title="In progress" color="text-orange-600" items={inProgress} />
+                <Section title="Not started" color="text-muted-foreground" items={notStarted} />
+                <Section title="Completed" color="text-green-600" items={completed} />
+              </>
+            );
+          })()}
         </div>
       )}
     </div>

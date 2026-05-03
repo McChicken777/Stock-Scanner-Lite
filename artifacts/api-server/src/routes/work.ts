@@ -1613,20 +1613,43 @@ async function getProjectWithItems(projectId: number) {
     .orderBy(workProjectItemsTable.sortOrder);
   const itemIds = items.map((i) => i.id);
 
-  let procedures: (typeof workItemStepsTable.$inferSelect)[] = [];
+  type ProcWithRole = typeof workItemStepsTable.$inferSelect & {
+    roleName: string | null;
+    activeStartTime: string | null;
+  };
+  let procedures: ProcWithRole[] = [];
   if (itemIds.length > 0) {
-    procedures = await db.select().from(workItemStepsTable).where(
-      sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
-    ).orderBy(workItemStepsTable.sortOrder);
+    const rows = await db
+      .select({
+        step: workItemStepsTable,
+        roleName: rolesTable.name,
+        activeStartTime: workTimeLogsTable.startTime,
+      })
+      .from(workItemStepsTable)
+      .leftJoin(rolesTable, eq(rolesTable.id, workItemStepsTable.roleId))
+      .leftJoin(
+        workTimeLogsTable,
+        and(eq(workTimeLogsTable.stepId, workItemStepsTable.id), isNull(workTimeLogsTable.endTime)),
+      )
+      .where(sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`)
+      .orderBy(workItemStepsTable.sortOrder);
+    procedures = rows.map((r) => ({
+      ...r.step,
+      roleName: r.roleName ?? null,
+      activeStartTime: r.activeStartTime ? r.activeStartTime.toISOString() : null,
+    }));
   }
 
   const itemsWithProcs = items.map((item) => {
     const procs = procedures.filter((p) => p.itemId === item.id);
     const completed = procs.filter((p) => p.status === "completed").length;
+    const nextUp = procs.find((p) => p.status === "in_progress")
+      ?? procs.find((p) => p.status === "not_started");
     return {
       ...item,
       procedures: procs,
       progress: procs.length > 0 ? Math.round((completed / procs.length) * 100) : 0,
+      nextUp: nextUp ? { id: nextUp.id, name: nextUp.name, roleName: nextUp.roleName, status: nextUp.status } : null,
     };
   });
 
