@@ -15,6 +15,14 @@ const router: IRouter = Router();
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+/** Returns the template if owned by companyId, else returns null. */
+async function getOwnedTemplate(templateId: number, companyId: number) {
+  const [t] = await db.select({ id: workTemplatesTable.id })
+    .from(workTemplatesTable)
+    .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
+  return t ?? null;
+}
+
 const procSchema = z.object({
   name: z.string().min(1).optional(),
   sortOrder: z.number().int().optional(),
@@ -51,10 +59,9 @@ router.post("/templates/seed-starter-pack", requireAdmin, async (req, res) => {
   }
 });
 
-// AI generate template from description
+// AI generate template preview — returns structured payload WITHOUT persisting (requires explicit confirm)
 router.post("/templates/generate", requireAdmin, async (req, res) => {
   try {
-    const companyId = req.session.companyId!;
     const parsed = z.object({
       description: z.string().min(3),
       existingRoles: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
@@ -117,18 +124,52 @@ Rules:
       res.status(500).json({ error: "AI returned invalid JSON" }); return;
     }
 
-    // Create template + product + BOM
+    // Return the preview payload — nothing is saved to the database yet
+    res.json({ preview: generated });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate template preview");
+    res.status(500).json({ error: "Failed to generate template" });
+  }
+});
+
+// Confirm and persist a generated template (called after user reviews the AI preview)
+router.post("/templates/confirm-generate", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      name: z.string().min(1),
+      topProcedures: z.array(z.object({
+        name: z.string().min(1),
+        roleId: z.number().int().nullable().optional(),
+        batchMode: z.string().optional(),
+        durationEstimate: z.number().int().nullable().optional(),
+      })).optional().default([]),
+      parts: z.array(z.object({
+        name: z.string().min(1),
+        itemType: z.string().optional(),
+        procedures: z.array(z.object({
+          name: z.string().min(1),
+          roleId: z.number().int().nullable().optional(),
+          batchMode: z.string().optional(),
+          durationEstimate: z.number().int().nullable().optional(),
+        })),
+      })).optional().default([]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid template payload" }); return; }
+
+    const { name, topProcedures, parts } = parsed.data;
+
     const [product] = await db.insert(productsTable).values({
-      name: generated.name, category: "Template", itemType: "final_product",
+      name, category: "Template", itemType: "final_product",
       bufferStock: 0, targetStock: 0, companyId,
     }).returning();
 
     const [template] = await db.insert(workTemplatesTable).values({
-      name: generated.name, companyId, productId: product.id,
+      name, companyId, productId: product.id,
     }).returning();
 
-    for (let i = 0; i < generated.topProcedures.length; i++) {
-      const p = generated.topProcedures[i];
+    for (let i = 0; i < topProcedures.length; i++) {
+      const p = topProcedures[i];
       await db.insert(workStepsTable).values({
         templateId: template.id, name: p.name, sortOrder: i,
         roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
@@ -136,9 +177,10 @@ Rules:
       });
     }
 
-    for (const part of generated.parts) {
+    for (const part of parts) {
       const [partProduct] = await db.insert(productsTable).values({
-        name: part.name, category: "Component", itemType: "manufactured_part",
+        name: part.name, category: "Component",
+        itemType: part.itemType ?? "manufactured_part" as "manufactured_part",
         bufferStock: 0, targetStock: 0, companyId,
       }).returning();
       await db.insert(productComponentsTable).values({
@@ -154,10 +196,10 @@ Rules:
       }
     }
 
-    res.status(201).json({ template, generatedName: generated.name });
+    res.status(201).json({ template, productId: product.id });
   } catch (err) {
-    req.log.error({ err }, "Failed to generate template");
-    res.status(500).json({ error: "Failed to generate template" });
+    req.log.error({ err }, "Failed to confirm template generation");
+    res.status(500).json({ error: "Failed to save template" });
   }
 });
 
@@ -419,6 +461,7 @@ router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
     const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
     const procs = await db.select().from(workStepsTable)
       .where(eq(workStepsTable.templateId, templateId))
       .orderBy(workStepsTable.sortOrder);
@@ -446,6 +489,8 @@ router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
 router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
     const parsed = z.object({
       name: z.string().min(1),
       sortOrder: z.number().int().optional(),
@@ -476,6 +521,8 @@ router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
 router.put("/templates/:id/procedures/reorder", requireAdmin, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
     const parsed = z.object({
       order: z.array(z.object({ id: z.number().int(), sortOrder: z.number().int() })),
     }).safeParse(req.body);
@@ -493,11 +540,14 @@ router.put("/templates/:id/procedures/reorder", requireAdmin, async (req, res) =
 
 router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
   try {
+    const templateId = Number(req.params.templateId);
     const procId = Number(req.params.procId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
     const parsed = procSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [p] = await db.update(workStepsTable).set(parsed.data)
-      .where(eq(workStepsTable.id, procId)).returning();
+      .where(and(eq(workStepsTable.id, procId), eq(workStepsTable.templateId, templateId))).returning();
     if (!p) { res.status(404).json({ error: "Not found" }); return; }
     res.json(p);
   } catch (err) {
@@ -508,7 +558,12 @@ router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req
 
 router.delete("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
   try {
-    await db.delete(workStepsTable).where(eq(workStepsTable.id, Number(req.params.procId)));
+    const templateId = Number(req.params.templateId);
+    const procId = Number(req.params.procId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    await db.delete(workStepsTable)
+      .where(and(eq(workStepsTable.id, procId), eq(workStepsTable.templateId, templateId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete procedure");
@@ -603,6 +658,7 @@ router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
     const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Template not found" }); return; }
     const parsed = z.object({ presetId: z.number().int(), append: z.boolean().optional() }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "presetId required" }); return; }
 

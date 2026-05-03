@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Loader2, Package, ChevronDown, ChevronRight,
-  Wrench, ShoppingCart, X, ListPlus, ArrowUp, ArrowDown,
-  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap,
+  Wrench, ShoppingCart, X, ListPlus, GripVertical,
+  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, Check,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
@@ -77,6 +77,7 @@ function TemplateProceduresEditor({ template, roles, presets }: {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
   const [savingPresetName, setSavingPresetName] = useState("");
   const [showSavePreset, setShowSavePreset] = useState(false);
+  const dragIdx = useRef<number | null>(null);
 
   const { data: procsData, isLoading } = useQuery<{ procedures: TemplateProcedure[]; hasSnapshot: boolean }>({
     queryKey: key,
@@ -117,13 +118,15 @@ function TemplateProceduresEditor({ template, roles, presets }: {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const moveProc = (idx: number, dir: -1 | 1) => {
-    const swap = idx + dir;
-    if (swap < 0 || swap >= procs.length) return;
-    const order = procs.map((p, i) => ({
-      id: p.id,
-      sortOrder: i === idx ? swap : i === swap ? idx : i,
-    }));
+  const handleDragStart = (idx: number) => { dragIdx.current = idx; };
+  const handleDrop = (targetIdx: number) => {
+    const from = dragIdx.current;
+    if (from === null || from === targetIdx) return;
+    dragIdx.current = null;
+    const reordered = [...procs];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(targetIdx, 0, moved);
+    const order = reordered.map((p, i) => ({ id: p.id, sortOrder: i }));
     apiFetch(`/api/work/templates/${template.id}/procedures/reorder`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order }),
@@ -253,17 +256,15 @@ function TemplateProceduresEditor({ template, roles, presets }: {
       ) : (
         <div className="space-y-1.5">
           {procs.map((proc, idx) => (
-            <div key={proc.id} className="flex items-start gap-2 bg-white border-2 border-slate-100 rounded-lg px-2 py-1.5">
-              <div className="flex flex-col mt-0.5">
-                <button onClick={() => moveProc(idx, -1)} disabled={idx === 0}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none p-0.5">
-                  <ArrowUp className="h-2.5 w-2.5" />
-                </button>
-                <button onClick={() => moveProc(idx, 1)} disabled={idx === procs.length - 1}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none p-0.5">
-                  <ArrowDown className="h-2.5 w-2.5" />
-                </button>
-              </div>
+            <div
+              key={proc.id}
+              draggable
+              onDragStart={() => handleDragStart(idx)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => handleDrop(idx)}
+              className="flex items-start gap-2 bg-white border-2 border-slate-100 rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing active:border-blue-300 active:bg-blue-50/30"
+            >
+              <GripVertical className="h-4 w-4 text-slate-300 mt-1 flex-shrink-0" />
               <span className="text-xs text-muted-foreground font-mono w-4 mt-1.5">{idx + 1}.</span>
               <div className="flex-1 min-w-0 space-y-1">
                 <input
@@ -392,14 +393,15 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const moveProc = (procIndex: number, dir: -1 | 1) => {
-    const procs = [...comp.procedures];
-    const swap = procIndex + dir;
-    if (swap < 0 || swap >= procs.length) return;
-    const order = procs.map((p, i) => ({
-      id: p.id,
-      sortOrder: i === procIndex ? swap : i === swap ? procIndex : i,
-    }));
+  const compDragIdx = useRef<number | null>(null);
+  const handleCompProcDrop = (targetIdx: number) => {
+    const from = compDragIdx.current;
+    if (from === null || from === targetIdx) return;
+    compDragIdx.current = null;
+    const reordered = [...comp.procedures];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(targetIdx, 0, moved);
+    const order = reordered.map((p, i) => ({ id: p.id, sortOrder: i }));
     apiFetch(`/api/products/${comp.componentProductId}/procedures/reorder`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order }),
@@ -412,17 +414,15 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
         <p className="text-xs text-muted-foreground italic">No steps defined</p>
       )}
       {comp.procedures.map((proc, procIndex) => (
-        <div key={proc.id} className="flex items-start gap-1.5 bg-white rounded px-2 py-1.5 border border-blue-100">
-          <div className="flex flex-col mt-0.5">
-            <button onClick={() => moveProc(procIndex, -1)} disabled={procIndex === 0}
-              className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none">
-              <ArrowUp className="h-2.5 w-2.5" />
-            </button>
-            <button onClick={() => moveProc(procIndex, 1)} disabled={procIndex === comp.procedures.length - 1}
-              className="text-muted-foreground hover:text-foreground disabled:opacity-30 leading-none">
-              <ArrowDown className="h-2.5 w-2.5" />
-            </button>
-          </div>
+        <div
+          key={proc.id}
+          draggable
+          onDragStart={() => { compDragIdx.current = procIndex; }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => handleCompProcDrop(procIndex)}
+          className="flex items-start gap-1.5 bg-white rounded px-2 py-1.5 border border-blue-100 cursor-grab active:cursor-grabbing active:border-blue-300"
+        >
+          <GripVertical className="h-3.5 w-3.5 text-slate-300 mt-1 flex-shrink-0" />
           <span className="text-xs text-muted-foreground font-mono w-4 mt-1">{procIndex + 1}.</span>
           <div className="flex-1 min-w-0 space-y-1">
             <input
@@ -572,13 +572,15 @@ function TemplateBOM({ template, allProducts, roles }: {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const moveComponent = (index: number, direction: -1 | 1) => {
-    const swap = index + direction;
-    if (swap < 0 || swap >= components.length) return;
-    const order = components.map((c, i) => ({
-      id: c.id,
-      sortOrder: i === index ? swap : i === swap ? index : i,
-    }));
+  const bomDragIdx = useRef<number | null>(null);
+  const handleBomDrop = (targetIdx: number) => {
+    const from = bomDragIdx.current;
+    if (from === null || from === targetIdx) return;
+    bomDragIdx.current = null;
+    const reordered = [...components];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(targetIdx, 0, moved);
+    const order = reordered.map((c, i) => ({ id: c.id, sortOrder: i }));
     reorderComponentsMutation.mutate(order);
   };
 
@@ -599,20 +601,18 @@ function TemplateBOM({ template, allProducts, roles }: {
         const isManufactured = comp.product?.itemType === "manufactured_part";
         const isPurchased = !isManufactured;
         return (
-          <div key={comp.id} className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40" : "border-orange-200 bg-orange-50/40"}`}>
+          <div
+            key={comp.id}
+            draggable={isManufactured}
+            onDragStart={() => { if (isManufactured) bomDragIdx.current = compIndex; }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => isManufactured && handleBomDrop(compIndex)}
+            className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40 cursor-grab active:cursor-grabbing active:border-blue-400" : "border-orange-200 bg-orange-50/40"}`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {isManufactured && (
-                  <div className="flex flex-col">
-                    <button onClick={() => moveComponent(compIndex, -1)} disabled={compIndex === 0 || reorderComponentsMutation.isPending}
-                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5">
-                      <ArrowUp className="h-3 w-3" />
-                    </button>
-                    <button onClick={() => moveComponent(compIndex, 1)} disabled={compIndex === components.length - 1 || reorderComponentsMutation.isPending}
-                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 p-0.5">
-                      <ArrowDown className="h-3 w-3" />
-                    </button>
-                  </div>
+                  <GripVertical className="h-4 w-4 text-slate-300 flex-shrink-0 cursor-grab" />
                 )}
                 {isManufactured ? <Wrench className="h-4 w-4 text-blue-600" /> : <ShoppingCart className="h-4 w-4 text-orange-600" />}
                 <span className="font-bold text-sm">{comp.product?.name ?? "Unknown"}</span>
@@ -708,6 +708,12 @@ export default function WorkTemplatesPage() {
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  type AiPreview = {
+    name: string;
+    parts: { name: string; itemType: string; procedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[] }[];
+    topProcedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+  };
+  const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["/api/work/templates"],
@@ -770,13 +776,25 @@ export default function WorkTemplatesPage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description, existingRoles: roles }),
     }),
+    onSuccess: (data: { preview: AiPreview }) => {
+      setAiPreview(data.preview);
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const confirmGenerate = useMutation({
+    mutationFn: (payload: AiPreview) => apiFetch("/api/work/templates/confirm-generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
     onSuccess: (data: { template: Template }) => {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setAiGenerateOpen(false);
+      setAiPreview(null);
       setAiDescription("");
       setExpandedId(data.template.id);
-      toast({ title: "Template generated by AI!" });
+      toast({ title: "Template saved!" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -812,40 +830,89 @@ export default function WorkTemplatesPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* AI Generate */}
-          <Dialog open={aiGenerateOpen} onOpenChange={setAiGenerateOpen}>
+          <Dialog open={aiGenerateOpen} onOpenChange={(o) => { setAiGenerateOpen(o); if (!o) setAiPreview(null); }}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="gap-1 border-purple-300 text-purple-700 hover:bg-purple-50">
                 <Sparkles className="h-3.5 w-3.5" /> AI
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[90vw] max-w-sm rounded-xl">
+            <DialogContent className="w-[90vw] max-w-md rounded-xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-purple-600" /> Generate Template with AI
                 </DialogTitle>
               </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">Describe what you're making</label>
-                  <Textarea
-                    value={aiDescription}
-                    onChange={(e) => setAiDescription(e.target.value)}
-                    placeholder="e.g. A welded steel gate with CNC-machined latch brackets, powder coated finish…"
-                    className="border-2 min-h-[100px] text-sm"
-                    rows={4}
-                  />
+
+              {!aiPreview ? (
+                /* Step 1: describe */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold">Describe what you're making</label>
+                    <Textarea
+                      value={aiDescription}
+                      onChange={(e) => setAiDescription(e.target.value)}
+                      placeholder="e.g. A welded steel gate with CNC-machined latch brackets, powder coated finish…"
+                      className="border-2 min-h-[100px] text-sm"
+                      rows={4}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    AI will generate a template with sub-parts and production steps for review before saving.
+                  </p>
+                  <Button
+                    className="w-full h-11 font-bold bg-purple-600 hover:bg-purple-700"
+                    disabled={!aiDescription.trim() || aiGenerate.isPending}
+                    onClick={() => aiGenerate.mutate(aiDescription.trim())}
+                  >
+                    {aiGenerate.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</> : <><Sparkles className="mr-2 h-4 w-4" /> Generate Preview</>}
+                  </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  AI will generate a template with sub-parts and production steps based on your description. Uses Replit AI — no API key needed.
-                </p>
-                <Button
-                  className="w-full h-11 font-bold bg-purple-600 hover:bg-purple-700"
-                  disabled={!aiDescription.trim() || aiGenerate.isPending}
-                  onClick={() => aiGenerate.mutate(aiDescription.trim())}
-                >
-                  {aiGenerate.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</> : <><Sparkles className="mr-2 h-4 w-4" /> Generate Template</>}
-                </Button>
-              </div>
+              ) : (
+                /* Step 2: review preview before saving */
+                <div className="space-y-3">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2 max-h-72 overflow-y-auto">
+                    <p className="font-bold text-sm">{aiPreview.name}</p>
+                    {aiPreview.topProcedures.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Top-level steps</p>
+                        <ul className="space-y-0.5">
+                          {aiPreview.topProcedures.map((p, i) => (
+                            <li key={i} className="text-xs text-foreground flex items-center gap-1.5">
+                              <span className="text-muted-foreground font-mono">{i + 1}.</span> {p.name}
+                              {p.roleId && <span className="text-purple-600 text-[10px]">({roles.find(r => r.id === p.roleId)?.name})</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {aiPreview.parts.map((part, pi) => (
+                      <div key={pi}>
+                        <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">{part.name}</p>
+                        <ul className="space-y-0.5 pl-2">
+                          {part.procedures.map((p, i) => (
+                            <li key={i} className="text-xs text-foreground flex items-center gap-1.5">
+                              <span className="text-muted-foreground font-mono">{i + 1}.</span> {p.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Review the steps above. Click Save to create the template, or go back to try a different description.</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setAiPreview(null)} disabled={confirmGenerate.isPending}>
+                      ← Edit description
+                    </Button>
+                    <Button
+                      className="flex-1 font-bold bg-purple-600 hover:bg-purple-700"
+                      disabled={confirmGenerate.isPending}
+                      onClick={() => confirmGenerate.mutate(aiPreview)}
+                    >
+                      {confirmGenerate.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</> : <><Check className="mr-2 h-4 w-4" /> Save Template</>}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
 
