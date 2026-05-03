@@ -194,8 +194,14 @@ export default function WorkProjectFormPage() {
   const canSubmitTemplate = name.trim() && deadline && templateItems.length > 0;
   const canSubmitQuick = name.trim() && deadline && quickSteps.filter((s) => s.name.trim()).length > 0;
   const canSubmit = quickJob ? canSubmitQuick : canSubmitTemplate;
+  const [bomConfirmed, setBomConfirmed] = useState(false);
+  const hasUnconfirmedShortages = bomShortages.length > 0 && !bomConfirmed && !quickJob;
 
   const handleSubmit = () => {
+    if (hasUnconfirmedShortages) {
+      setBomConfirmed(true);
+      return;
+    }
     if (quickJob) {
       createMutation.mutate({
         name: name.trim(), deadline, priority,
@@ -463,24 +469,46 @@ export default function WorkProjectFormPage() {
               </div>
             )}
 
-            {bomShortages.length > 0 && (
+            {bomShortages.length > 0 && !bomConfirmed && (
               <div className="border-2 border-amber-300 bg-amber-50 rounded-xl p-3 space-y-2">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
                   <p className="font-bold text-sm text-amber-800">Stock shortage warning</p>
                 </div>
-                <p className="text-xs text-amber-700">The following BOM components may be insufficient:</p>
+                <p className="text-xs text-amber-700">The following BOM components are insufficient (available after reservations):</p>
                 <div className="space-y-1">
                   {bomShortages.map((s, i) => (
                     <div key={i} className="flex items-center justify-between text-xs bg-amber-100 rounded-lg px-2.5 py-1.5">
                       <span className="font-medium text-amber-900 truncate">{s.productName}</span>
                       <span className="text-amber-700 font-bold flex-shrink-0 ml-2">
-                        need {s.needed}, have {s.have}
+                        need {s.needed}, available {s.have}
                       </span>
                     </div>
                   ))}
                 </div>
-                <p className="text-[10px] text-amber-600">You can still create the work order, but tasks may be blocked due to insufficient stock.</p>
+                <p className="text-[10px] text-amber-600">Pressing "Create Work Order" will ask you to confirm before proceeding.</p>
+              </div>
+            )}
+            {bomShortages.length > 0 && bomConfirmed && (
+              <div className="border-2 border-rose-300 bg-rose-50 rounded-xl p-3 space-y-2">
+                <p className="font-bold text-sm text-rose-800 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-rose-600" /> Confirm short stock
+                </p>
+                <p className="text-xs text-rose-700">Some BOM components are below required levels. Tasks may start blocked until stock arrives. Continue?</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 h-9 border-rose-200 text-rose-700" onClick={() => setBomConfirmed(false)}>
+                    Go Back
+                  </Button>
+                  <Button size="sm" className="flex-1 h-9 font-bold bg-rose-600 hover:bg-rose-700"
+                    disabled={createMutation.isPending}
+                    onClick={() => createMutation.mutate(
+                      quickJob
+                        ? { name: name.trim(), deadline, priority, paintColor: paintColor || null, requiresExternalParts, quickJob: true, quickJobName: name.trim(), quickSteps: quickSteps.filter((s) => s.name.trim()) }
+                        : { name: name.trim(), deadline, priority, paintColor: paintColor || null, requiresExternalParts, quickJob: false, templateItems }
+                    )}>
+                    {createMutation.isPending ? "Creating…" : "Create Anyway"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

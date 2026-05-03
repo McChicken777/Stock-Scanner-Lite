@@ -405,14 +405,16 @@ export default function PurchaseOrdersPage() {
   const [, setLocation] = useLocation();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
 
-  const [showCreate, setShowCreate] = useState(false);
+  const [matchDetail] = useRoute("/work/purchase-orders/:id");
+  const [, params] = useRoute("/work/purchase-orders/:id");
+  const rawId = params?.id;
+  const isNewRoute = rawId === "new";
+  const detailId = rawId && !isNewRoute ? Number(rawId) : null;
+
+  const [showCreate, setShowCreate] = useState(isNewRoute ?? false);
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newExpectedDate, setNewExpectedDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
-
-  const [matchDetail] = useRoute("/work/purchase-orders/:id");
-  const [, params] = useRoute("/work/purchase-orders/:id");
-  const detailId = params?.id ? Number(params.id) : null;
 
   const { data: pos = [], isLoading } = useQuery<PurchaseOrder[]>({
     queryKey: ["/api/purchase-orders"],

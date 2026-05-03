@@ -19,6 +19,8 @@ interface ReorderItem {
   bufferStock: number;
   targetStock: number;
   totalStock: number;
+  reserved: number;
+  available: number;
   shortfall: number;
   pendingPo: { poId: number; quantity: number; status: string } | null;
   supplierId: number | null;
@@ -28,6 +30,8 @@ interface ReorderItem {
 interface ShortageFlag {
   id: number;
   productName: string;
+  quantityNeeded: number | null;
+  flaggedByUsername: string | null;
   note: string | null;
   resolvedAt: string | null;
   createdAt: string;
@@ -174,6 +178,16 @@ export default function ReorderQueuePage() {
                   <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-rose-900">{flag.productName}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {flag.quantityNeeded && (
+                        <span className="text-xs font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
+                          Need: {flag.quantityNeeded}
+                        </span>
+                      )}
+                      {flag.flaggedByUsername && (
+                        <span className="text-xs text-rose-600">by {flag.flaggedByUsername}</span>
+                      )}
+                    </div>
                     {flag.note && <p className="text-xs text-rose-700 mt-0.5">{flag.note}</p>}
                     <p className="text-[10px] text-rose-500 mt-1">
                       {new Date(flag.createdAt).toLocaleDateString()}
@@ -235,10 +249,17 @@ export default function ReorderQueuePage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 text-xs">
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground">Total: <span className="font-bold text-foreground">{item.totalStock}</span></span>
+                      {item.reserved > 0 && (
+                        <span className="text-purple-700">Reserved: <span className="font-bold">{item.reserved}</span></span>
+                      )}
+                      <span className="text-foreground">Available: <span className="font-bold text-amber-700">{item.available}</span></span>
+                    </div>
                     <div className="flex items-center gap-1 text-red-700 font-bold">
                       <RefreshCw className="h-3 w-3" />
-                      Need +{item.shortfall} (target: {item.targetStock})
+                      Short by {item.shortfall} (min: {item.bufferStock})
                     </div>
                     {item.supplierSku && (
                       <span className="text-muted-foreground font-mono">SKU: {item.supplierSku}</span>

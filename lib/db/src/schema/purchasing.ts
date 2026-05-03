@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, varchar } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 import { suppliersTable } from "./suppliers";
@@ -30,12 +30,27 @@ export const shortageFlagsTable = pgTable("shortage_flags", {
   id: serial("id").primaryKey(),
   stepId: integer("step_id"),
   productName: text("product_name").notNull(),
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
+  quantityNeeded: integer("quantity_needed"),
+  projectId: integer("project_id"),
+  flaggedByUsername: varchar("flagged_by_username", { length: 100 }),
   note: text("note"),
   resolvedAt: timestamp("resolved_at"),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const stockReservationsTable = pgTable("stock_reservations", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
+  quantity: integer("quantity").notNull().default(1),
+  workOrderId: integer("work_order_id"),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export type PurchaseOrder = typeof purchaseOrdersTable.$inferSelect;
 export type PurchaseOrderItem = typeof purchaseOrderItemsTable.$inferSelect;
 export type ShortageFlag = typeof shortageFlagsTable.$inferSelect;
+export type StockReservation = typeof stockReservationsTable.$inferSelect;

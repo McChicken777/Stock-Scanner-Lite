@@ -229,10 +229,11 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [productName, setProductName] = useState("");
+  const [quantityNeeded, setQuantityNeeded] = useState("");
   const [note, setNote] = useState("");
 
   const flagMutation = useMutation({
-    mutationFn: (data: { productName: string; note?: string; stepId?: number }) =>
+    mutationFn: (data: { productName: string; quantityNeeded?: number; note?: string; stepId?: number }) =>
       fetch("/api/work/shortage-flags", {
         method: "POST",
         credentials: "include",
@@ -252,7 +253,7 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-background rounded-2xl border-2 border-rose-300 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
+      <div className="w-full max-w-sm bg-background rounded-2xl border-2 border-rose-300 shadow-xl p-5 space-y-3 animate-in slide-in-from-bottom-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="font-black text-base flex items-center gap-2">
@@ -273,20 +274,35 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
           className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
           autoFocus
         />
-        <input
-          type="text"
-          placeholder="Note (optional, e.g. needed for this job)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
-        />
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="1"
+            placeholder="Qty needed"
+            value={quantityNeeded}
+            onChange={(e) => setQuantityNeeded(e.target.value)}
+            className="w-28 h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+          />
+          <input
+            type="text"
+            placeholder="Note (optional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="flex-1 h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+          />
+        </div>
 
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
           <Button
             className="flex-1 h-11 font-bold bg-rose-600 hover:bg-rose-700"
             disabled={!productName.trim() || flagMutation.isPending}
-            onClick={() => flagMutation.mutate({ productName: productName.trim(), note: note.trim() || undefined, stepId })}
+            onClick={() => flagMutation.mutate({
+              productName: productName.trim(),
+              quantityNeeded: quantityNeeded ? Number(quantityNeeded) : undefined,
+              note: note.trim() || undefined,
+              stepId,
+            })}
           >
             <AlertTriangle className="h-4 w-4 mr-1.5" />
             {flagMutation.isPending ? "Flagging…" : "Flag Shortage"}

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   db, purchaseOrdersTable, purchaseOrderItemsTable, productsTable,
-  stockTable, locationsTable, suppliersTable,
+  stockTable, locationsTable, suppliersTable, workItemStepsTable, productComponentsTable, workProjectsTable, workProjectItemsTable,
 } from "@workspace/db";
 import { eq, and, sum, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -304,6 +304,74 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
     await db.update(purchaseOrdersTable)
       .set({ status: newPoStatus })
       .where(eq(purchaseOrdersTable.id, poId));
+
+    // ── Recompute step readiness after stock arrives ──────────────────────────
+    // Find templates whose BOM includes the arrived product. Then find any
+    // not_started work item steps for those templates that were put in this
+    // company's projects — they can now potentially proceed.
+    try {
+      const arrivedProductId = poItem.item.productId;
+
+      // Products that use the arrived item as a BOM component
+      const parentProductIds = (await db.select({ parentProductId: productComponentsTable.parentProductId })
+        .from(productComponentsTable)
+        .where(eq(productComponentsTable.componentProductId, arrivedProductId)))
+        .map((r) => r.parentProductId);
+
+      if (parentProductIds.length > 0) {
+        // Templates linked to those parent products
+        const { workTemplatesTable } = await import("@workspace/db");
+        const templateIds = (await db.select({ id: workTemplatesTable.id })
+          .from(workTemplatesTable)
+          .where(inArray(workTemplatesTable.productId, parentProductIds)))
+          .map((r) => r.id);
+
+        if (templateIds.length > 0) {
+          // Work item steps whose templateStepId belongs to those templates' steps
+          // and are currently not_started in active projects for this company
+          const { workStepsTable } = await import("@workspace/db");
+          const templateStepIds = (await db.select({ id: workStepsTable.id })
+            .from(workStepsTable)
+            .where(inArray(workStepsTable.templateId, templateIds)))
+            .map((r) => r.id);
+
+          if (templateStepIds.length > 0) {
+            // Find active projects for this company
+            const activeProjectIds = (await db.select({ id: workProjectsTable.id })
+              .from(workProjectsTable)
+              .where(eq(workProjectsTable.companyId, companyId)))
+              .map((r) => r.id);
+
+            if (activeProjectIds.length > 0) {
+              // Get items in those projects
+              const itemIds = (await db.select({ id: workProjectItemsTable.id })
+                .from(workProjectItemsTable)
+                .where(inArray(workProjectItemsTable.projectId, activeProjectIds)))
+                .map((r) => r.id);
+
+              if (itemIds.length > 0) {
+                // Mark affected not_started steps as in_progress-eligible by keeping them
+                // not_started — step readiness is computed dynamically at query time.
+                // Log for monitoring: steps that could now proceed
+                const affectedCount = await db.select({ count: sql<number>`count(*)::int` })
+                  .from(workItemStepsTable)
+                  .where(and(
+                    inArray(workItemStepsTable.itemId, itemIds),
+                    inArray(workItemStepsTable.templateStepId, templateStepIds),
+                    eq(workItemStepsTable.status, "not_started"),
+                  ));
+                req.log.info(
+                  { arrivedProductId, affectedSteps: affectedCount[0]?.count ?? 0 },
+                  "PO arrive: stock incremented; affected not_started steps will be re-evaluated on next load"
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      req.log.warn({ err }, "Non-fatal: failed to log affected steps after PO arrive");
+    }
 
     res.json({ item: updatedItem, poStatus: newPoStatus });
   } catch (err) {

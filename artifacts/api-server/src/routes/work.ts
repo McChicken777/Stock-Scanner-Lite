@@ -5,7 +5,7 @@ import {
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
-  purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable,
+  purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -2270,11 +2270,11 @@ router.get("/supervisor/bottlenecks", requireSupervisorOrAdmin, async (req, res)
 
 // ─── REORDER QUEUE ────────────────────────────────────────────────────────────
 
-router.get("/reorder-queue", requireAuth, async (req, res) => {
+router.get("/reorder-queue", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
 
-    // Get all products with totalStock < bufferStock
+    // Get all products for this company
     const allProducts = await db.select().from(productsTable)
       .where(eq(productsTable.companyId, companyId));
 
@@ -2284,23 +2284,48 @@ router.get("/reorder-queue", requireAuth, async (req, res) => {
       stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
     }
 
+    // Aggregate active reservations per product
+    const activeReservations = await db.select({
+      productId: stockReservationsTable.productId,
+      reserved: sql<number>`sum(${stockReservationsTable.quantity})::int`,
+    })
+      .from(stockReservationsTable)
+      .where(and(
+        eq(stockReservationsTable.companyId, companyId),
+        eq(stockReservationsTable.status, "active"),
+      ))
+      .groupBy(stockReservationsTable.productId);
+    const reservedByProduct = new Map<number, number>(
+      activeReservations.map((r) => [r.productId, r.reserved ?? 0])
+    );
+
+    // Filter by available stock (total - reserved) < bufferStock
     const lowStockProducts = allProducts
       .filter((p) => {
         const total = stockByProduct.get(p.id) ?? 0;
-        return total < p.bufferStock;
+        const reserved = reservedByProduct.get(p.id) ?? 0;
+        const available = Math.max(0, total - reserved);
+        return available < p.bufferStock;
       })
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        category: p.category,
-        itemType: p.itemType,
-        bufferStock: p.bufferStock,
-        targetStock: p.targetStock,
-        totalStock: stockByProduct.get(p.id) ?? 0,
-        shortfall: p.targetStock - (stockByProduct.get(p.id) ?? 0),
-        supplierId: p.supplierId,
-        supplierSku: p.supplierSku,
-      }));
+      .map((p) => {
+        const total = stockByProduct.get(p.id) ?? 0;
+        const reserved = reservedByProduct.get(p.id) ?? 0;
+        const available = Math.max(0, total - reserved);
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          itemType: p.itemType,
+          bufferStock: p.bufferStock,
+          targetStock: p.targetStock,
+          totalStock: total,
+          reserved,
+          available,
+          shortfall: Math.max(0, p.bufferStock - available),
+          supplierId: p.supplierId,
+          supplierSku: p.supplierSku,
+        };
+      });
 
     // Find pending POs for each product
     if (lowStockProducts.length === 0) { res.json([]); return; }
@@ -2364,22 +2389,46 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
 
     if (components.length === 0) { res.json({ ok: true, shortages: [] }); return; }
 
-    const allStock = await db.select().from(stockTable);
+    const componentProductIds = components.map((c) => c.comp.componentProductId);
+
+    // Total stock per component product
+    const allStock = await db.select().from(stockTable)
+      .where(inArray(stockTable.productId, componentProductIds));
     const stockByProduct = new Map<number, number>();
     for (const s of allStock) {
       stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
     }
 
+    // Active reservations per component product (subtract from available)
+    const activeReservations = await db.select({
+      productId: stockReservationsTable.productId,
+      reserved: sql<number>`sum(${stockReservationsTable.quantity})::int`,
+    })
+      .from(stockReservationsTable)
+      .where(and(
+        eq(stockReservationsTable.companyId, companyId),
+        eq(stockReservationsTable.status, "active"),
+        inArray(stockReservationsTable.productId, componentProductIds),
+      ))
+      .groupBy(stockReservationsTable.productId);
+    const reservedByProduct = new Map<number, number>(
+      activeReservations.map((r) => [r.productId, r.reserved ?? 0])
+    );
+
     const shortages = components
       .map((c) => {
         const needed = c.comp.quantity * quantity;
-        const have = stockByProduct.get(c.comp.componentProductId) ?? 0;
+        const total = stockByProduct.get(c.comp.componentProductId) ?? 0;
+        const reserved = reservedByProduct.get(c.comp.componentProductId) ?? 0;
+        const available = Math.max(0, total - reserved);
         return {
           productId: c.comp.componentProductId,
           productName: c.product.name,
           needed,
-          have,
-          shortfall: Math.max(0, needed - have),
+          have: available,
+          totalStock: total,
+          reserved,
+          shortfall: Math.max(0, needed - available),
         };
       })
       .filter((s) => s.shortfall > 0);
@@ -2393,7 +2442,7 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
 
 // ─── SHORTAGE FLAGS ───────────────────────────────────────────────────────────
 
-router.get("/shortage-flags", requireAuth, async (req, res) => {
+router.get("/shortage-flags", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const flags = await db.select().from(shortageFlagsTable)
@@ -2409,8 +2458,12 @@ router.get("/shortage-flags", requireAuth, async (req, res) => {
 router.post("/shortage-flags", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
+    const username = req.session.username ?? null;
     const parsed = z.object({
       productName: z.string().min(1),
+      productId: z.number().int().optional(),
+      quantityNeeded: z.number().int().min(1).optional(),
+      projectId: z.number().int().optional(),
       note: z.string().optional(),
       stepId: z.number().int().optional(),
     }).safeParse(req.body);
@@ -2418,6 +2471,10 @@ router.post("/shortage-flags", requireAuth, async (req, res) => {
 
     const [flag] = await db.insert(shortageFlagsTable).values({
       productName: parsed.data.productName,
+      productId: parsed.data.productId ?? null,
+      quantityNeeded: parsed.data.quantityNeeded ?? null,
+      projectId: parsed.data.projectId ?? null,
+      flaggedByUsername: username,
       note: parsed.data.note ?? null,
       stepId: parsed.data.stepId ?? null,
       companyId,
