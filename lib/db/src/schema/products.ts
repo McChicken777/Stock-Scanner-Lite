@@ -44,6 +44,9 @@ export const productProceduresTable = pgTable("product_procedures", {
   productId: integer("product_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  roleId: integer("role_id"),
+  batchMode: text("batch_mode").notNull().default("individual"),
+  durationEstimate: integer("duration_estimate"),
 });
 
 export const productsRelations = relations(productsTable, ({ many }) => ({

@@ -1,10 +1,155 @@
 import { Router, type IRouter } from "express";
-import { db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable, workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable, productsTable, productComponentsTable, productProceduresTable } from "@workspace/db";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import {
+  db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable,
+  workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable,
+  productsTable, productComponentsTable, productProceduresTable,
+  rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
+} from "@workspace/db";
+import { eq, and, isNull, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
+import { anthropic } from "@workspace/integrations-anthropic-ai";
 
 const router: IRouter = Router();
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+const procSchema = z.object({
+  name: z.string().min(1).optional(),
+  sortOrder: z.number().int().optional(),
+  requiresInbound: z.boolean().optional(),
+  roleId: z.number().int().nullable().optional(),
+  batchMode: z.string().optional(),
+  durationEstimate: z.number().int().nullable().optional(),
+});
+
+// ─── STARTER PACK ─────────────────────────────────────────────────────────────
+
+const STARTER_PACK_TEMPLATES = [
+  {
+    name: "Welded Frame",
+    parts: [
+      { name: "Main Frame Rails", procs: [
+        { name: "Cut to length", roleId: null },
+        { name: "Weld assembly", roleId: null },
+        { name: "Grind welds", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Sandblast", roleId: null },
+      { name: "Prime & paint", roleId: null },
+    ],
+  },
+  {
+    name: "CNC Machined Part",
+    parts: [
+      { name: "CNC Body", procs: [
+        { name: "Program setup", roleId: null },
+        { name: "CNC machine", roleId: null },
+        { name: "Deburr & inspect", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Final inspection", roleId: null },
+    ],
+  },
+  {
+    name: "Sheet Metal Assembly",
+    parts: [
+      { name: "Sheet Metal Panel", procs: [
+        { name: "Laser cut", roleId: null },
+        { name: "Form / press brake", roleId: null },
+        { name: "Hardware insert", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Powder coat", roleId: null },
+      { name: "Final assembly", roleId: null },
+    ],
+  },
+  {
+    name: "Structural Bracket",
+    parts: [
+      { name: "Bracket Plate", procs: [
+        { name: "Cut & drill", roleId: null },
+        { name: "Weld gussets", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Sandblast", roleId: null },
+      { name: "Prime", roleId: null },
+    ],
+  },
+  {
+    name: "Pipe / Tube Assembly",
+    parts: [
+      { name: "Tube Sections", procs: [
+        { name: "Cut to spec", roleId: null },
+        { name: "End prep / bevel", roleId: null },
+        { name: "Weld joints", roleId: null },
+        { name: "Pressure test", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Coating / galvanise", roleId: null },
+    ],
+  },
+  {
+    name: "Custom Enclosure",
+    parts: [
+      { name: "Enclosure Shell", procs: [
+        { name: "Cut sheet", roleId: null },
+        { name: "Punch holes", roleId: null },
+        { name: "Fold / form", roleId: null },
+        { name: "Weld corners", roleId: null },
+      ]},
+    ],
+    topProcs: [
+      { name: "Sandblast", roleId: null },
+      { name: "Paint", roleId: null },
+      { name: "Install hardware", roleId: null },
+    ],
+  },
+];
+
+async function seedStarterPack(companyId: number) {
+  for (const tmpl of STARTER_PACK_TEMPLATES) {
+    const [product] = await db.insert(productsTable).values({
+      name: tmpl.name, category: "Template", itemType: "final_product",
+      bufferStock: 0, targetStock: 0, companyId,
+    }).returning();
+
+    const [template] = await db.insert(workTemplatesTable).values({
+      name: tmpl.name, companyId, productId: product.id,
+    }).returning();
+
+    // Top-level steps
+    for (let i = 0; i < tmpl.topProcs.length; i++) {
+      await db.insert(workTemplateProceduresTable).values({
+        templateId: template.id, name: tmpl.topProcs[i].name, sortOrder: i,
+        roleId: null, batchMode: "individual",
+      });
+    }
+
+    // BOM sub-parts
+    for (const part of tmpl.parts) {
+      const [partProduct] = await db.insert(productsTable).values({
+        name: part.name, category: "Component", itemType: "manufactured_part",
+        bufferStock: 0, targetStock: 0, companyId,
+      }).returning();
+
+      await db.insert(productComponentsTable).values({
+        parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: 0,
+      });
+
+      for (let j = 0; j < part.procs.length; j++) {
+        await db.insert(productProceduresTable).values({
+          productId: partProduct.id, name: part.procs[j].name, sortOrder: j, roleId: null, batchMode: "individual",
+        });
+      }
+    }
+  }
+}
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
@@ -21,26 +166,141 @@ router.get("/templates", requireAuth, async (req, res) => {
   }
 });
 
+// Seed starter pack (POST /work/templates/seed-starter-pack)
+router.post("/templates/seed-starter-pack", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    await seedStarterPack(companyId);
+    res.status(201).json({ seeded: STARTER_PACK_TEMPLATES.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to seed starter pack");
+    res.status(500).json({ error: "Failed to seed starter pack" });
+  }
+});
+
+// AI generate template from description
+router.post("/templates/generate", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      description: z.string().min(3),
+      existingRoles: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Description required" }); return; }
+
+    const { description, existingRoles = [] } = parsed.data;
+    const roleList = existingRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n");
+
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      messages: [{
+        role: "user",
+        content: `You are a production planning assistant for a custom fabrication shop. Generate a work order template based on this description:
+
+"${description}"
+
+Available roles (use their IDs if relevant, or null if uncertain):
+${roleList || "None defined yet"}
+
+Respond with ONLY a valid JSON object in this exact shape (no markdown, no explanation):
+{
+  "name": "Template name",
+  "parts": [
+    {
+      "name": "Sub-part name",
+      "itemType": "manufactured_part",
+      "procedures": [
+        { "name": "Step name", "roleId": null, "batchMode": "individual", "durationEstimate": null }
+      ]
+    }
+  ],
+  "topProcedures": [
+    { "name": "Final step", "roleId": null, "batchMode": "individual", "durationEstimate": null }
+  ]
+}
+
+Rules:
+- batchMode must be "individual", "free_batch", or "type_batch"
+- durationEstimate is minutes (integer or null)
+- roleId must be null or one of the IDs listed above
+- Keep names concise (2-5 words each)
+- Include 2-6 top procedures and 0-4 parts with 1-6 procedures each
+- Focus on the actual fabrication steps, not project management`,
+      }],
+    });
+
+    const text = message.content[0];
+    if (text.type !== "text") throw new Error("No text response");
+
+    let generated: {
+      name: string;
+      parts: { name: string; itemType: string; procedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[] }[];
+      topProcedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+    };
+    try {
+      generated = JSON.parse(text.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+    } catch {
+      res.status(500).json({ error: "AI returned invalid JSON" }); return;
+    }
+
+    // Create template + product + BOM
+    const [product] = await db.insert(productsTable).values({
+      name: generated.name, category: "Template", itemType: "final_product",
+      bufferStock: 0, targetStock: 0, companyId,
+    }).returning();
+
+    const [template] = await db.insert(workTemplatesTable).values({
+      name: generated.name, companyId, productId: product.id,
+    }).returning();
+
+    for (let i = 0; i < generated.topProcedures.length; i++) {
+      const p = generated.topProcedures[i];
+      await db.insert(workTemplateProceduresTable).values({
+        templateId: template.id, name: p.name, sortOrder: i,
+        roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
+        durationEstimate: p.durationEstimate ?? null,
+      });
+    }
+
+    for (const part of generated.parts) {
+      const [partProduct] = await db.insert(productsTable).values({
+        name: part.name, category: "Component", itemType: "manufactured_part",
+        bufferStock: 0, targetStock: 0, companyId,
+      }).returning();
+      await db.insert(productComponentsTable).values({
+        parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: 0,
+      });
+      for (let j = 0; j < part.procedures.length; j++) {
+        const p = part.procedures[j];
+        await db.insert(productProceduresTable).values({
+          productId: partProduct.id, name: p.name, sortOrder: j,
+          roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
+          durationEstimate: p.durationEstimate ?? null,
+        });
+      }
+    }
+
+    res.status(201).json({ template, generatedName: generated.name });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate template");
+    res.status(500).json({ error: "Failed to generate template" });
+  }
+});
+
 router.post("/templates", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
 
-    // Auto-create a final_product
     const [product] = await db.insert(productsTable).values({
-      name: parsed.data.name,
-      category: "",
-      itemType: "final_product",
-      bufferStock: 0,
-      targetStock: 0,
-      companyId,
+      name: parsed.data.name, category: "", itemType: "final_product",
+      bufferStock: 0, targetStock: 0, companyId,
     }).returning();
 
     const [t] = await db.insert(workTemplatesTable).values({
-      name: parsed.data.name,
-      companyId,
-      productId: product.id,
+      name: parsed.data.name, companyId, productId: product.id,
     }).returning();
     res.status(201).json({ ...t, productId: product.id });
   } catch (err) {
@@ -65,25 +325,250 @@ router.put("/templates/:id", requireAdmin, async (req, res) => {
   }
 });
 
-router.delete("/templates/:id", requireAdmin, async (req, res) => {
+// Clone a template
+router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
   try {
+    const templateId = Number(req.params.id);
     const companyId = req.session.companyId!;
-    await db.delete(workTemplatesTable)
-      .where(and(eq(workTemplatesTable.id, Number(req.params.id)), eq(workTemplatesTable.companyId, companyId)));
-    res.status(204).send();
+
+    const [source] = await db.select().from(workTemplatesTable)
+      .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
+    if (!source) { res.status(404).json({ error: "Not found" }); return; }
+
+    const cloneName = `${source.name} (copy)`;
+
+    // Clone the final_product
+    let newProductId: number | null = null;
+    if (source.productId) {
+      const [srcProduct] = await db.select().from(productsTable).where(eq(productsTable.id, source.productId));
+      if (srcProduct) {
+        const [newProduct] = await db.insert(productsTable).values({
+          name: cloneName, category: srcProduct.category, itemType: srcProduct.itemType,
+          bufferStock: srcProduct.bufferStock, targetStock: srcProduct.targetStock, companyId,
+        }).returning();
+        newProductId = newProduct.id;
+
+        // Clone BOM components
+        const components = await db.select().from(productComponentsTable)
+          .where(eq(productComponentsTable.parentProductId, source.productId))
+          .orderBy(productComponentsTable.sortOrder);
+
+        for (const comp of components) {
+          const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+          if (!compProduct) continue;
+          const [newComp] = await db.insert(productsTable).values({
+            name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
+            bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
+          }).returning();
+          await db.insert(productComponentsTable).values({
+            parentProductId: newProductId, componentProductId: newComp.id,
+            quantity: comp.quantity, sortOrder: comp.sortOrder,
+          });
+          const compProcs = await db.select().from(productProceduresTable)
+            .where(eq(productProceduresTable.productId, comp.componentProductId))
+            .orderBy(productProceduresTable.sortOrder);
+          for (const p of compProcs) {
+            await db.insert(productProceduresTable).values({
+              productId: newComp.id, name: p.name, sortOrder: p.sortOrder,
+              roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
+              durationEstimate: p.durationEstimate ?? null,
+            });
+          }
+        }
+      }
+    }
+
+    const [newTemplate] = await db.insert(workTemplatesTable).values({
+      name: cloneName, companyId, productId: newProductId,
+    }).returning();
+
+    // Clone top-level template procedures
+    const srcProcs = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+    for (const p of srcProcs) {
+      await db.insert(workTemplateProceduresTable).values({
+        templateId: newTemplate.id, name: p.name, sortOrder: p.sortOrder,
+        requiresInbound: p.requiresInbound, roleId: p.roleId ?? null,
+        batchMode: p.batchMode ?? "individual", durationEstimate: p.durationEstimate ?? null,
+      });
+    }
+
+    res.status(201).json(newTemplate);
   } catch (err) {
-    req.log.error({ err }, "Failed to delete template");
-    res.status(500).json({ error: "Failed to delete template" });
+    req.log.error({ err }, "Failed to clone template");
+    res.status(500).json({ error: "Failed to clone template" });
+  }
+});
+
+// AI edit template
+router.put("/templates/:id/ai-edit", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      instruction: z.string().min(3),
+      existingRoles: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Instruction required" }); return; }
+
+    const [template] = await db.select().from(workTemplatesTable)
+      .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
+    if (!template) { res.status(404).json({ error: "Not found" }); return; }
+
+    // Snapshot current state before editing
+    const currentProcs = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+
+    // Save snapshot for undo
+    await db.insert(aiSnapshotsTable).values({
+      entityType: "template_procs",
+      entityId: templateId,
+      companyId,
+      snapshot: currentProcs as unknown as Record<string, unknown>[],
+    });
+
+    const { instruction, existingRoles = [] } = parsed.data;
+    const roleList = existingRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n");
+    const currentState = currentProcs.map((p, i) => `${i + 1}. "${p.name}" roleId:${p.roleId ?? "null"} batchMode:${p.batchMode} duration:${p.durationEstimate ?? "null"}`).join("\n");
+
+    const message = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      messages: [{
+        role: "user",
+        content: `You are editing the top-level production steps for template "${template.name}".
+
+Current steps:
+${currentState || "(none)"}
+
+Available roles:
+${roleList || "None"}
+
+User instruction: "${instruction}"
+
+Respond with ONLY a valid JSON array of steps (no markdown):
+[
+  { "name": "Step name", "roleId": null, "batchMode": "individual", "durationEstimate": null }
+]
+
+Rules:
+- Return the COMPLETE updated list, not just changes
+- batchMode: "individual", "free_batch", or "type_batch"
+- durationEstimate: integer minutes or null
+- roleId: null or one of the IDs above`,
+      }],
+    });
+
+    const text = message.content[0];
+    if (text.type !== "text") throw new Error("No text response");
+
+    let steps: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+    try {
+      steps = JSON.parse(text.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+    } catch {
+      res.status(500).json({ error: "AI returned invalid JSON" }); return;
+    }
+
+    // Replace all template procedures
+    await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i];
+      await db.insert(workTemplateProceduresTable).values({
+        templateId, name: s.name, sortOrder: i,
+        roleId: s.roleId ?? null, batchMode: s.batchMode ?? "individual",
+        durationEstimate: s.durationEstimate ?? null,
+      });
+    }
+
+    const updated = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+    res.json({ procedures: updated, canUndo: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to AI edit template");
+    res.status(500).json({ error: "Failed to AI edit template" });
+  }
+});
+
+// Undo AI edit
+router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+
+    const [snapshot] = await db.select().from(aiSnapshotsTable)
+      .where(and(
+        eq(aiSnapshotsTable.entityType, "template_procs"),
+        eq(aiSnapshotsTable.entityId, templateId),
+        eq(aiSnapshotsTable.companyId, companyId),
+      ))
+      .orderBy(sql`${aiSnapshotsTable.createdAt} DESC`)
+      .limit(1);
+
+    if (!snapshot) { res.status(404).json({ error: "No snapshot to undo" }); return; }
+
+    const procs = snapshot.snapshot as { name: string; sortOrder: number; requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+    await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+    for (const p of procs) {
+      await db.insert(workTemplateProceduresTable).values({
+        templateId, name: p.name, sortOrder: p.sortOrder,
+        requiresInbound: p.requiresInbound ?? false,
+        roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
+        durationEstimate: p.durationEstimate ?? null,
+      });
+    }
+
+    // Remove the used snapshot
+    await db.delete(aiSnapshotsTable).where(eq(aiSnapshotsTable.id, snapshot.id));
+
+    const updated = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+    res.json({ procedures: updated });
+  } catch (err) {
+    req.log.error({ err }, "Failed to undo AI edit");
+    res.status(500).json({ error: "Failed to undo" });
+  }
+});
+
+// Get template procedures
+router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const procs = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+    res.json(procs);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list template procedures");
+    res.status(500).json({ error: "Failed to list template procedures" });
   }
 });
 
 router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
-    const parsed = z.object({ name: z.string().min(1), sortOrder: z.number().int().optional() }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1),
+      sortOrder: z.number().int().optional(),
+      roleId: z.number().int().nullable().optional(),
+      batchMode: z.string().optional(),
+      durationEstimate: z.number().int().nullable().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
+    let so = parsed.data.sortOrder;
+    if (so === undefined) {
+      const existing = await db.select().from(workTemplateProceduresTable)
+        .where(eq(workTemplateProceduresTable.templateId, templateId));
+      so = existing.length;
+    }
     const [p] = await db.insert(workTemplateProceduresTable).values({
-      templateId, name: parsed.data.name, sortOrder: parsed.data.sortOrder ?? 0,
+      templateId, name: parsed.data.name, sortOrder: so,
+      roleId: parsed.data.roleId ?? null,
+      batchMode: parsed.data.batchMode ?? "individual",
+      durationEstimate: parsed.data.durationEstimate ?? null,
     }).returning();
     res.status(201).json(p);
   } catch (err) {
@@ -92,14 +577,28 @@ router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
   }
 });
 
+router.put("/templates/:id/procedures/reorder", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const parsed = z.object({
+      order: z.array(z.object({ id: z.number().int(), sortOrder: z.number().int() })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid order" }); return; }
+    for (const { id, sortOrder } of parsed.data.order) {
+      await db.update(workTemplateProceduresTable).set({ sortOrder })
+        .where(and(eq(workTemplateProceduresTable.id, id), eq(workTemplateProceduresTable.templateId, templateId)));
+    }
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder procedures");
+    res.status(500).json({ error: "Failed to reorder procedures" });
+  }
+});
+
 router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
   try {
     const procId = Number(req.params.procId);
-    const parsed = z.object({
-      name: z.string().min(1).optional(),
-      sortOrder: z.number().int().optional(),
-      requiresInbound: z.boolean().optional(),
-    }).safeParse(req.body);
+    const parsed = procSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [p] = await db.update(workTemplateProceduresTable).set(parsed.data)
       .where(eq(workTemplateProceduresTable.id, procId)).returning();
@@ -118,6 +617,219 @@ router.delete("/templates/:templateId/procedures/:procId", requireAdmin, async (
   } catch (err) {
     req.log.error({ err }, "Failed to delete procedure");
     res.status(500).json({ error: "Failed to delete procedure" });
+  }
+});
+
+router.delete("/templates/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    await db.delete(workTemplatesTable)
+      .where(and(eq(workTemplatesTable.id, Number(req.params.id)), eq(workTemplatesTable.companyId, companyId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete template");
+    res.status(500).json({ error: "Failed to delete template" });
+  }
+});
+
+// ─── STEP PRESETS ─────────────────────────────────────────────────────────────
+
+router.get("/step-presets", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const presets = await db.select().from(stepPresetsTable)
+      .where(eq(stepPresetsTable.companyId, companyId))
+      .orderBy(stepPresetsTable.name);
+    const presetsWithEntries = await Promise.all(presets.map(async (preset) => {
+      const entries = await db.select().from(stepPresetEntriesTable)
+        .where(eq(stepPresetEntriesTable.presetId, preset.id))
+        .orderBy(stepPresetEntriesTable.sortOrder);
+      return { ...preset, entries };
+    }));
+    res.json(presetsWithEntries);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list step presets");
+    res.status(500).json({ error: "Failed to list step presets" });
+  }
+});
+
+router.post("/step-presets", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      name: z.string().min(1),
+      entries: z.array(z.object({
+        name: z.string().min(1),
+        roleId: z.number().int().nullable().optional(),
+        batchMode: z.string().optional(),
+        durationEstimate: z.number().int().nullable().optional(),
+      })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Name and entries required" }); return; }
+
+    const [preset] = await db.insert(stepPresetsTable).values({
+      name: parsed.data.name, companyId,
+    }).returning();
+
+    for (let i = 0; i < parsed.data.entries.length; i++) {
+      const e = parsed.data.entries[i];
+      await db.insert(stepPresetEntriesTable).values({
+        presetId: preset.id, name: e.name, sortOrder: i,
+        roleId: e.roleId ?? null, batchMode: e.batchMode ?? "individual",
+        durationEstimate: e.durationEstimate ?? null,
+      });
+    }
+
+    const entries = await db.select().from(stepPresetEntriesTable)
+      .where(eq(stepPresetEntriesTable.presetId, preset.id))
+      .orderBy(stepPresetEntriesTable.sortOrder);
+    res.status(201).json({ ...preset, entries });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create step preset");
+    res.status(500).json({ error: "Failed to create step preset" });
+  }
+});
+
+router.delete("/step-presets/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    await db.delete(stepPresetsTable)
+      .where(and(eq(stepPresetsTable.id, Number(req.params.id)), eq(stepPresetsTable.companyId, companyId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete step preset");
+    res.status(500).json({ error: "Failed to delete step preset" });
+  }
+});
+
+// Apply preset to template procedures
+router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ presetId: z.number().int(), append: z.boolean().optional() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "presetId required" }); return; }
+
+    const [preset] = await db.select().from(stepPresetsTable)
+      .where(and(eq(stepPresetsTable.id, parsed.data.presetId), eq(stepPresetsTable.companyId, companyId)));
+    if (!preset) { res.status(404).json({ error: "Preset not found" }); return; }
+
+    const entries = await db.select().from(stepPresetEntriesTable)
+      .where(eq(stepPresetEntriesTable.presetId, preset.id))
+      .orderBy(stepPresetEntriesTable.sortOrder);
+
+    let baseSortOrder = 0;
+    if (parsed.data.append) {
+      const existing = await db.select().from(workTemplateProceduresTable)
+        .where(eq(workTemplateProceduresTable.templateId, templateId));
+      baseSortOrder = existing.length;
+    } else {
+      await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      await db.insert(workTemplateProceduresTable).values({
+        templateId, name: e.name, sortOrder: baseSortOrder + i,
+        roleId: e.roleId ?? null, batchMode: e.batchMode ?? "individual",
+        durationEstimate: e.durationEstimate ?? null,
+      });
+    }
+
+    const procs = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+    res.json(procs);
+  } catch (err) {
+    req.log.error({ err }, "Failed to apply preset");
+    res.status(500).json({ error: "Failed to apply preset" });
+  }
+});
+
+// ─── MY STEPS (role-based worker view) ───────────────────────────────────────
+
+router.get("/my-steps", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+
+    // Get all roleIds for this user
+    const userRoles = await db.select().from(userRolesTable).where(eq(userRolesTable.userId, userId));
+    const roleIds = userRoles.map((r) => r.roleId);
+
+    // If worker has no roles, return empty list (unfiltered would be overwhelming)
+    if (roleIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Get all non-completed item procedures assigned to user's roles in this company
+    const allProcsForRoles = await db
+      .select({
+        proc: workItemProceduresTable,
+        item: workProjectItemsTable,
+        project: workProjectsTable,
+      })
+      .from(workItemProceduresTable)
+      .innerJoin(workProjectItemsTable, eq(workItemProceduresTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        inArray(workItemProceduresTable.roleId, roleIds),
+        ne(workItemProceduresTable.status, "completed"),
+      ))
+      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemProceduresTable.sortOrder);
+
+    if (allProcsForRoles.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // Determine READY vs BLOCKED for each procedure
+    // A procedure is BLOCKED if any earlier step (lower sortOrder, same itemId) is not completed
+    const itemIds = [...new Set(allProcsForRoles.map((r) => r.item.id))];
+    const allItemProcs = await db.select().from(workItemProceduresTable)
+      .where(inArray(workItemProceduresTable.itemId, itemIds))
+      .orderBy(workItemProceduresTable.sortOrder);
+
+    // Build a map of itemId -> sorted procedures
+    const itemProcMap = new Map<number, typeof workItemProceduresTable.$inferSelect[]>();
+    for (const p of allItemProcs) {
+      if (!itemProcMap.has(p.itemId)) itemProcMap.set(p.itemId, []);
+      itemProcMap.get(p.itemId)!.push(p);
+    }
+
+    // Get role names
+    const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
+
+    const result = allProcsForRoles.map(({ proc, item, project }) => {
+      const itemProcs = itemProcMap.get(item.id) ?? [];
+      const myIndex = itemProcs.findIndex((p) => p.id === proc.id);
+      const blockedByStep = myIndex > 0
+        ? itemProcs.slice(0, myIndex).find((p) => p.status !== "completed")
+        : undefined;
+
+      return {
+        ...proc,
+        roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
+        stepStatus: blockedByStep ? "blocked" : "ready",
+        blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
+        item: { id: item.id, name: item.name },
+        project: {
+          id: project.id,
+          name: project.name,
+          deadline: project.deadline,
+          priority: project.priority,
+        },
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get my steps");
+    res.status(500).json({ error: "Failed to get my steps" });
   }
 });
 
@@ -152,9 +864,7 @@ async function getProjectWithItems(projectId: number) {
   const totalProcs = procedures.length;
   const completedProcs = procedures.filter((p) => p.status === "completed").length;
 
-  // Fetch linked inbound record (if any)
-  const [inbound] = await db.select().from(inboundTable)
-    .where(eq(inboundTable.projectId, projectId));
+  const [inbound] = await db.select().from(inboundTable).where(eq(inboundTable.projectId, projectId));
 
   return {
     ...project,
@@ -166,18 +876,28 @@ async function getProjectWithItems(projectId: number) {
   };
 }
 
-// templateItems: [{templateId, quantity}]
+const quickStepSchema = z.object({
+  name: z.string().min(1),
+  roleId: z.number().int().nullable().optional(),
+  batchMode: z.string().optional(),
+  durationEstimate: z.number().int().nullable().optional(),
+});
+
 const createProjectSchema = z.object({
   name: z.string().min(1),
   deadline: z.string(),
-  priority: z.enum(["low", "medium", "high"]),
+  priority: z.enum(["low", "normal", "high", "urgent"]),
   paintColor: z.string().nullable().optional(),
   requiresExternalParts: z.boolean().optional().default(false),
-  includePainting: z.boolean().optional().default(false),
+  // Template-based mode
   templateItems: z.array(z.object({
     templateId: z.number().int(),
     quantity: z.number().int().min(1).max(100),
-  })),
+  })).optional(),
+  // Quick job mode: one item with inline steps (no template required)
+  quickJob: z.boolean().optional().default(false),
+  quickJobName: z.string().optional(),
+  quickSteps: z.array(quickStepSchema).optional(),
 });
 
 router.get("/projects", requireAuth, async (req, res) => {
@@ -220,84 +940,119 @@ router.post("/projects", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const parsed = createProjectSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const { name, deadline, priority, paintColor, requiresExternalParts, includePainting, templateItems } = parsed.data;
+    const { name, deadline, priority, paintColor, requiresExternalParts, templateItems, quickJob, quickJobName, quickSteps } = parsed.data;
 
     const [project] = await db.insert(workProjectsTable).values({
       name, deadline: new Date(deadline), priority, paintColor: paintColor ?? null,
       requiresExternalParts: requiresExternalParts ?? false, companyId,
     }).returning();
 
-    let sortOrder = 0;
-    for (const { templateId, quantity } of templateItems) {
-      const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
-      if (!template) continue;
+    if (quickJob) {
+      // Quick job mode: create a single item with the provided inline steps
+      const itemName = quickJobName || name;
+      const [item] = await db.insert(workProjectItemsTable).values({
+        projectId: project.id, name: itemName, sortOrder: 0,
+      }).returning();
 
-      // Load BOM components if this template has an associated product
-      let bomComponents: { componentProductId: number; quantity: number; name: string; procedures: { name: string; sortOrder: number }[]; itemType: string }[] = [];
-      if (template.productId) {
-        const components = await db.select().from(productComponentsTable)
-          .where(eq(productComponentsTable.parentProductId, template.productId))
-          .orderBy(productComponentsTable.sortOrder);
-        for (const comp of components) {
-          const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
-          if (!compProduct) continue;
-          const procedures = await db.select().from(productProceduresTable)
-            .where(eq(productProceduresTable.productId, comp.componentProductId))
-            .orderBy(productProceduresTable.sortOrder);
-          bomComponents.push({ componentProductId: comp.componentProductId, quantity: comp.quantity, name: compProduct.name, procedures, itemType: compProduct.itemType });
-        }
-      }
-
-      for (let i = 1; i <= quantity; i++) {
-        const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
-        const [item] = await db.insert(workProjectItemsTable).values({
-          projectId: project.id, name: itemName, sortOrder,
-        }).returning();
-        sortOrder++;
-
-        // Always add Sandblasting (required final step)
+      const steps = quickSteps ?? [];
+      for (let i = 0; i < steps.length; i++) {
         await db.insert(workItemProceduresTable).values({
-          itemId: item.id, name: "Sandblasting", sortOrder: 0,
-          requiresInbound: false,
+          itemId: item.id, name: steps[i].name, sortOrder: i,
+          roleId: steps[i].roleId ?? null,
+          batchMode: steps[i].batchMode ?? "individual",
+          durationEstimate: steps[i].durationEstimate ?? null,
         });
+      }
+    } else {
+      // Template-based mode
+      let sortOrder = 0;
+      for (const { templateId, quantity } of (templateItems ?? [])) {
+        const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
+        if (!template) continue;
 
-        // Conditionally add Painting if requested
-        if (includePainting) {
-          await db.insert(workItemProceduresTable).values({
-            itemId: item.id, name: "Painting", sortOrder: 1,
-            requiresInbound: false,
-          });
+        // Load template's top-level procedures
+        const templateProcs = await db.select().from(workTemplateProceduresTable)
+          .where(eq(workTemplateProceduresTable.templateId, templateId))
+          .orderBy(workTemplateProceduresTable.sortOrder);
+
+        // Load BOM components
+        let bomComponents: {
+          componentProductId: number; quantity: number; name: string;
+          procedures: { name: string; sortOrder: number; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+          itemType: string;
+        }[] = [];
+        if (template.productId) {
+          const components = await db.select().from(productComponentsTable)
+            .where(eq(productComponentsTable.parentProductId, template.productId))
+            .orderBy(productComponentsTable.sortOrder);
+          for (const comp of components) {
+            const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+            if (!compProduct) continue;
+            const procedures = await db.select().from(productProceduresTable)
+              .where(eq(productProceduresTable.productId, comp.componentProductId))
+              .orderBy(productProceduresTable.sortOrder);
+            bomComponents.push({
+              componentProductId: comp.componentProductId,
+              quantity: comp.quantity,
+              name: compProduct.name,
+              procedures: procedures.map((p) => ({
+                name: p.name,
+                sortOrder: p.sortOrder,
+                roleId: p.roleId ?? null,
+                batchMode: p.batchMode ?? "individual",
+                durationEstimate: p.durationEstimate ?? null,
+              })),
+              itemType: compProduct.itemType,
+            });
+          }
         }
 
-        // Create sub-items for each manufactured_part in BOM
-        for (const comp of bomComponents) {
-          if (comp.itemType !== "manufactured_part") continue;
-          for (let q = 1; q <= comp.quantity; q++) {
-            const subName = comp.quantity > 1
-              ? `${itemName} › ${comp.name} #${q}`
-              : `${itemName} › ${comp.name}`;
-            const [subItem] = await db.insert(workProjectItemsTable).values({
-              projectId: project.id, name: subName, sortOrder,
-            }).returning();
-            sortOrder++;
-            for (const proc of comp.procedures) {
-              await db.insert(workItemProceduresTable).values({
-                itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
-                requiresInbound: false,
-              });
+        for (let i = 1; i <= quantity; i++) {
+          const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
+          const [item] = await db.insert(workProjectItemsTable).values({
+            projectId: project.id, name: itemName, sortOrder,
+          }).returning();
+          sortOrder++;
+
+          // Copy template top-level procedures (with roleId/batchMode/duration)
+          for (const proc of templateProcs) {
+            await db.insert(workItemProceduresTable).values({
+              itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
+              requiresInbound: proc.requiresInbound,
+              roleId: proc.roleId ?? null,
+              batchMode: proc.batchMode ?? "individual",
+              durationEstimate: proc.durationEstimate ?? null,
+            });
+          }
+
+          // Create sub-items for each manufactured_part in BOM
+          for (const comp of bomComponents) {
+            if (comp.itemType !== "manufactured_part") continue;
+            for (let q = 1; q <= comp.quantity; q++) {
+              const subName = comp.quantity > 1
+                ? `${itemName} › ${comp.name} #${q}`
+                : `${itemName} › ${comp.name}`;
+              const [subItem] = await db.insert(workProjectItemsTable).values({
+                projectId: project.id, name: subName, sortOrder,
+              }).returning();
+              sortOrder++;
+              for (const proc of comp.procedures) {
+                await db.insert(workItemProceduresTable).values({
+                  itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
+                  requiresInbound: false,
+                  roleId: proc.roleId ?? null,
+                  batchMode: proc.batchMode ?? "individual",
+                  durationEstimate: proc.durationEstimate ?? null,
+                });
+              }
             }
           }
         }
       }
     }
 
-    // Auto-create inbound record if project requires external parts
     if (requiresExternalParts) {
-      await db.insert(inboundTable).values({
-        projectId: project.id,
-        status: "expected",
-        companyId,
-      });
+      await db.insert(inboundTable).values({ projectId: project.id, status: "expected", companyId });
     }
 
     const full = await getProjectWithItems(project.id);
@@ -328,7 +1083,7 @@ router.put("/projects/:id", requireAdmin, async (req, res) => {
     const parsed = z.object({
       name: z.string().min(1).optional(),
       deadline: z.string().optional(),
-      priority: z.enum(["low", "medium", "high"]).optional(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
       status: z.enum(["in_progress", "completed"]).optional(),
       paintColor: z.string().nullable().optional(),
     }).safeParse(req.body);
@@ -357,7 +1112,7 @@ router.delete("/projects/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// ─── PROJECT ITEMS (add/remove/update after creation) ─────────────────────────
+// ─── PROJECT ITEMS ────────────────────────────────────────────────────────────
 
 router.post("/projects/:id/items", requireAdmin, async (req, res) => {
   try {
@@ -378,7 +1133,10 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
     const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
     if (!template) { res.status(404).json({ error: "Template not found" }); return; }
 
-    // Get current max sort order
+    const templateProcs = await db.select().from(workTemplateProceduresTable)
+      .where(eq(workTemplateProceduresTable.templateId, templateId))
+      .orderBy(workTemplateProceduresTable.sortOrder);
+
     const existingItems = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));
     let sortOrder = existingItems.length;
 
@@ -390,11 +1148,15 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
       }).returning();
       sortOrder++;
 
-      // Always add Sandblasting
-      await db.insert(workItemProceduresTable).values({
-        itemId: item.id, name: "Sandblasting", sortOrder: 0,
-        requiresInbound: false,
-      });
+      for (const proc of templateProcs) {
+        await db.insert(workItemProceduresTable).values({
+          itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
+          requiresInbound: proc.requiresInbound,
+          roleId: proc.roleId ?? null,
+          batchMode: proc.batchMode ?? "individual",
+          durationEstimate: proc.durationEstimate ?? null,
+        });
+      }
 
       newItems.push(item);
     }
@@ -468,7 +1230,6 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
     const [procedure] = await db.select().from(workItemProceduresTable).where(eq(workItemProceduresTable.id, procedureId));
     if (!procedure) { res.status(404).json({ error: "Procedure not found" }); return; }
 
-    // Check inbound requirement: if procedure requires inbound, block when still "expected"
     if (procedure.requiresInbound) {
       const [item] = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.id, procedure.itemId));
       if (item) {

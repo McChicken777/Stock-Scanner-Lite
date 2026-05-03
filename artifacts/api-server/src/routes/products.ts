@@ -371,6 +371,9 @@ router.post("/:productId/procedures", requireAdmin, async (req, res) => {
     const parsed = z.object({
       name: z.string().min(1),
       sortOrder: z.number().int().optional(),
+      roleId: z.number().int().nullable().optional(),
+      batchMode: z.string().optional(),
+      durationEstimate: z.number().int().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -383,6 +386,9 @@ router.post("/:productId/procedures", requireAdmin, async (req, res) => {
 
     const [proc] = await db.insert(productProceduresTable).values({
       productId, name: parsed.data.name, sortOrder,
+      roleId: parsed.data.roleId ?? null,
+      batchMode: parsed.data.batchMode ?? "individual",
+      durationEstimate: parsed.data.durationEstimate ?? null,
     }).returning();
     res.status(201).json(proc);
   } catch (err) {
@@ -412,6 +418,34 @@ router.put("/:productId/procedures/reorder", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to reorder procedures");
     res.status(500).json({ error: "Failed to reorder procedures" });
+  }
+});
+
+router.put("/:productId/procedures/:procedureId", requireAdmin, async (req, res) => {
+  try {
+    const productId = Number(req.params.productId);
+    const procedureId = Number(req.params.procedureId);
+    const companyId = req.session.companyId!;
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const parsed = z.object({
+      name: z.string().min(1).optional(),
+      roleId: z.number().int().nullable().optional(),
+      batchMode: z.string().optional(),
+      durationEstimate: z.number().int().nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [proc] = await db.update(productProceduresTable).set(parsed.data)
+      .where(and(eq(productProceduresTable.id, procedureId), eq(productProceduresTable.productId, productId)))
+      .returning();
+    if (!proc) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(proc);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update procedure");
+    res.status(500).json({ error: "Failed to update procedure" });
   }
 });
 

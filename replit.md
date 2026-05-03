@@ -96,16 +96,19 @@ Set these environment variables to enable email alerts:
 - **Worker**: can view and update stock, scan QR codes, view history and dashboard, view/start/stop work order procedures; cannot manage products or users
 
 ### Work Orders Module
-- **Templates**: simple item blueprints (names only); when created, automatically generates a `final_product` with matching name
-- **Projects**: work orders with name, deadline, priority, status, RAL paint color, `requiresExternalParts` flag, and `includePainting` toggle
-- **Items**: project items created from templates; always include Sandblasting; conditionally include Painting if `includePainting=true`
-- **Auto Procedures**: every project item gets Sandblasting (sortOrder=0) and optionally Painting (sortOrder=1) based on project config
-- **Default**: Sandblasting always included; Painting optional per project
-- **Manual Add**: when adding items to existing project, Sandblasting always added (Painting requires re-creating project)
+- **Templates**: item blueprints with free-text production steps; each step has role, batchMode, and durationEstimate; when created, automatically generates a `final_product` with matching name
+- **Projects**: work orders with name, deadline, priority (low/normal/high/urgent), status, RAL paint color, `requiresExternalParts` flag
+- **Quick Job Mode**: create a one-off work order with custom inline steps (no template needed); pass `quickJob:true` + `quickSteps` array to POST /api/work/projects
+- **Items**: project items created from templates; procedures copied from template steps with roleId/batchMode/durationEstimate
 - **Progress**: item progress = completed procedures / total; project progress = total across all items
 - **Urgency**: < 2 days = red (critical), < 5 days = orange (warning), else green
 - **Timer**: one active timer per user at a time; server enforces this
 - **Inbound Banner**: project detail shows linked inbound status and blocks procedures if parts not yet arrived
+- **Worker Routing**: GET /api/work/my-steps returns READY/BLOCKED procedures filtered by user's assigned roles; READY = all previous steps done, BLOCKED = waiting on prior step
+- **Template Clone**: POST /api/work/templates/:id/clone — duplicates template, product, all procedures and BOM
+- **AI Templates**: POST /api/work/templates/generate — describe what you're making, AI generates template with steps; PUT /api/work/templates/:id/ai-edit — edit steps by instruction; POST /api/work/templates/:id/undo — revert last AI edit (snapshots in ai_snapshots table)
+- **Step Presets**: save a set of steps as a reusable preset (step_presets table); apply to any template (append or replace)
+- **Starter Pack**: POST /api/work/templates/seed-starter-pack — seeds 6 generic fabrication templates
 
 ### Inbound Module (workflow, not inventory tracking)
 - **Purpose**: track pallet arrivals for projects that require external parts
@@ -118,10 +121,14 @@ Set these environment variables to enable email alerts:
 
 ### Work Order DB Tables
 - `work_templates` — id, name, product_id (FK to final_product), company_id, created_at
-- `work_projects` — id, name, deadline, priority, status, paint_color, requires_external_parts (bool), company_id, created_at
+- `work_template_procedures` — id, template_id, name, sort_order, requires_inbound, role_id (FK), batch_mode, duration_estimate
+- `work_projects` — id, name, deadline, priority (low/normal/high/urgent), status, paint_color, requires_external_parts (bool), company_id, created_at
 - `work_project_items` — id, project_id, name, paint_color, sort_order
-- `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds, requires_inbound (bool)
+- `work_item_procedures` — id, item_id, name, status, sort_order, total_time_seconds, requires_inbound (bool), role_id (FK), batch_mode, duration_estimate
 - `work_time_logs` — id, procedure_id, user_id, start_time, end_time, duration_seconds
+- `step_presets` — id, name, company_id, created_at
+- `step_preset_entries` — id, preset_id, name, role_id, batch_mode, duration_estimate, sort_order
+- `ai_snapshots` — id, template_id, procedures_json (snapshot before AI edit), created_at
 - `inbound` — id, project_id (nullable FK), status (expected/arrived/stored/in_production), location_id (nullable FK), assigned_procedure, procedure_id (FK), received_at, notes, company_id, created_at
 
 ### Item Type System
@@ -193,9 +200,9 @@ Pages:
 - `/history` — Change history
 - `/locations` — Location management
 - `/work/projects` — Work orders project list
-- `/work/projects/new` — Create work order (with requiresExternalParts toggle)
+- `/work/projects/new` — Create work order; "From Template" or "Quick Job" mode (inline step editor); 4-level priority (low/normal/high/urgent)
 - `/work/projects/:id` — Project detail with items + procedures + inbound status banner
-- `/work/templates` — Item template management (admin); toggle requiresInbound per procedure
+- `/work/templates` — Item template management (admin); free-text steps with role/batchMode/duration pickers; AI generate/edit; clone; step presets; BOM editor with role pickers per component step
 - `/work/inbound` — Inbound pallet management (Expected / Arrived / Stored+InProduction)
 
 ### `artifacts/api-server` (`@workspace/api-server`)

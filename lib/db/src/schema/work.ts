@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
@@ -16,13 +16,16 @@ export const workTemplatesTable = pgTable("work_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Procedures defined per template
+// Procedures defined per template (for the top-level item)
 export const workTemplateProceduresTable = pgTable("work_template_procedures", {
   id: serial("id").primaryKey(),
   templateId: integer("template_id").notNull().references(() => workTemplatesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   requiresInbound: boolean("requires_inbound").notNull().default(false),
+  roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
+  batchMode: text("batch_mode").notNull().default("individual"),
+  durationEstimate: integer("duration_estimate"),
 });
 
 // Projects / Work Orders
@@ -56,6 +59,9 @@ export const workItemProceduresTable = pgTable("work_item_procedures", {
   sortOrder: integer("sort_order").notNull().default(0),
   totalTimeSeconds: integer("total_time_seconds").notNull().default(0),
   requiresInbound: boolean("requires_inbound").notNull().default(false),
+  roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
+  batchMode: text("batch_mode").notNull().default("individual"),
+  durationEstimate: integer("duration_estimate"),
 });
 
 // Time log: individual start/stop sessions per procedure per user
@@ -84,7 +90,7 @@ export const userRolesTable = pgTable("user_roles", {
   priority: userRolePriorityEnum("priority").notNull().default("primary"),
 });
 
-// Procedures: admin-defined production procedures with role assignment
+// Procedures: admin-defined production procedures with role assignment (legacy global system)
 export const proceduresTable = pgTable("procedures", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -96,7 +102,7 @@ export const proceduresTable = pgTable("procedures", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Link procedures to items: each item has its own set of procedures
+// Link procedures to items: each item has its own set of procedures (legacy)
 export const itemProceduresTable = pgTable("item_procedures", {
   itemId: integer("item_id").notNull().references(() => workProjectItemsTable.id, { onDelete: "cascade" }),
   procedureId: integer("procedure_id").notNull().references(() => proceduresTable.id, { onDelete: "cascade" }),
@@ -104,7 +110,7 @@ export const itemProceduresTable = pgTable("item_procedures", {
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
 });
 
-// Tasks: generated when project is created, one per (item, procedure) pair
+// Tasks: generated when project is created, one per (item, procedure) pair (legacy)
 export const taskStatusEnum = pgEnum("task_status", ["not_started", "in_progress", "completed"]);
 export const tasksTable = pgTable("tasks", {
   id: serial("id").primaryKey(),
@@ -116,13 +122,41 @@ export const tasksTable = pgTable("tasks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Procedure inputs: what items are required for a procedure
+// Procedure inputs: what items are required for a procedure (legacy)
 export const procedureInputsTable = pgTable("procedure_inputs", {
   id: serial("id").primaryKey(),
   procedureId: integer("procedure_id").notNull().references(() => proceduresTable.id, { onDelete: "cascade" }),
   itemId: integer("item_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
   quantityRequired: integer("quantity_required").notNull().default(1),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Step presets: saved reusable step sequences for fast template building
+export const stepPresetsTable = pgTable("step_presets", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const stepPresetEntriesTable = pgTable("step_preset_entries", {
+  id: serial("id").primaryKey(),
+  presetId: integer("preset_id").notNull().references(() => stepPresetsTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  batchMode: text("batch_mode").notNull().default("individual"),
+  durationEstimate: integer("duration_estimate"),
+});
+
+// AI snapshots: stores previous template/item state for undo after AI edits
+export const aiSnapshotsTable = pgTable("ai_snapshots", {
+  id: serial("id").primaryKey(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id").notNull(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  snapshot: jsonb("snapshot").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -138,3 +172,6 @@ export type Procedure = typeof proceduresTable.$inferSelect;
 export type ItemProcedure = typeof itemProceduresTable.$inferSelect;
 export type Task = typeof tasksTable.$inferSelect;
 export type ProcedureInput = typeof procedureInputsTable.$inferSelect;
+export type StepPreset = typeof stepPresetsTable.$inferSelect;
+export type StepPresetEntry = typeof stepPresetEntriesTable.$inferSelect;
+export type AiSnapshot = typeof aiSnapshotsTable.$inferSelect;
