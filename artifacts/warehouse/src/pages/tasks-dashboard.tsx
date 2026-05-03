@@ -218,6 +218,7 @@ interface ConfirmState { stepIds: number[]; label: string }
 function BatchQueueTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
@@ -237,9 +238,10 @@ function BatchQueueTab() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stepIds }),
     }),
-    onSuccess: (data: { started: number }) => {
+    onSuccess: (data: { started: number }, stepIds) => {
       invalidate();
-      toast({ title: `Batch started — ${data.started} step${data.started !== 1 ? "s" : ""} in progress` });
+      setSelectedIds((prev) => { const next = new Set(prev); stepIds.forEach((id) => next.delete(id)); return next; });
+      toast({ title: `Batch started — ${data.started} step${data.started !== 1 ? "s" : ""} now in progress` });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -249,9 +251,10 @@ function BatchQueueTab() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stepIds }),
     }),
-    onSuccess: (data: { completed: number; alreadyDone: number }) => {
+    onSuccess: (data: { completed: number; alreadyDone: number }, stepIds) => {
       invalidate();
       setConfirm(null);
+      setSelectedIds((prev) => { const next = new Set(prev); stepIds.forEach((id) => next.delete(id)); return next; });
       const msg = data.alreadyDone > 0
         ? `${data.completed} done · ${data.alreadyDone} already complete`
         : `${data.completed} step${data.completed !== 1 ? "s" : ""} marked complete`;
@@ -261,12 +264,35 @@ function BatchQueueTab() {
   });
 
   const requestComplete = (stepIds: number[], label: string) => setConfirm({ stepIds, label });
+  const isPending = batchStart.isPending || batchComplete.isPending;
+
+  const toggleItem = (id: number) => setSelectedIds((prev) => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+
+  const toggleGroupAll = (ids: number[]) => {
+    const allSelected = ids.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  };
 
   const toggleExpand = (key: string) => setExpandedGroups((prev) => {
     const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
   });
 
-  if (isLoading) return <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}</div>;
+  // Determine which IDs to act on: selected IDs within a group, or all IDs if none selected
+  const actionIds = (allGroupIds: number[]) => {
+    const inGroup = allGroupIds.filter((id) => selectedIds.has(id));
+    return inGroup.length > 0 ? inGroup : allGroupIds;
+  };
+
+  if (isLoading) return (
+    <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}</div>
+  );
 
   const { freeBatchGroups = [], typeBatchGroups = [], activeBatchGroups = [], totalCount = 0 } = queue ?? {};
 
@@ -282,10 +308,24 @@ function BatchQueueTab() {
     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold capitalize border ${priorityColors[p] ?? "bg-gray-100 text-gray-600"}`}>{p}</span>
   );
 
-  const ItemRow = ({ item, accent }: { item: BatchItem; accent: string }) => {
+  const projectSummaryFor = (items: BatchItem[]) =>
+    [...new Map(items.map((i) => [i.projectId, i])).values()]
+      .map((i) => `${i.projectName} (${i.priority})`).join(", ");
+
+  // Shared item row with checkbox
+  const ItemRow = ({ item, checkColor }: { item: BatchItem; checkColor: string }) => {
     const dl = formatDeadline(item.deadline);
+    const checked = selectedIds.has(item.id);
     return (
-      <div className="flex items-center gap-2.5 px-3 py-2 bg-white/30">
+      <div
+        className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${checked ? "bg-white/60" : "bg-white/20 hover:bg-white/40"}`}
+        onClick={() => toggleItem(item.id)}
+      >
+        <div className="flex-shrink-0">
+          {checked
+            ? <SquareCheck className={`h-4 w-4 ${checkColor}`} />
+            : <Square className="h-4 w-4 text-muted-foreground" />}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{item.name}</p>
           <p className="text-xs text-muted-foreground truncate">{item.projectName}</p>
@@ -298,15 +338,28 @@ function BatchQueueTab() {
     );
   };
 
-  const projectSummaryFor = (items: BatchItem[]) =>
-    [...new Map(items.map((i) => [i.projectId, i])).values()]
-      .map((i) => `${i.projectName} (${i.priority})`).join(", ");
+  // Group header checkbox state
+  const groupCheckState = (ids: number[]) => {
+    const selected = ids.filter((id) => selectedIds.has(id)).length;
+    return selected === 0 ? "none" : selected === ids.length ? "all" : "partial";
+  };
 
-  const isPending = batchStart.isPending || batchComplete.isPending;
+  const GroupCheckbox = ({ ids, color }: { ids: number[]; color: string }) => {
+    const state = groupCheckState(ids);
+    return (
+      <button onClick={(e) => { e.stopPropagation(); toggleGroupAll(ids); }} className="flex-shrink-0 p-0.5">
+        {state === "all"
+          ? <SquareCheck className={`h-4 w-4 ${color}`} />
+          : state === "partial"
+          ? <SquareCheck className="h-4 w-4 text-muted-foreground opacity-50" />
+          : <Square className="h-4 w-4 text-muted-foreground" />}
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-5">
-      {/* Confirmation dialog — sticky so it's always visible */}
+      {/* Confirmation dialog — sticky */}
       {confirm && (
         <div className="sticky top-16 z-30 rounded-xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-lg space-y-2">
           <p className="text-sm font-bold text-green-900">
@@ -336,16 +389,17 @@ function BatchQueueTab() {
             const key = `active:${group.stepName}:${group.templateName ?? "free"}`;
             const expanded = expandedGroups.has(key);
             const allIds = group.items.map((i) => i.id);
+            const ids = actionIds(allIds);
+            const hasSelection = allIds.some((id) => selectedIds.has(id));
             const summary = projectSummaryFor(group.items);
-            const label = group.groupType === "type_batch"
-              ? `"${group.stepName}" for ${group.items.length} ${group.templateName ?? ""} item${group.items.length !== 1 ? "s" : ""} — ${summary}`
-              : `"${group.stepName}" for ${group.items.length} item${group.items.length !== 1 ? "s" : ""} — ${summary}`;
+            const label = `"${group.stepName}" — ${ids.length} of ${group.items.length} item${group.items.length !== 1 ? "s" : ""} — ${summary}`;
             return (
               <div key={key} className="rounded-xl border-2 border-orange-300 overflow-hidden bg-orange-50">
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-orange-100/60">
+                  <GroupCheckbox ids={allIds} color="text-orange-600" />
                   <button className="flex-1 min-w-0 text-left" onClick={() => toggleExpand(key)}>
                     <p className="font-bold text-sm leading-tight truncate">
-                      {group.groupType === "type_batch" ? group.templateName : group.stepName}
+                      {group.groupType === "type_batch" && group.templateName ? group.templateName : group.stepName}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {group.stepName} · {group.items.length} item{group.items.length !== 1 ? "s" : ""}
@@ -359,14 +413,15 @@ function BatchQueueTab() {
                       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 font-bold"
-                      onClick={() => requestComplete(allIds, label)} disabled={isPending}>
-                      <CheckCircle2 className="h-3 w-3 mr-1" /> Finish ({group.items.length})
+                      onClick={() => requestComplete(ids, label)} disabled={isPending}>
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {hasSelection ? `Finish (${ids.length})` : `Finish All (${allIds.length})`}
                     </Button>
                   </div>
                 </div>
                 {expanded && (
                   <div className="divide-y divide-border/40">
-                    {group.items.map((item) => <ItemRow key={item.id} item={item} accent="orange" />)}
+                    {group.items.map((item) => <ItemRow key={item.id} item={item} checkColor="text-orange-600" />)}
                   </div>
                 )}
               </div>
@@ -385,11 +440,14 @@ function BatchQueueTab() {
             const key = `free:${group.stepName}`;
             const expanded = expandedGroups.has(key);
             const allIds = group.items.map((i) => i.id);
+            const ids = actionIds(allIds);
+            const hasSelection = allIds.some((id) => selectedIds.has(id));
             const summary = [...new Map(group.items.map((i) => [i.projectId, i])).values()]
               .map((i) => i.projectName).join(", ");
             return (
               <div key={key} className={`rounded-xl border-2 overflow-hidden ${priorityBg[group.topPriority]}`}>
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-white/60">
+                  <GroupCheckbox ids={allIds} color="text-purple-600" />
                   <button className="flex-1 min-w-0 text-left" onClick={() => toggleExpand(key)}>
                     <p className="font-bold text-sm leading-tight truncate">{group.stepName}</p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -403,16 +461,16 @@ function BatchQueueTab() {
                       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <Button size="sm" className="h-7 text-xs bg-purple-600 hover:bg-purple-700 font-bold"
-                      onClick={() => batchStart.mutate(allIds)} disabled={isPending}>
-                      <Zap className="h-3 w-3 mr-1" /> Start ({group.items.length})
+                      onClick={() => batchStart.mutate(ids)} disabled={isPending}>
+                      <Zap className="h-3 w-3 mr-1" />
+                      {hasSelection ? `Start (${ids.length})` : `Start All (${allIds.length})`}
                     </Button>
                   </div>
                 </div>
-                {expanded && (
-                  <div className="divide-y divide-border/40">
-                    {group.items.map((item) => <ItemRow key={item.id} item={item} accent="purple" />)}
-                  </div>
-                )}
+                {/* Always show items for free-batch so workers can choose a subset */}
+                <div className="divide-y divide-border/40">
+                  {group.items.map((item) => <ItemRow key={item.id} item={item} checkColor="text-purple-600" />)}
+                </div>
               </div>
             );
           })}
@@ -429,10 +487,13 @@ function BatchQueueTab() {
             const key = `type:${group.templateName}:${group.stepName}`;
             const expanded = expandedGroups.has(key);
             const allIds = group.items.map((i) => i.id);
+            const ids = actionIds(allIds);
+            const hasSelection = allIds.some((id) => selectedIds.has(id));
             const projectSummary = projectSummaryFor(group.items);
             return (
               <div key={key} className={`rounded-xl border-2 overflow-hidden ${priorityBg[group.topPriority]}`}>
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-white/60">
+                  <GroupCheckbox ids={allIds} color="text-indigo-600" />
                   <button className="flex-1 min-w-0 text-left" onClick={() => toggleExpand(key)}>
                     <p className="font-bold text-sm leading-tight truncate">{group.templateName}</p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -447,14 +508,16 @@ function BatchQueueTab() {
                       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <Button size="sm" className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 font-bold"
-                      onClick={() => batchStart.mutate(allIds)} disabled={isPending}>
-                      <Zap className="h-3 w-3 mr-1" /> Start ({group.items.length})
+                      onClick={() => batchStart.mutate(ids)} disabled={isPending}>
+                      <Zap className="h-3 w-3 mr-1" />
+                      {hasSelection ? `Start (${ids.length})` : `Start All (${allIds.length})`}
                     </Button>
                   </div>
                 </div>
+                {/* Collapsed by default; expand to see individual items and select a subset */}
                 {expanded && (
                   <div className="divide-y divide-border/40">
-                    {group.items.map((item) => <ItemRow key={item.id} item={item} accent="indigo" />)}
+                    {group.items.map((item) => <ItemRow key={item.id} item={item} checkColor="text-indigo-600" />)}
                   </div>
                 )}
               </div>
