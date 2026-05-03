@@ -360,12 +360,45 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateCustomerRequest"
       responses:
-        "200":
+        "201":
           description: Created customer
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Customer"
+
+  /customers/{customerId}/quotes:
+    parameters:
+      - in: path
+        name: customerId
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: listCustomerQuotes
+      tags: [customers]
+      summary: List quotes belonging to a single customer
+      responses:
+        "200":
+          description: Quotes for the customer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuoteSummary"
+
+  /quotes/counts:
+    get:
+      operationId: getQuoteCounts
+      tags: [quotes]
+      summary: Counts of quotes grouped by status (for dashboard)
+      responses:
+        "200":
+          description: Counts keyed by status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteStatusCounts"
 
   /customers/{customerId}:
     parameters:
@@ -459,7 +492,7 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateQuoteRequest"
       responses:
-        "200":
+        "201":
           description: Created quote
           content:
             application/json:
@@ -1232,3 +1265,13 @@ components:
           type: string
           enum: [low, normal, high, urgent]
       required: [deadline]
+
+    QuoteStatusCounts:
+      type: object
+      properties:
+        draft: { type: integer }
+        sent: { type: integer }
+        approved: { type: integer }
+        rejected: { type: integer }
+        converted: { type: integer }
+      required: [draft, sent, approved, rejected, converted]

@@ -40,6 +40,7 @@ export * from "./quoteFull";
 export * from "./quoteItem";
 export * from "./quoteRevision";
 export * from "./quoteRevisionSnapshot";
+export * from "./quoteStatusCounts";
 export * from "./quoteSummary";
 export * from "./quoteSummaryStatus";
 export * from "./setQuoteStatusRequest";

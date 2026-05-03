@@ -343,15 +343,40 @@ export const CreateCustomerBody = zod.object({
   notes: zod.string().nullish(),
 });
 
-export const CreateCustomerResponse = zod.object({
+/**
+ * @summary List quotes belonging to a single customer
+ */
+export const ListCustomerQuotesParams = zod.object({
+  customerId: zod.coerce.number(),
+});
+
+export const ListCustomerQuotesResponseItem = zod.object({
   id: zod.number(),
-  name: zod.string(),
-  contactPerson: zod.string().nullish(),
-  email: zod.string().nullish(),
-  phone: zod.string().nullish(),
-  address: zod.string().nullish(),
-  notes: zod.string().nullish(),
+  quoteNumber: zod.string(),
+  status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+  customerId: zod.number().nullish(),
+  customerName: zod.string().nullish(),
+  customerNameLookup: zod.string().nullish(),
+  customerDisplayName: zod.string().nullish(),
+  total: zod.number(),
+  validUntil: zod.coerce.date().nullish(),
+  workProjectId: zod.number().nullish(),
   createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListCustomerQuotesResponse = zod.array(
+  ListCustomerQuotesResponseItem,
+);
+
+/**
+ * @summary Counts of quotes grouped by status (for dashboard)
+ */
+export const GetQuoteCountsResponse = zod.object({
+  draft: zod.number(),
+  sent: zod.number(),
+  approved: zod.number(),
+  rejected: zod.number(),
+  converted: zod.number(),
 });
 
 /**
@@ -465,36 +490,6 @@ export const CreateQuoteBody = zod.object({
     }),
   ),
 });
-
-export const CreateQuoteResponse = zod
-  .object({
-    id: zod.number(),
-    quoteNumber: zod.string(),
-    status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
-    customerId: zod.number().nullish(),
-    customerName: zod.string().nullish(),
-    customerNameLookup: zod.string().nullish(),
-    customerDisplayName: zod.string().nullish(),
-    total: zod.number(),
-    validUntil: zod.coerce.date().nullish(),
-    workProjectId: zod.number().nullish(),
-    createdAt: zod.coerce.date(),
-    updatedAt: zod.coerce.date(),
-  })
-  .and(
-    zod.object({
-      customerContact: zod.string().nullish(),
-      customerEmail: zod.string().nullish(),
-      customerPhone: zod.string().nullish(),
-      customerAddress: zod.string().nullish(),
-      notes: zod.string().nullish(),
-      terms: zod.string().nullish(),
-      subtotal: zod.number().optional(),
-      discount: zod.number().optional(),
-      taxRate: zod.number().optional(),
-      taxAmount: zod.number().optional(),
-    }),
-  );
 
 /**
  * @summary Get a quote with items, customer and revisions

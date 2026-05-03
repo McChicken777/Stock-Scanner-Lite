@@ -40,6 +40,7 @@ import type {
   ProductWithStock,
   Quote,
   QuoteFull,
+  QuoteStatusCounts,
   QuoteSummary,
   SetQuoteStatusRequest,
   StockEntry,
@@ -1566,6 +1567,170 @@ export const useCreateCustomer = <
 > => {
   return useMutation(getCreateCustomerMutationOptions(options));
 };
+
+/**
+ * @summary List quotes belonging to a single customer
+ */
+export const getListCustomerQuotesUrl = (customerId: number) => {
+  return `/api/customers/${customerId}/quotes`;
+};
+
+export const listCustomerQuotes = async (
+  customerId: number,
+  options?: RequestInit,
+): Promise<QuoteSummary[]> => {
+  return customFetch<QuoteSummary[]>(getListCustomerQuotesUrl(customerId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListCustomerQuotesQueryKey = (customerId: number) => {
+  return [`/api/customers/${customerId}/quotes`] as const;
+};
+
+export const getListCustomerQuotesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCustomerQuotes>>,
+  TError = ErrorType<unknown>,
+>(
+  customerId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCustomerQuotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListCustomerQuotesQueryKey(customerId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listCustomerQuotes>>
+  > = ({ signal }) =>
+    listCustomerQuotes(customerId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!customerId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCustomerQuotes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListCustomerQuotesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listCustomerQuotes>>
+>;
+export type ListCustomerQuotesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List quotes belonging to a single customer
+ */
+
+export function useListCustomerQuotes<
+  TData = Awaited<ReturnType<typeof listCustomerQuotes>>,
+  TError = ErrorType<unknown>,
+>(
+  customerId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listCustomerQuotes>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListCustomerQuotesQueryOptions(customerId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Counts of quotes grouped by status (for dashboard)
+ */
+export const getGetQuoteCountsUrl = () => {
+  return `/api/quotes/counts`;
+};
+
+export const getQuoteCounts = async (
+  options?: RequestInit,
+): Promise<QuoteStatusCounts> => {
+  return customFetch<QuoteStatusCounts>(getGetQuoteCountsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuoteCountsQueryKey = () => {
+  return [`/api/quotes/counts`] as const;
+};
+
+export const getGetQuoteCountsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuoteCounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getQuoteCounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuoteCountsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuoteCounts>>> = ({
+    signal,
+  }) => getQuoteCounts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuoteCounts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuoteCountsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuoteCounts>>
+>;
+export type GetQuoteCountsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Counts of quotes grouped by status (for dashboard)
+ */
+
+export function useGetQuoteCounts<
+  TData = Awaited<ReturnType<typeof getQuoteCounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getQuoteCounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuoteCountsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a single customer

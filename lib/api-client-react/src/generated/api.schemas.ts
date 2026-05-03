@@ -350,6 +350,14 @@ export interface ConvertQuoteRequest {
   priority?: ConvertQuoteRequestPriority;
 }
 
+export interface QuoteStatusCounts {
+  draft: number;
+  sent: number;
+  approved: number;
+  rejected: number;
+  converted: number;
+}
+
 export type ListHistoryParams = {
   productId?: number;
   locationId?: string;
