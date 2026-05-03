@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { companiesTable } from "./companies";
@@ -25,6 +25,7 @@ export const productsTable = pgTable("products", {
   supplierProductName: text("supplier_product_name"),
   supplierSku: text("supplier_sku"),
   alertEmail: text("alert_email"),
+  unitCost: numeric("unit_cost", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -6,10 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CreateProductRequest {
+export interface StockValuationProduct {
+  productId: number;
   name: string;
-  category: string;
-  bufferStock: number;
-  alertEmail?: string | null;
-  unitCost?: number;
+  totalQty: number;
+  unitCost: number;
+  totalValue: number;
 }

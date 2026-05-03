@@ -63,6 +63,8 @@ export interface Product {
   supplierId?: number | null;
   supplierSku?: string | null;
   supplierProductName?: string | null;
+  /** Per-unit cost used for stock valuation */
+  unitCost: number;
   createdAt: string;
 }
 
@@ -77,6 +79,7 @@ export interface ProductWithStock {
   supplierId?: number | null;
   supplierSku?: string | null;
   supplierProductName?: string | null;
+  unitCost: number;
   createdAt: string;
   /** Total quantity across all locations */
   totalStock: number;
@@ -88,6 +91,7 @@ export interface CreateProductRequest {
   category: string;
   bufferStock: number;
   alertEmail?: string | null;
+  unitCost?: number;
 }
 
 export interface UpdateProductRequest {
@@ -95,6 +99,7 @@ export interface UpdateProductRequest {
   category?: string;
   bufferStock?: number;
   alertEmail?: string | null;
+  unitCost?: number;
 }
 
 export type ImportItemType =
@@ -168,6 +173,30 @@ export interface DashboardSummary {
   lowStockProducts: ProductWithStock[];
   recentActivity: HistoryEntry[];
   categoryBreakdown: CategoryCount[];
+}
+
+export interface StockValuationProduct {
+  productId: number;
+  name: string;
+  totalQty: number;
+  unitCost: number;
+  totalValue: number;
+}
+
+export interface StockValuationCategory {
+  category: string;
+  productCount: number;
+  totalQty: number;
+  totalValue: number;
+  products: StockValuationProduct[];
+}
+
+export interface StockValuation {
+  totalValue: number;
+  totalQty: number;
+  totalProducts: number;
+  productsWithoutCost: number;
+  categories: StockValuationCategory[];
 }
 
 export type ListHistoryParams = {

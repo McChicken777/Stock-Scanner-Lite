@@ -6,6 +6,65 @@ import { sendLowStockAlert } from "../lib/email";
 
 const router: IRouter = Router();
 
+router.get("/valuation", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const products = await db.select().from(productsTable)
+      .where(eq(productsTable.companyId, companyId));
+    const totals = await db
+      .select({
+        productId: stockTable.productId,
+        totalQty: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::int`.as("total_qty"),
+      })
+      .from(stockTable)
+      .innerJoin(locationsTable, eq(stockTable.locationId, locationsTable.id))
+      .where(eq(locationsTable.companyId, companyId))
+      .groupBy(stockTable.productId);
+    const totalsMap = new Map(totals.map((t) => [t.productId, Number(t.totalQty)]));
+    const rows = products.map((p) => ({
+      productId: p.id,
+      name: p.name,
+      category: p.category,
+      unitCost: p.unitCost,
+      totalQty: totalsMap.get(p.id) ?? 0,
+    }));
+
+    const catMap = new Map<string, {
+      category: string;
+      productCount: number;
+      totalQty: number;
+      totalValue: number;
+      products: { productId: number; name: string; totalQty: number; unitCost: number; totalValue: number }[];
+    }>();
+    let totalValue = 0;
+    let totalQty = 0;
+    let productsWithoutCost = 0;
+    for (const r of rows) {
+      const qty = Number(r.totalQty ?? 0);
+      const cost = Number(r.unitCost ?? 0);
+      const value = qty * cost;
+      totalQty += qty;
+      totalValue += value;
+      if (cost <= 0) productsWithoutCost += 1;
+      const cat = r.category || "Uncategorised";
+      const entry = catMap.get(cat) ?? { category: cat, productCount: 0, totalQty: 0, totalValue: 0, products: [] };
+      entry.productCount += 1;
+      entry.totalQty += qty;
+      entry.totalValue += value;
+      entry.products.push({ productId: r.productId, name: r.name, totalQty: qty, unitCost: cost, totalValue: value });
+      catMap.set(cat, entry);
+    }
+    const categories = Array.from(catMap.values())
+      .map((c) => ({ ...c, products: c.products.sort((a, b) => b.totalValue - a.totalValue) }))
+      .sort((a, b) => b.totalValue - a.totalValue);
+
+    res.json({ totalValue, totalQty, totalProducts: rows.length, productsWithoutCost, categories });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get stock valuation");
+    res.status(500).json({ error: "Failed to get stock valuation" });
+  }
+});
+
 router.get("/:locationId", async (req, res) => {
   try {
     const { locationId } = req.params;

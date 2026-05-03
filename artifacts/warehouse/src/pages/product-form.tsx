@@ -47,6 +47,7 @@ const formSchema = z.object({
   minStock: z.coerce.number().min(0, "Must be positive"),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
+  unitCost: z.coerce.number().min(0, "Must be positive").default(0),
   supplierId: z.coerce.number().optional().or(z.literal("")),
   supplierProductName: z.string().optional().or(z.literal("")),
   supplierSku: z.string().optional().or(z.literal("")),
@@ -116,6 +117,7 @@ export default function ProductFormPage() {
       minStock: 0,
       bufferStock: 0,
       targetStock: 0,
+      unitCost: 0,
       supplierId: "",
       supplierProductName: "",
       supplierSku: "",
@@ -136,6 +138,7 @@ export default function ProductFormPage() {
         minStock: (p as Product & { minStock?: number }).minStock ?? 0,
         bufferStock: p.bufferStock,
         targetStock: p.targetStock || 0,
+        unitCost: (p as Product & { unitCost?: number }).unitCost ?? 0,
         supplierId: p.supplierId ?? "",
         supplierProductName: p.supplierProductName || "",
         supplierSku: p.supplierSku || "",
@@ -153,6 +156,7 @@ export default function ProductFormPage() {
       supplierProductName: isPurchased ? (data.supplierProductName || null) : null,
       supplierSku: isPurchased ? (data.supplierSku || null) : null,
       alertEmail: data.alertEmail || null,
+      unitCost: data.unitCost ?? 0,
     };
 
     if (isEdit) {
@@ -390,6 +394,28 @@ export default function ProductFormPage() {
                 />
               </div>
             )}
+
+            <FormField
+              control={form.control}
+              name="unitCost"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Unit Cost</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="h-12 text-base border-2 shadow-sm font-mono"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground mt-1">Per-unit cost — used for inventory valuation</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}

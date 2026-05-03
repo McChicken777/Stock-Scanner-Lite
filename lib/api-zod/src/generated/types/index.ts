@@ -25,5 +25,8 @@ export * from "./product";
 export * from "./productWithStock";
 export * from "./stockEntry";
 export * from "./stockUpdateResult";
+export * from "./stockValuation";
+export * from "./stockValuationCategory";
+export * from "./stockValuationProduct";
 export * from "./updateProductRequest";
 export * from "./updateStockRequest";

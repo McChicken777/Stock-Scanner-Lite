@@ -318,6 +318,19 @@ paths:
                 items:
                   $ref: "#/components/schemas/HistoryEntry"
 
+  /stock/valuation:
+    get:
+      operationId: getStockValuation
+      tags: [stock]
+      summary: Total inventory value and per-category breakdown
+      responses:
+        "200":
+          description: Stock valuation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockValuation"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -433,6 +446,9 @@ components:
         supplierProductName:
           type: string
           nullable: true
+        unitCost:
+          type: number
+          description: Per-unit cost used for stock valuation
         createdAt:
           type: string
           format: date-time
@@ -443,6 +459,7 @@ components:
         - itemType
         - bufferStock
         - targetStock
+        - unitCost
         - createdAt
 
     ProductWithStock:
@@ -472,6 +489,8 @@ components:
         supplierProductName:
           type: string
           nullable: true
+        unitCost:
+          type: number
         createdAt:
           type: string
           format: date-time
@@ -487,6 +506,7 @@ components:
         - itemType
         - bufferStock
         - targetStock
+        - unitCost
         - createdAt
         - totalStock
         - isLowStock
@@ -503,6 +523,8 @@ components:
         alertEmail:
           type: string
           nullable: true
+        unitCost:
+          type: number
       required:
         - name
         - category
@@ -520,6 +542,8 @@ components:
         alertEmail:
           type: string
           nullable: true
+        unitCost:
+          type: number
 
     ImportItemType:
       type: string
@@ -693,6 +717,70 @@ components:
         - lowStockProducts
         - recentActivity
         - categoryBreakdown
+
+    StockValuationProduct:
+      type: object
+      properties:
+        productId:
+          type: integer
+        name:
+          type: string
+        totalQty:
+          type: integer
+        unitCost:
+          type: number
+        totalValue:
+          type: number
+      required:
+        - productId
+        - name
+        - totalQty
+        - unitCost
+        - totalValue
+
+    StockValuationCategory:
+      type: object
+      properties:
+        category:
+          type: string
+        productCount:
+          type: integer
+        totalQty:
+          type: integer
+        totalValue:
+          type: number
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockValuationProduct"
+      required:
+        - category
+        - productCount
+        - totalQty
+        - totalValue
+        - products
+
+    StockValuation:
+      type: object
+      properties:
+        totalValue:
+          type: number
+        totalQty:
+          type: integer
+        totalProducts:
+          type: integer
+        productsWithoutCost:
+          type: integer
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockValuationCategory"
+      required:
+        - totalValue
+        - totalQty
+        - totalProducts
+        - productsWithoutCost
+        - categories
 
     CategoryCount:
       type: object

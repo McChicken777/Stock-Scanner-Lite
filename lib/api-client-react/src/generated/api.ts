@@ -32,6 +32,7 @@ import type {
   ProductWithStock,
   StockEntry,
   StockUpdateResult,
+  StockValuation,
   UpdateProductRequest,
   UpdateStockRequest,
 } from "./api.schemas";
@@ -1310,6 +1311,81 @@ export function useListHistory<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Total inventory value and per-category breakdown
+ */
+export const getGetStockValuationUrl = () => {
+  return `/api/stock/valuation`;
+};
+
+export const getStockValuation = async (
+  options?: RequestInit,
+): Promise<StockValuation> => {
+  return customFetch<StockValuation>(getGetStockValuationUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStockValuationQueryKey = () => {
+  return [`/api/stock/valuation`] as const;
+};
+
+export const getGetStockValuationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStockValuation>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStockValuation>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStockValuationQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStockValuation>>
+  > = ({ signal }) => getStockValuation({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStockValuation>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStockValuationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStockValuation>>
+>;
+export type GetStockValuationQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Total inventory value and per-category breakdown
+ */
+
+export function useGetStockValuation<
+  TData = Awaited<ReturnType<typeof getStockValuation>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getStockValuation>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStockValuationQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

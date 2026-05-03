@@ -11,4 +11,5 @@ export interface UpdateProductRequest {
   category?: string;
   bufferStock?: number;
   alertEmail?: string | null;
+  unitCost?: number;
 }

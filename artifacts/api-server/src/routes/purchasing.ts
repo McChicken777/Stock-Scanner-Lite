@@ -214,6 +214,7 @@ router.post("/:id/items", requireAdmin, async (req, res) => {
     const parsed = z.object({
       productId: z.number().int(),
       quantityOrdered: z.number().int().min(1),
+      unitPrice: z.number().min(0).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -222,6 +223,7 @@ router.post("/:id/items", requireAdmin, async (req, res) => {
       productId: parsed.data.productId,
       quantityOrdered: parsed.data.quantityOrdered,
       quantityArrived: 0,
+      unitPrice: parsed.data.unitPrice ?? null,
       companyId,
     }).returning();
 
@@ -240,11 +242,16 @@ router.put("/:id/items/:itemId", requireAdmin, async (req, res) => {
     const itemId = Number(req.params.itemId);
     const parsed = z.object({
       quantityOrdered: z.number().int().min(1).optional(),
+      unitPrice: z.number().min(0).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+    const updateSet: Record<string, unknown> = {};
+    if (parsed.data.quantityOrdered !== undefined) updateSet.quantityOrdered = parsed.data.quantityOrdered;
+    if (parsed.data.unitPrice !== undefined) updateSet.unitPrice = parsed.data.unitPrice;
+
     const [updated] = await db.update(purchaseOrderItemsTable)
-      .set({ quantityOrdered: parsed.data.quantityOrdered })
+      .set(updateSet)
       .where(and(eq(purchaseOrderItemsTable.id, itemId), eq(purchaseOrderItemsTable.companyId, companyId)))
       .returning();
 
@@ -325,6 +332,20 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
       .set({ quantityArrived: totalArrived })
       .where(eq(purchaseOrderItemsTable.id, itemId))
       .returning();
+
+    // Auto-suggest unit cost from PO unit price when product has no cost yet
+    let unitCostUpdated = false;
+    if (poItem.item.unitPrice != null && poItem.item.unitPrice > 0) {
+      const [prod] = await db.select({ id: productsTable.id, unitCost: productsTable.unitCost })
+        .from(productsTable)
+        .where(and(eq(productsTable.id, poItem.item.productId), eq(productsTable.companyId, companyId)));
+      if (prod && (prod.unitCost == null || Number(prod.unitCost) === 0)) {
+        await db.update(productsTable)
+          .set({ unitCost: poItem.item.unitPrice })
+          .where(eq(productsTable.id, prod.id));
+        unitCostUpdated = true;
+      }
+    }
 
     // Recompute PO status
     const allItems = await db.select().from(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.poId, poId));
@@ -412,6 +433,7 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
       item: updatedItem,
       poStatus: newPoStatus,
       affectedStepCount: typeof affectedStepCount === "number" ? affectedStepCount : 0,
+      unitCostUpdated,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to mark item as arrived");

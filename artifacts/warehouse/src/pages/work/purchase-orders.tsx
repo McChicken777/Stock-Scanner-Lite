@@ -38,6 +38,7 @@ interface POItem {
   supplierSku: string | null;
   quantityOrdered: number;
   quantityArrived: number;
+  unitPrice: number | null;
   waitingProjects: WaitingProject[];
 }
 
@@ -103,6 +104,9 @@ function PODetailPage({ poId }: { poId: number }) {
   const [arriveItemId, setArriveItemId] = useState<number | null>(null);
   const [arriveQty, setArriveQty] = useState("1");
   const [arriveLocationId, setArriveLocationId] = useState("");
+  const [editPriceItemId, setEditPriceItemId] = useState<number | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState("");
+  const [addPrice, setAddPrice] = useState("");
 
   const { data: po, isLoading } = useQuery<PODetail>({
     queryKey: [`/api/purchase-orders/${poId}`],
@@ -132,13 +136,24 @@ function PODetailPage({ poId }: { poId: number }) {
   };
 
   const addItemMutation = useMutation({
-    mutationFn: (data: { productId: number; quantityOrdered: number }) =>
+    mutationFn: (data: { productId: number; quantityOrdered: number; unitPrice: number | null }) =>
       apiFetch(`/api/purchase-orders/${poId}/items`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => { invalidate(); toast({ title: "Item added" }); setShowAddItem(false); setAddProductId(""); setAddQty("1"); },
+    onSuccess: () => { invalidate(); toast({ title: "Item added" }); setShowAddItem(false); setAddProductId(""); setAddQty("1"); setAddPrice(""); },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const updateItemPriceMutation = useMutation({
+    mutationFn: (data: { itemId: number; unitPrice: number | null }) =>
+      apiFetch(`/api/purchase-orders/${poId}/items/${data.itemId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ unitPrice: data.unitPrice }),
+      }),
+    onSuccess: () => { invalidate(); toast({ title: "Unit price updated" }); setEditPriceItemId(null); },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
@@ -169,7 +184,8 @@ function PODetailPage({ poId }: { poId: number }) {
     onSuccess: (data) => {
       invalidate();
       const stepNote = data.affectedStepCount > 0 ? ` · ${data.affectedStepCount} work step${data.affectedStepCount !== 1 ? "s" : ""} can now proceed` : "";
-      toast({ title: `Stock updated — PO now ${data.poStatus.replace("_", " ")}${stepNote}` });
+      const costNote = data.unitCostUpdated ? " · product unit cost updated from PO price" : "";
+      toast({ title: `Stock updated — PO now ${data.poStatus.replace("_", " ")}${stepNote}${costNote}` });
       setArriveItemId(null);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
@@ -270,13 +286,26 @@ function PODetailPage({ poId }: { poId: number }) {
                 value={addQty}
                 onChange={(e) => setAddQty(e.target.value)}
                 placeholder="Qty"
-                className="w-24 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
+                className="w-20 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
+              />
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={addPrice}
+                onChange={(e) => setAddPrice(e.target.value)}
+                placeholder="Unit price"
+                className="w-28 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
               />
               <Button
                 size="sm"
                 className="flex-1 h-10 font-bold"
                 disabled={!addProductId || addItemMutation.isPending}
-                onClick={() => addItemMutation.mutate({ productId: Number(addProductId), quantityOrdered: Math.max(1, Number(addQty)) })}
+                onClick={() => addItemMutation.mutate({
+                  productId: Number(addProductId),
+                  quantityOrdered: Math.max(1, Number(addQty)),
+                  unitPrice: addPrice ? Math.max(0, Number(addPrice)) : null,
+                })}
               >
                 Add
               </Button>
@@ -304,6 +333,51 @@ function PODetailPage({ poId }: { poId: number }) {
                       <p className="font-black text-base">{item.quantityArrived}<span className="text-muted-foreground font-normal text-sm">/{item.quantityOrdered}</span></p>
                       <p className="text-[10px] text-muted-foreground">{pct}% arrived</p>
                     </div>
+                  </div>
+
+                  {/* Unit price + line total */}
+                  <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-lg p-2">
+                    {editPriceItemId === item.id ? (
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground">Unit price</span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={editPriceValue}
+                          onChange={(e) => setEditPriceValue(e.target.value)}
+                          placeholder="0.00"
+                          className="w-24 h-8 px-2 rounded border-2 border-input bg-background text-xs font-mono"
+                        />
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs font-bold"
+                          disabled={updateItemPriceMutation.isPending}
+                          onClick={() => updateItemPriceMutation.mutate({
+                            itemId: item.id,
+                            unitPrice: editPriceValue ? Math.max(0, Number(editPriceValue)) : null,
+                          })}
+                        >Save</Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditPriceItemId(null)}>X</Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="text-muted-foreground">Unit price: <span className="font-bold font-mono text-foreground">{item.unitPrice != null ? `$${Number(item.unitPrice).toFixed(2)}` : "—"}</span></span>
+                          {item.unitPrice != null && (
+                            <span className="text-muted-foreground">Line total: <span className="font-bold font-mono text-foreground">${(Number(item.unitPrice) * item.quantityOrdered).toFixed(2)}</span></span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[10px] font-bold"
+                          onClick={() => { setEditPriceItemId(item.id); setEditPriceValue(item.unitPrice != null ? String(item.unitPrice) : ""); }}
+                        >
+                          <Edit2 className="h-3 w-3 mr-1" /> Edit
+                        </Button>
+                      </>
+                    )}
                   </div>
 
                   {/* Progress bar */}

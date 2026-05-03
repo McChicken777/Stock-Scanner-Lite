@@ -36,7 +36,7 @@ router.get("/", requireAuth, async (req, res) => {
 router.post("/", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const body = { ...req.body, companyId, category: req.body.category ?? "" };
+    const body = { ...req.body, companyId, category: req.body.category ?? "", unitCost: req.body.unitCost ?? 0 };
     const parsed = insertProductSchema.safeParse(body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
@@ -191,6 +191,7 @@ const updateProductSchema = z.object({
   supplierId: z.number().int().nullable().optional(),
   supplierProductName: z.string().nullable().optional(),
   supplierSku: z.string().nullable().optional(),
+  unitCost: z.number().min(0).optional(),
 });
 
 router.put("/:productId", requireAdmin, async (req, res) => {

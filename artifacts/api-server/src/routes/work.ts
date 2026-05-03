@@ -2354,6 +2354,8 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           reserved,
           available,
           shortfall: Math.max(0, p.minStock - available),
+          unitCost: Number(p.unitCost ?? 0),
+          estimatedReorderCost: Math.max(0, p.minStock - available) * Number(p.unitCost ?? 0),
           supplierId: p.supplierId,
           supplierSku: p.supplierSku,
         };

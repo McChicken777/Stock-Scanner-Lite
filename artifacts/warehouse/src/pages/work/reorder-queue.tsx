@@ -27,6 +27,8 @@ interface ReorderItem {
   supplierId: number | null;
   supplierSku: string | null;
   supplierName: string | null;
+  unitCost: number;
+  estimatedReorderCost: number;
 }
 
 interface ShortageFlag {
@@ -274,6 +276,16 @@ export default function ReorderQueuePage() {
             )}
           </h2>
 
+          {!isLoading && queue.length > 0 && (() => {
+            const totalCost = queue.reduce((sum, q) => sum + (Number(q.estimatedReorderCost) || 0), 0);
+            return totalCost > 0 ? (
+              <div className="border-2 border-amber-300 bg-amber-100/60 rounded-xl px-3 py-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Total est. reorder cost</span>
+                <span className="text-lg font-black font-mono text-amber-900">${totalCost.toFixed(2)}</span>
+              </div>
+            ) : null;
+          })()}
+
           {isLoading ? (
             <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
           ) : queue.length === 0 ? (
@@ -324,6 +336,12 @@ export default function ReorderQueuePage() {
                       <RefreshCw className="h-3 w-3" />
                       Short by {item.shortfall} (min: {item.minStock})
                     </div>
+                    {item.unitCost > 0 && (
+                      <div className="text-muted-foreground">
+                        Est. reorder cost: <span className="font-bold font-mono text-foreground">${Number(item.estimatedReorderCost).toFixed(2)}</span>
+                        <span className="text-[10px] ml-1">({item.shortfall} × ${Number(item.unitCost).toFixed(2)})</span>
+                      </div>
+                    )}
                     {item.supplierName && (
                       <span className="text-muted-foreground">
                         Supplier: <span className="font-semibold">{item.supplierName}</span>

@@ -82,6 +82,7 @@ export const ListProductsResponseItem = zod.object({
   supplierId: zod.number().nullish(),
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
+  unitCost: zod.number(),
   createdAt: zod.coerce.date(),
   totalStock: zod.number().describe("Total quantity across all locations"),
   isLowStock: zod.boolean(),
@@ -96,6 +97,7 @@ export const CreateProductBody = zod.object({
   category: zod.string(),
   bufferStock: zod.number(),
   alertEmail: zod.string().nullish(),
+  unitCost: zod.number().optional(),
 });
 
 /**
@@ -155,6 +157,7 @@ export const GetProductResponse = zod.object({
   supplierId: zod.number().nullish(),
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
+  unitCost: zod.number(),
   createdAt: zod.coerce.date(),
   totalStock: zod.number().describe("Total quantity across all locations"),
   isLowStock: zod.boolean(),
@@ -172,6 +175,7 @@ export const UpdateProductBody = zod.object({
   category: zod.string().optional(),
   bufferStock: zod.number().optional(),
   alertEmail: zod.string().nullish(),
+  unitCost: zod.number().optional(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -191,6 +195,7 @@ export const UpdateProductResponse = zod.object({
   supplierId: zod.number().nullish(),
   supplierSku: zod.string().nullish(),
   supplierProductName: zod.string().nullish(),
+  unitCost: zod.number().describe("Per-unit cost used for stock valuation"),
   createdAt: zod.coerce.date(),
 });
 
@@ -271,6 +276,33 @@ export const ListHistoryResponseItem = zod.object({
 export const ListHistoryResponse = zod.array(ListHistoryResponseItem);
 
 /**
+ * @summary Total inventory value and per-category breakdown
+ */
+export const GetStockValuationResponse = zod.object({
+  totalValue: zod.number(),
+  totalQty: zod.number(),
+  totalProducts: zod.number(),
+  productsWithoutCost: zod.number(),
+  categories: zod.array(
+    zod.object({
+      category: zod.string(),
+      productCount: zod.number(),
+      totalQty: zod.number(),
+      totalValue: zod.number(),
+      products: zod.array(
+        zod.object({
+          productId: zod.number(),
+          name: zod.string(),
+          totalQty: zod.number(),
+          unitCost: zod.number(),
+          totalValue: zod.number(),
+        }),
+      ),
+    }),
+  ),
+});
+
+/**
  * @summary Get dashboard summary with low stock alerts
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -294,6 +326,7 @@ export const GetDashboardSummaryResponse = zod.object({
       supplierId: zod.number().nullish(),
       supplierSku: zod.string().nullish(),
       supplierProductName: zod.string().nullish(),
+      unitCost: zod.number(),
       createdAt: zod.coerce.date(),
       totalStock: zod.number().describe("Total quantity across all locations"),
       isLowStock: zod.boolean(),

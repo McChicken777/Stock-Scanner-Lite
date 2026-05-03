@@ -19,5 +19,7 @@ export interface Product {
   supplierId?: number | null;
   supplierSku?: string | null;
   supplierProductName?: string | null;
+  /** Per-unit cost used for stock valuation */
+  unitCost: number;
   createdAt: Date;
 }
