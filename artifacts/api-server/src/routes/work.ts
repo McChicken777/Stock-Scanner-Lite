@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db, workTemplatesTable, workStepsTable, workProjectsTable,
   workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
-  productsTable, productComponentsTable, productProceduresTable,
+  productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
 } from "@workspace/db";
 import { eq, and, isNull, sql, inArray, ne } from "drizzle-orm";
@@ -15,12 +15,26 @@ const router: IRouter = Router();
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-/** Returns the template if owned by companyId, else returns null. */
+/** Returns the full template row if owned by companyId, else null. */
 async function getOwnedTemplate(templateId: number, companyId: number) {
-  const [t] = await db.select({ id: workTemplatesTable.id })
-    .from(workTemplatesTable)
+  const [t] = await db.select().from(workTemplatesTable)
     .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
   return t ?? null;
+}
+
+/**
+ * Returns the productComponent row if it belongs to a template owned by companyId,
+ * else null.  componentId = productComponentsTable.id (the BOM entry's PK).
+ */
+async function getOwnedComponent(templateId: number, componentId: number, companyId: number) {
+  const tmpl = await getOwnedTemplate(templateId, companyId);
+  if (!tmpl?.productId) return null;
+  const [comp] = await db.select().from(productComponentsTable)
+    .where(and(
+      eq(productComponentsTable.id, componentId),
+      eq(productComponentsTable.parentProductId, tmpl.productId),
+    ));
+  return comp ?? null;
 }
 
 const procSchema = z.object({
@@ -177,19 +191,22 @@ router.post("/templates/confirm-generate", requireAdmin, async (req, res) => {
       });
     }
 
-    for (const part of parts) {
+    for (let pi = 0; pi < parts.length; pi++) {
+      const part = parts[pi];
       const [partProduct] = await db.insert(productsTable).values({
         name: part.name, category: "Component",
         itemType: part.itemType ?? "manufactured_part" as "manufactured_part",
         bufferStock: 0, targetStock: 0, companyId,
       }).returning();
-      await db.insert(productComponentsTable).values({
-        parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: 0,
-      });
+      const [compEntry] = await db.insert(productComponentsTable).values({
+        parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: pi,
+      }).returning();
+      // Save component steps into work_steps with templateComponentId = compEntry.id
       for (let j = 0; j < part.procedures.length; j++) {
         const p = part.procedures[j];
-        await db.insert(productProceduresTable).values({
-          productId: partProduct.id, name: p.name, sortOrder: j,
+        await db.insert(workStepsTable).values({
+          templateId: template.id, templateComponentId: compEntry.id,
+          name: p.name, sortOrder: j,
           roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
           durationEstimate: p.durationEstimate ?? null,
         });
@@ -268,6 +285,8 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
           .where(eq(productComponentsTable.parentProductId, source.productId))
           .orderBy(productComponentsTable.sortOrder);
 
+        // Track old→new component ID mapping for copying work_steps
+        const compIdMap = new Map<number, number>(); // oldComponentId → newComponentId
         for (const comp of components) {
           const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
           if (!compProduct) continue;
@@ -275,20 +294,11 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
             name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
             bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
           }).returning();
-          await db.insert(productComponentsTable).values({
+          const [newCompEntry] = await db.insert(productComponentsTable).values({
             parentProductId: newProductId, componentProductId: newComp.id,
             quantity: comp.quantity, sortOrder: comp.sortOrder,
-          });
-          const compProcs = await db.select().from(productProceduresTable)
-            .where(eq(productProceduresTable.productId, comp.componentProductId))
-            .orderBy(productProceduresTable.sortOrder);
-          for (const p of compProcs) {
-            await db.insert(productProceduresTable).values({
-              productId: newComp.id, name: p.name, sortOrder: p.sortOrder,
-              roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
-              durationEstimate: p.durationEstimate ?? null,
-            });
-          }
+          }).returning();
+          compIdMap.set(comp.id, newCompEntry.id);
         }
       }
     }
@@ -297,15 +307,35 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
       name: cloneName, companyId, productId: newProductId,
     }).returning();
 
-    // Clone top-level template procedures
-    const srcProcs = await db.select().from(workStepsTable)
+    // Clone all work_steps (top-level and component-level)
+    const srcSteps = await db.select().from(workStepsTable)
       .where(eq(workStepsTable.templateId, templateId))
       .orderBy(workStepsTable.sortOrder);
-    for (const p of srcProcs) {
+
+    // Rebuild compIdMap in scope for step cloning
+    // Re-query the new template's components to map old→new component IDs
+    const newComponents = newProductId
+      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, newProductId))
+      : [];
+    const oldComponents = source.productId
+      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, source.productId))
+        .orderBy(productComponentsTable.sortOrder)
+      : [];
+    // Match by sortOrder (same order as original)
+    const cloneCompIdMap = new Map<number, number>();
+    oldComponents.forEach((oc, i) => {
+      if (newComponents[i]) cloneCompIdMap.set(oc.id, newComponents[i].id);
+    });
+
+    for (const s of srcSteps) {
+      const newTemplateComponentId = s.templateComponentId
+        ? (cloneCompIdMap.get(s.templateComponentId) ?? null)
+        : null;
       await db.insert(workStepsTable).values({
-        templateId: newTemplate.id, name: p.name, sortOrder: p.sortOrder,
-        requiresInbound: p.requiresInbound, roleId: p.roleId ?? null,
-        batchMode: p.batchMode ?? "individual", durationEstimate: p.durationEstimate ?? null,
+        templateId: newTemplate.id, name: s.name, sortOrder: s.sortOrder,
+        requiresInbound: s.requiresInbound, roleId: s.roleId ?? null,
+        batchMode: s.batchMode ?? "individual", durationEstimate: s.durationEstimate ?? null,
+        templateComponentId: newTemplateComponentId,
       });
     }
 
@@ -331,9 +361,9 @@ router.put("/templates/:id/ai-edit", requireAdmin, async (req, res) => {
       .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
     if (!template) { res.status(404).json({ error: "Not found" }); return; }
 
-    // Snapshot current state before editing
+    // Snapshot current state before editing (top-level steps only)
     const currentProcs = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
 
     // Save snapshot for undo
@@ -386,8 +416,8 @@ Rules:
       res.status(500).json({ error: "AI returned invalid JSON" }); return;
     }
 
-    // Replace all template procedures
-    await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
+    // Replace all top-level template procedures (leave component steps untouched)
+    await db.delete(workStepsTable).where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)));
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
       await db.insert(workStepsTable).values({
@@ -398,7 +428,7 @@ Rules:
     }
 
     const updated = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
     res.json({ procedures: updated, canUndo: true });
   } catch (err) {
@@ -433,7 +463,8 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
     }
 
     const procs = snapshot.snapshot as { name: string; sortOrder: number; requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
-    await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
+    // Restore only top-level steps; leave component steps untouched
+    await db.delete(workStepsTable).where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)));
     for (const p of procs) {
       await db.insert(workStepsTable).values({
         templateId, name: p.name, sortOrder: p.sortOrder,
@@ -447,7 +478,7 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
     await db.delete(aiSnapshotsTable).where(eq(aiSnapshotsTable.id, snapshot.id));
 
     const updated = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
     res.json({ procedures: updated });
   } catch (err) {
@@ -463,7 +494,7 @@ router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
     const companyId = req.session.companyId!;
     if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
     const procs = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
 
     // Check if a valid (non-expired) snapshot exists for the undo button
@@ -673,10 +704,10 @@ router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
     let baseSortOrder = 0;
     if (parsed.data.append) {
       const existing = await db.select().from(workStepsTable)
-        .where(eq(workStepsTable.templateId, templateId));
+        .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)));
       baseSortOrder = existing.length;
     } else {
-      await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
+      await db.delete(workStepsTable).where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)));
     }
 
     for (let i = 0; i < entries.length; i++) {
@@ -685,16 +716,227 @@ router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
         templateId, name: e.name, sortOrder: baseSortOrder + i,
         roleId: e.roleId ?? null, batchMode: e.batchMode ?? "individual",
         durationEstimate: e.durationEstimate ?? null,
+        // templateComponentId intentionally null → top-level step
       });
     }
 
     const procs = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
     res.json(procs);
   } catch (err) {
     req.log.error({ err }, "Failed to apply preset");
     res.status(500).json({ error: "Failed to apply preset" });
+  }
+});
+
+// ─── TEMPLATE COMPONENT STEPS ─────────────────────────────────────────────────
+// Steps for BOM sub-parts live in work_steps with templateComponentId = productComponent.id
+// This decouples component step sequences from global product_procedures.
+
+// List BOM components for a template, with their per-template steps
+router.get("/templates/:id/components", requireAuth, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    const tmpl = await getOwnedTemplate(templateId, companyId);
+    if (!tmpl) { res.status(404).json({ error: "Not found" }); return; }
+    if (!tmpl.productId) { res.json([]); return; }
+
+    const components = await db.select().from(productComponentsTable)
+      .where(eq(productComponentsTable.parentProductId, tmpl.productId))
+      .orderBy(productComponentsTable.sortOrder);
+
+    const result = await Promise.all(components.map(async (comp) => {
+      const [product] = await db.select().from(productsTable)
+        .where(eq(productsTable.id, comp.componentProductId));
+      const steps = await db.select().from(workStepsTable)
+        .where(and(
+          eq(workStepsTable.templateId, templateId),
+          eq(workStepsTable.templateComponentId, comp.id),
+        ))
+        .orderBy(workStepsTable.sortOrder);
+      return { ...comp, product, procedures: steps };
+    }));
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list template components");
+    res.status(500).json({ error: "Failed to list template components" });
+  }
+});
+
+// List steps for one BOM component within a template
+router.get("/templates/:templateId/components/:componentId/steps", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const steps = await db.select().from(workStepsTable)
+      .where(and(
+        eq(workStepsTable.templateId, templateId),
+        eq(workStepsTable.templateComponentId, componentId),
+      ))
+      .orderBy(workStepsTable.sortOrder);
+    res.json(steps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list component steps");
+    res.status(500).json({ error: "Failed to list component steps" });
+  }
+});
+
+// Add a step to a BOM component in a template
+router.post("/templates/:templateId/components/:componentId/steps", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const parsed = z.object({
+      name: z.string().min(1),
+      roleId: z.number().int().nullable().optional(),
+      batchMode: z.string().optional(),
+      durationEstimate: z.number().int().nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
+    const existing = await db.select().from(workStepsTable)
+      .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)));
+    const [step] = await db.insert(workStepsTable).values({
+      templateId,
+      templateComponentId: componentId,
+      name: parsed.data.name,
+      sortOrder: existing.length,
+      roleId: parsed.data.roleId ?? null,
+      batchMode: parsed.data.batchMode ?? "individual",
+      durationEstimate: parsed.data.durationEstimate ?? null,
+    }).returning();
+    res.status(201).json(step);
+  } catch (err) {
+    req.log.error({ err }, "Failed to add component step");
+    res.status(500).json({ error: "Failed to add component step" });
+  }
+});
+
+// Reorder steps for a BOM component
+router.put("/templates/:templateId/components/:componentId/steps/reorder", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const parsed = z.object({
+      order: z.array(z.object({ id: z.number().int(), sortOrder: z.number().int() })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid order" }); return; }
+    for (const { id, sortOrder } of parsed.data.order) {
+      await db.update(workStepsTable).set({ sortOrder })
+        .where(and(
+          eq(workStepsTable.id, id),
+          eq(workStepsTable.templateId, templateId),
+          eq(workStepsTable.templateComponentId, componentId),
+        ));
+    }
+    const steps = await db.select().from(workStepsTable)
+      .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)))
+      .orderBy(workStepsTable.sortOrder);
+    res.json(steps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder component steps");
+    res.status(500).json({ error: "Failed to reorder component steps" });
+  }
+});
+
+// Update a component step
+router.put("/templates/:templateId/components/:componentId/steps/:stepId", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const stepId = Number(req.params.stepId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const parsed = procSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [step] = await db.update(workStepsTable).set(parsed.data)
+      .where(and(
+        eq(workStepsTable.id, stepId),
+        eq(workStepsTable.templateId, templateId),
+        eq(workStepsTable.templateComponentId, componentId),
+      )).returning();
+    if (!step) { res.status(404).json({ error: "Step not found" }); return; }
+    res.json(step);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update component step");
+    res.status(500).json({ error: "Failed to update component step" });
+  }
+});
+
+// Delete a component step
+router.delete("/templates/:templateId/components/:componentId/steps/:stepId", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const stepId = Number(req.params.stepId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    await db.delete(workStepsTable)
+      .where(and(
+        eq(workStepsTable.id, stepId),
+        eq(workStepsTable.templateId, templateId),
+        eq(workStepsTable.templateComponentId, componentId),
+      ));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete component step");
+    res.status(500).json({ error: "Failed to delete component step" });
+  }
+});
+
+// Apply a step preset to a BOM component's step sequence
+router.post("/templates/:templateId/components/:componentId/apply-preset", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const parsed = z.object({ presetId: z.number().int(), append: z.boolean().optional() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "presetId required" }); return; }
+
+    const [preset] = await db.select().from(stepPresetsTable)
+      .where(and(eq(stepPresetsTable.id, parsed.data.presetId), eq(stepPresetsTable.companyId, companyId)));
+    if (!preset) { res.status(404).json({ error: "Preset not found" }); return; }
+
+    const entries = await db.select().from(stepPresetEntriesTable)
+      .where(eq(stepPresetEntriesTable.presetId, preset.id))
+      .orderBy(stepPresetEntriesTable.sortOrder);
+
+    let baseSortOrder = 0;
+    if (parsed.data.append) {
+      const existing = await db.select().from(workStepsTable)
+        .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)));
+      baseSortOrder = existing.length;
+    } else {
+      await db.delete(workStepsTable)
+        .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)));
+    }
+
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      await db.insert(workStepsTable).values({
+        templateId, templateComponentId: componentId, name: e.name,
+        sortOrder: baseSortOrder + i,
+        roleId: e.roleId ?? null, batchMode: e.batchMode ?? "individual",
+        durationEstimate: e.durationEstimate ?? null,
+      });
+    }
+
+    const steps = await db.select().from(workStepsTable)
+      .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)))
+      .orderBy(workStepsTable.sortOrder);
+    res.json(steps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to apply preset to component");
+    res.status(500).json({ error: "Failed to apply preset to component" });
   }
 });
 
@@ -927,7 +1169,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
           .where(eq(workStepsTable.templateId, templateId))
           .orderBy(workStepsTable.sortOrder);
 
-        // Load BOM components
+        // Load BOM components with per-template steps from work_steps (templateComponentId)
         let bomComponents: {
           componentProductId: number; quantity: number; name: string;
           procedures: { name: string; sortOrder: number; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
@@ -940,19 +1182,23 @@ router.post("/projects", requireAdmin, async (req, res) => {
           for (const comp of components) {
             const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
             if (!compProduct) continue;
-            const procedures = await db.select().from(productProceduresTable)
-              .where(eq(productProceduresTable.productId, comp.componentProductId))
-              .orderBy(productProceduresTable.sortOrder);
+            // Load steps from work_steps (per-template, keyed by templateComponentId = comp.id)
+            const steps = await db.select().from(workStepsTable)
+              .where(and(
+                eq(workStepsTable.templateId, templateId),
+                eq(workStepsTable.templateComponentId, comp.id),
+              ))
+              .orderBy(workStepsTable.sortOrder);
             bomComponents.push({
               componentProductId: comp.componentProductId,
               quantity: comp.quantity,
               name: compProduct.name,
-              procedures: procedures.map((p) => ({
-                name: p.name,
-                sortOrder: p.sortOrder,
-                roleId: p.roleId ?? null,
-                batchMode: p.batchMode ?? "individual",
-                durationEstimate: p.durationEstimate ?? null,
+              procedures: steps.map((s) => ({
+                name: s.name,
+                sortOrder: s.sortOrder,
+                roleId: s.roleId ?? null,
+                batchMode: s.batchMode ?? "individual",
+                durationEstimate: s.durationEstimate ?? null,
               })),
               itemType: compProduct.itemType,
             });
@@ -966,8 +1212,8 @@ router.post("/projects", requireAdmin, async (req, res) => {
           }).returning();
           sortOrder++;
 
-          // Copy template top-level procedures (with roleId/batchMode/duration)
-          for (const proc of templateProcs) {
+          // Copy top-level steps (templateComponentId IS NULL)
+          for (const proc of templateProcs.filter((p) => p.templateComponentId === null)) {
             await db.insert(workItemStepsTable).values({
               itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
               requiresInbound: proc.requiresInbound,
@@ -1086,7 +1332,7 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
     if (!template) { res.status(404).json({ error: "Template not found" }); return; }
 
     const templateProcs = await db.select().from(workStepsTable)
-      .where(eq(workStepsTable.templateId, templateId))
+      .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
       .orderBy(workStepsTable.sortOrder);
 
     const existingItems = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));

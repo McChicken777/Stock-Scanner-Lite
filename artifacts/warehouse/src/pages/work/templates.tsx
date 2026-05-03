@@ -27,7 +27,7 @@ interface TemplateProcedure {
 interface ComponentEntry {
   id: number; parentProductId: number; componentProductId: number;
   quantity: number; sortOrder: number;
-  product: Product; procedures: Procedure[];
+  product: Product; procedures: TemplateProcedure[];
 }
 interface Template { id: number; name: string; productId: number | null; }
 interface StepPresetEntry { id: number; name: string; roleId: number | null; batchMode: string; sortOrder: number; durationEstimate: number | null; }
@@ -359,16 +359,19 @@ function TemplateProceduresEditor({ template, roles, presets }: {
 
 // ─── BOM Component Procedures (enhanced with role pickers) ───────────────────
 
-function ComponentProcedureList({ comp, roles, onInvalidate }: {
-  comp: ComponentEntry; roles: Role[]; onInvalidate: () => void;
+function ComponentProcedureList({ templateId, comp, roles, presets, onInvalidate }: {
+  templateId: number; comp: ComponentEntry; roles: Role[]; presets: StepPreset[]; onInvalidate: () => void;
 }) {
   const { toast } = useToast();
   const [addingProc, setAddingProc] = useState(false);
   const [newProcName, setNewProcName] = useState("");
+  const [showPresetPicker, setShowPresetPicker] = useState(false);
+
+  const base = `/api/work/templates/${templateId}/components/${comp.id}/steps`;
 
   const updateProc = useMutation({
     mutationFn: ({ procId, data }: { procId: number; data: object }) =>
-      apiFetch(`/api/products/${comp.componentProductId}/procedures/${procId}`, {
+      apiFetch(`${base}/${procId}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
@@ -377,7 +380,7 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
   });
 
   const addProc = useMutation({
-    mutationFn: (name: string) => apiFetch(`/api/products/${comp.componentProductId}/procedures`, {
+    mutationFn: (name: string) => apiFetch(base, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
@@ -386,10 +389,20 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
   });
 
   const deleteProc = useMutation({
-    mutationFn: (procId: number) => fetch(`/api/products/${comp.componentProductId}/procedures/${procId}`, {
+    mutationFn: (procId: number) => fetch(`${base}/${procId}`, {
       method: "DELETE", credentials: "include",
     }).then(() => {}),
     onSuccess: onInvalidate,
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const applyPreset = useMutation({
+    mutationFn: ({ presetId, append }: { presetId: number; append: boolean }) =>
+      apiFetch(`/api/work/templates/${templateId}/components/${comp.id}/apply-preset`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId, append }),
+      }),
+    onSuccess: () => { onInvalidate(); setShowPresetPicker(false); },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
@@ -402,7 +415,7 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
     const [moved] = reordered.splice(from, 1);
     reordered.splice(targetIdx, 0, moved);
     const order = reordered.map((p, i) => ({ id: p.id, sortOrder: i }));
-    apiFetch(`/api/products/${comp.componentProductId}/procedures/reorder`, {
+    apiFetch(`${base}/reorder`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order }),
     }).then(onInvalidate).catch((e: Error) => toast({ title: e.message, variant: "destructive" }));
@@ -490,12 +503,41 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
           </Button>
         </div>
       ) : (
-        <button
-          onClick={() => { setAddingProc(true); setNewProcName(""); }}
-          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
-        >
-          <Plus className="h-3 w-3" /> Add step
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setAddingProc(true); setNewProcName(""); }}
+            className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
+          >
+            <Plus className="h-3 w-3" /> Add step
+          </button>
+          {presets.length > 0 && (
+            <button
+              onClick={() => setShowPresetPicker((v) => !v)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
+            >
+              <ListPlus className="h-3 w-3" /> Preset
+            </button>
+          )}
+        </div>
+      )}
+
+      {showPresetPicker && presets.length > 0 && (
+        <div className="mt-1 bg-indigo-50 border border-indigo-200 rounded-lg p-2 space-y-1.5">
+          <p className="text-xs font-semibold text-indigo-700">Apply preset:</p>
+          {presets.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2">
+              <span className="text-xs">{p.name}</span>
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5"
+                  disabled={applyPreset.isPending}
+                  onClick={() => applyPreset.mutate({ presetId: p.id, append: false })}>Replace</Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5"
+                  disabled={applyPreset.isPending}
+                  onClick={() => applyPreset.mutate({ presetId: p.id, append: true })}>Append</Button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -503,8 +545,8 @@ function ComponentProcedureList({ comp, roles, onInvalidate }: {
 
 // ─── BOM (existing, enhanced) ────────────────────────────────────────────────
 
-function TemplateBOM({ template, allProducts, roles }: {
-  template: Template; allProducts: Product[]; roles: Role[];
+function TemplateBOM({ template, allProducts, roles, presets }: {
+  template: Template; allProducts: Product[]; roles: Role[]; presets: StepPreset[];
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -515,10 +557,10 @@ function TemplateBOM({ template, allProducts, roles }: {
   const [newPartName, setNewPartName] = useState("");
   const [componentQty, setComponentQty] = useState(1);
 
-  const compKey = [`/api/products/${productId}/components`];
+  const compKey = [`/api/work/templates/${template.id}/components`];
   const { data: components = [], isLoading } = useQuery<ComponentEntry[]>({
     queryKey: compKey,
-    queryFn: () => apiFetch(`/api/products/${productId}/components`),
+    queryFn: () => apiFetch(`/api/work/templates/${template.id}/components`),
     enabled: !!productId,
   });
 
@@ -632,7 +674,7 @@ function TemplateBOM({ template, allProducts, roles }: {
             </div>
 
             {isManufactured && (
-              <ComponentProcedureList comp={comp} roles={roles} onInvalidate={invalidate} />
+              <ComponentProcedureList templateId={template.id} comp={comp} roles={roles} presets={presets} onInvalidate={invalidate} />
             )}
             {isPurchased && (
               <p className="pl-6 text-xs text-muted-foreground italic">Tracked via stock / inbound</p>
@@ -1053,7 +1095,7 @@ export default function WorkTemplatesPage() {
                         <TemplateProceduresEditor template={template} roles={roles} presets={presets} />
                       </div>
                       {/* BOM */}
-                      <TemplateBOM template={template} allProducts={allProducts} roles={roles} />
+                      <TemplateBOM template={template} allProducts={allProducts} roles={roles} presets={presets} />
                     </div>
                   )}
                 </div>
