@@ -7,8 +7,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  PackageCheck, Truck, Warehouse, Factory, Clock, ChevronRight, Trash2, MapPin, Wrench, Plus,
+  PackageCheck, Truck, Warehouse, Factory, Clock, ChevronRight, Trash2, MapPin, Wrench, Plus, Printer,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -136,6 +137,17 @@ function InboundCard({
           >
             <Truck className="h-4 w-4 mr-1.5" /> Unload Pallet
           </Button>
+        )}
+        {record.status === "arrived" && record.projectId && (
+          <Link href={`/work/projects/${record.projectId}/print-tag`}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 font-bold border-orange-400 text-orange-700 hover:bg-orange-50"
+            >
+              <Printer className="h-4 w-4 mr-1" /> Tags
+            </Button>
+          </Link>
         )}
         {record.status === "arrived" && (
           <Button

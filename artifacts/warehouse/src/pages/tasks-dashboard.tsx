@@ -16,7 +16,7 @@ import {
 
 interface WipLocation { locationType: string; locationValue: string }
 
-interface PartNeeded { partName: string; quantity: number; itemType: string }
+interface PartNeeded { partName: string; quantity: number; itemType: string; location: string | null }
 
 interface MyStep {
   id: number; itemId: number; name: string;
@@ -292,15 +292,23 @@ function MyStepsTab() {
           )}
         </div>
         {step.partsNeeded.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-1">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-1.5">
             <p className="text-[10px] uppercase tracking-wider font-bold text-amber-700 flex items-center gap-1">
               <Layers className="h-3 w-3" /> Parts needed
             </p>
             {step.partsNeeded.map((part, i) => (
-              <p key={i} className="text-xs text-amber-900 flex items-center justify-between">
-                <span className="font-medium truncate">{part.partName}</span>
-                <span className="ml-2 text-amber-700 font-bold flex-shrink-0">×{part.quantity}</span>
-              </p>
+              <div key={i} className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-amber-900 font-medium truncate">{part.partName}</p>
+                  {part.location && (
+                    <p className="text-[10px] text-amber-700 flex items-center gap-0.5 mt-0.5">
+                      <MapPin className="h-2.5 w-2.5 flex-shrink-0" />
+                      <span className="truncate">{part.location}</span>
+                    </p>
+                  )}
+                </div>
+                <span className="text-amber-700 font-bold text-xs flex-shrink-0">×{part.quantity}</span>
+              </div>
             ))}
           </div>
         )}

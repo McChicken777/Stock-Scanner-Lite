@@ -4,7 +4,7 @@ import {
   workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
-  productionZonesTable, wipLocationsTable,
+  productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -1341,7 +1341,7 @@ router.get("/my-steps", requireAuth, async (req, res) => {
     const templateStepIds = allProcsForRoles
       .map((r) => r.proc.templateStepId)
       .filter((id): id is number => id !== null && id !== undefined);
-    const partsNeededMap = new Map<number, { partName: string; quantity: number; itemType: string }[]>();
+    const partsNeededMap = new Map<number, { partName: string; quantity: number; itemType: string; location: string | null }[]>();
     if (templateStepIds.length > 0) {
       const tmplSteps = await db.select({
         id: workStepsTable.id,
@@ -1364,6 +1364,26 @@ router.get("/my-steps", requireAuth, async (req, res) => {
           ? await db.select({ id: productsTable.id, name: productsTable.name, itemType: productsTable.itemType })
               .from(productsTable).where(inArray(productsTable.id, productIds))
           : [];
+
+        // Fetch bin locations for purchased parts (first location with qty > 0)
+        const purchasedProductIds = products
+          .filter((p) => p.itemType === "purchased_part")
+          .map((p) => p.id);
+        const stockBinMap = new Map<number, string>();
+        if (purchasedProductIds.length > 0) {
+          const stockRows = await db.select({
+            productId: stockTable.productId,
+            locationId: stockTable.locationId,
+            quantity: stockTable.quantity,
+          }).from(stockTable)
+            .where(and(inArray(stockTable.productId, purchasedProductIds)));
+          for (const row of stockRows) {
+            if (row.quantity > 0 && !stockBinMap.has(row.productId)) {
+              stockBinMap.set(row.productId, row.locationId);
+            }
+          }
+        }
+
         const productMap = new Map(products.map((p) => [p.id, p]));
         const compMap = new Map(components.map((c) => [c.compId, c]));
 
@@ -1374,11 +1394,15 @@ router.get("/my-steps", requireAuth, async (req, res) => {
           if (!comp) continue;
           const product = productMap.get(comp.componentProductId);
           if (!product) continue;
+          const binLocation = product.itemType === "purchased_part"
+            ? (stockBinMap.get(product.id) ?? null)
+            : null;
           if (!partsNeededMap.has(proc.proc.id)) partsNeededMap.set(proc.proc.id, []);
           partsNeededMap.get(proc.proc.id)!.push({
             partName: product.name,
             quantity: comp.quantity,
             itemType: product.itemType,
+            location: binLocation,
           });
         }
       }
@@ -1393,7 +1417,7 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         .orderBy(desc(wipLocationsTable.setAt));
       for (const row of wipRows) {
         if (!latestWipMap.has(row.stepId)) {
-          latestWipMap.set(row.stepId, { locationType: row.locationType, locationValue: row.locationValue });
+          latestWipMap.set(row.stepId, { locationType: row.locationType, locationValue: row.locationValue ?? "" });
         }
       }
     }
@@ -1418,6 +1442,15 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         }
       }
 
+      // Enrich manufactured parts in partsNeeded with previousWip location
+      const rawParts = partsNeededMap.get(proc.id) ?? [];
+      const enrichedParts = rawParts.map((part) => {
+        if (part.itemType === "manufactured_part" && previousWip && !part.location) {
+          return { ...part, location: previousWip.locationValue };
+        }
+        return part;
+      });
+
       return {
         ...proc,
         roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
@@ -1425,7 +1458,7 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
         wipLocation: latestWipMap.get(proc.id) ?? null,
         previousWip,
-        partsNeeded: partsNeededMap.get(proc.id) ?? [],
+        partsNeeded: enrichedParts,
         item: { id: item.id, name: item.name },
         project: {
           id: project.id,
@@ -1868,11 +1901,12 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
     await db.update(workItemStepsTable).set({ status: "in_progress" }).where(eq(workItemStepsTable.id, procedureId));
     const [log] = await db.insert(workTimeLogsTable).values({ stepId: procedureId, userId, startTime: new Date() }).returning();
 
-    // Auto-log "with_worker" WIP location — worker picked up the part
+    // Auto-log "with_worker" WIP location — include worker's username
+    const [worker] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, userId));
     await db.insert(wipLocationsTable).values({
       stepId: procedureId,
       locationType: "with_worker",
-      locationValue: "With worker (picked up)",
+      locationValue: `With ${worker?.username ?? "worker"} (picked up)`,
       setByUserId: userId,
     }).catch((err: unknown) => {
       req.log.warn({ err, stepId: procedureId }, "Failed to auto-log WIP location on step start");
@@ -2005,7 +2039,11 @@ router.get("/supervisor/daily-plan", requireSupervisorOrAdmin, async (req, res) 
   try {
     const companyId = req.session.companyId!;
 
-    // All non-completed steps for in_progress projects
+    // Daily plan: steps from projects due today or overdue (deadline <= end of today)
+    // Also include any currently in_progress steps regardless of deadline
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     const allSteps = await db
       .select({
         proc: workItemStepsTable,
@@ -2019,6 +2057,10 @@ router.get("/supervisor/daily-plan", requireSupervisorOrAdmin, async (req, res) 
         eq(workProjectsTable.companyId, companyId),
         eq(workProjectsTable.status, "in_progress"),
         ne(workItemStepsTable.status, "completed"),
+        or(
+          sql`${workProjectsTable.deadline} <= ${todayEnd}`,
+          eq(workItemStepsTable.status, "in_progress"),
+        ),
       ))
       .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemStepsTable.sortOrder);
 
@@ -2190,13 +2232,35 @@ router.get("/supervisor/bottlenecks", requireSupervisorOrAdmin, async (req, res)
       }
     }
 
-    // Role bottlenecks: roles where blocked > ready (pressure)
+    // Role bottlenecks: roles with 5+ ready steps queued (workload overload) OR high blocked pressure
+    const BOTTLENECK_QUEUE_THRESHOLD = 5;
     const roleBottlenecks = [...roleStats.entries()]
       .map(([roleId, stats]) => ({ roleId, ...stats }))
-      .filter((r) => r.blockedCount > 0)
-      .sort((a, b) => b.blockedCount - a.blockedCount);
+      .filter((r) => r.readyCount >= BOTTLENECK_QUEUE_THRESHOLD || r.blockedCount > r.readyCount)
+      .sort((a, b) => (b.readyCount + b.blockedCount) - (a.readyCount + a.blockedCount));
 
-    res.json({ roleBottlenecks, overdueProjects, allBlockedItems });
+    // Inbound delay: pallet arrived 2+ days ago and still not routed to production/stored
+    const INBOUND_DELAY_DAYS = 2;
+    const delayThreshold = new Date();
+    delayThreshold.setDate(delayThreshold.getDate() - INBOUND_DELAY_DAYS);
+    const stalledInbound = await db.select().from(inboundTable)
+      .where(and(
+        inArray(inboundTable.projectId, projectIds),
+        or(
+          eq(inboundTable.status, "arrived"),
+          eq(inboundTable.status, "expected"),
+        ),
+        sql`${inboundTable.createdAt} <= ${delayThreshold}`,
+      ));
+    const inboundDelays = stalledInbound.map((r) => ({
+      id: r.id,
+      projectId: r.projectId,
+      projectName: projects.find((p) => p.id === r.projectId)?.name ?? null,
+      status: r.status,
+      daysPending: Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000),
+    }));
+
+    res.json({ roleBottlenecks, overdueProjects, allBlockedItems, inboundDelays });
   } catch (err) {
     req.log.error({ err }, "Failed to get bottlenecks");
     res.status(500).json({ error: "Failed to get bottlenecks" });

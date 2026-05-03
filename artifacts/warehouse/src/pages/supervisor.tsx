@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  AlertTriangle, Calendar, CheckSquare, Clock, Flag, User, Zap,
+  AlertTriangle, Calendar, CheckSquare, Clock, Flag, PackageCheck, Truck, User, Zap,
 } from "lucide-react";
 
 interface DailyPlanStep {
@@ -42,10 +42,19 @@ interface Bottleneck {
   readyCount: number;
 }
 
+interface InboundDelay {
+  id: number;
+  projectId: number | null;
+  projectName: string | null;
+  status: "expected" | "arrived";
+  daysPending: number;
+}
+
 interface BottleneckReport {
   roleBottlenecks: Bottleneck[];
   overdueProjects: { id: number; name: string; deadline: string; priority: string }[];
   allBlockedItems: { id: number; name: string; projectName: string; blockedStep: string }[];
+  inboundDelays: InboundDelay[];
 }
 
 async function apiFetch(url: string) {
@@ -91,7 +100,7 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
             <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${group.overCapacity ? "text-red-600" : "text-foreground"}`}>
               <User className="h-3.5 w-3.5 text-blue-500" />
               {group.roleName ?? "Unassigned"}
-              {group.overCapacity && <Zap className="h-3.5 w-3.5 text-red-500" title="Over 8h capacity" />}
+              {group.overCapacity && <Zap className="h-3.5 w-3.5 text-red-500" aria-label="Over 8h capacity" />}
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-semibold">{group.steps.length} step{group.steps.length !== 1 ? "s" : ""}</span>
@@ -156,7 +165,9 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
 }
 
 function BottlenecksSection({ report }: { report: BottleneckReport }) {
-  const hasIssues = report.roleBottlenecks.length > 0 || report.overdueProjects.length > 0 || report.allBlockedItems.length > 0;
+  const [, navigate] = useLocation();
+  const hasIssues = report.roleBottlenecks.length > 0 || report.overdueProjects.length > 0
+    || report.allBlockedItems.length > 0 || (report.inboundDelays?.length ?? 0) > 0;
 
   if (!hasIssues) {
     return (
@@ -237,6 +248,38 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
           </div>
         </div>
       )}
+
+      {(report.inboundDelays?.length ?? 0) > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+            <Truck className="h-3.5 w-3.5" /> Stalled Inbound ({report.inboundDelays.length})
+          </h3>
+          <p className="text-xs text-muted-foreground">Pallets unrouted for 2+ days</p>
+          <div className="space-y-1.5">
+            {report.inboundDelays.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => navigate("/work/inbound")}
+                className="w-full text-left rounded-lg border border-purple-200 bg-purple-50 px-3 py-2.5 flex items-center justify-between gap-2 active:scale-[0.99] transition-transform"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{d.projectName ?? "Manual entry"}</p>
+                  <p className="text-xs text-purple-700 flex items-center gap-1 mt-0.5">
+                    {d.status === "arrived"
+                      ? <PackageCheck className="h-3 w-3" />
+                      : <Truck className="h-3 w-3" />
+                    }
+                    {d.status === "arrived" ? "Arrived, not routed" : "Expected, not arrived"} · {d.daysPending}d waiting
+                  </p>
+                </div>
+                <span className="flex-shrink-0 text-[10px] font-bold text-purple-700 bg-purple-100 border border-purple-200 px-1.5 py-0.5 rounded-full">
+                  {d.daysPending}d
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -262,7 +305,9 @@ export default function SupervisorPage() {
   }
 
   const overdueCount = bottlenecks?.overdueProjects.length ?? 0;
-  const bottleneckCount = (bottlenecks?.roleBottlenecks.length ?? 0) + (bottlenecks?.allBlockedItems.length ?? 0);
+  const bottleneckCount = (bottlenecks?.roleBottlenecks.length ?? 0)
+    + (bottlenecks?.allBlockedItems.length ?? 0)
+    + (bottlenecks?.inboundDelays?.length ?? 0);
 
   return (
     <div className="p-4 space-y-4 pb-24">
