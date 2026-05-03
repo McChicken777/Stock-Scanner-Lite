@@ -304,8 +304,10 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
       res.status(400).json({ error: `Cannot arrive more than ordered (${poItem.item.quantityOrdered})` }); return;
     }
 
-    // Verify location exists
-    const [loc] = await db.select().from(locationsTable).where(eq(locationsTable.id, parsed.data.locationId));
+    // Verify location exists AND belongs to this company (prevents cross-tenant stock updates)
+    const [loc] = await db.select().from(locationsTable).where(
+      and(eq(locationsTable.id, parsed.data.locationId), eq(locationsTable.companyId, companyId))
+    );
     if (!loc) { res.status(400).json({ error: "Location not found" }); return; }
 
     // Upsert stock at location

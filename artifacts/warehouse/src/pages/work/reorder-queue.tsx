@@ -101,6 +101,59 @@ export default function ReorderQueuePage() {
     cancelled: "bg-red-100 text-red-700",
   };
 
+  // Non-admins see only the shortage flag submission UI
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col min-h-full">
+        <div className="bg-secondary text-secondary-foreground p-4 sticky top-0 z-20 shadow-sm flex items-center gap-3">
+          <Link href="/work/projects" className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
+            <ArrowLeft className="h-6 w-6" />
+          </Link>
+          <h1 className="text-xl font-bold">Report Shortage</h1>
+        </div>
+        <div className="p-4 space-y-4 pb-24">
+          <div className="border-2 border-rose-200 bg-rose-50 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-bold text-rose-800 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Flag a missing or low part
+            </p>
+            <input
+              type="text"
+              placeholder="Part / product name"
+              value={flagProductName}
+              onChange={(e) => setFlagProductName(e.target.value)}
+              className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            <input
+              type="text"
+              placeholder="Note (optional, e.g. needed for job #42)"
+              value={flagNote}
+              onChange={(e) => setFlagNote(e.target.value)}
+              className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+            />
+            <Button
+              className="w-full h-11 font-bold bg-rose-600 hover:bg-rose-700 text-white"
+              disabled={!flagProductName.trim() || flagMutation.isPending}
+              onClick={() => flagMutation.mutate({ productName: flagProductName.trim(), note: flagNote.trim() || undefined })}
+            >
+              Submit Shortage Flag
+            </Button>
+          </div>
+          {activeFlags.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Recent Flags</p>
+              {activeFlags.map((f) => (
+                <div key={f.id} className="border rounded-xl p-3 text-sm">
+                  <p className="font-semibold">{f.productName}</p>
+                  {f.note && <p className="text-xs text-muted-foreground mt-0.5">{f.note}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-full">
       <div className="bg-secondary text-secondary-foreground p-4 sticky top-0 z-20 shadow-sm flex items-center gap-3">
@@ -111,13 +164,11 @@ export default function ReorderQueuePage() {
           <h1 className="text-xl font-bold">Reorder Queue</h1>
           <p className="text-xs opacity-70">{queue.length} items below min stock</p>
         </div>
-        {isAdmin && (
-          <Link href="/work/purchase-orders">
-            <Button size="sm" variant="outline" className="font-bold h-9">
-              <ShoppingCart className="h-3.5 w-3.5 mr-1" /> POs
-            </Button>
-          </Link>
-        )}
+        <Link href="/work/purchase-orders">
+          <Button size="sm" variant="outline" className="font-bold h-9">
+            <ShoppingCart className="h-3.5 w-3.5 mr-1" /> POs
+          </Button>
+        </Link>
       </div>
 
       <div className="p-4 space-y-5 pb-24">

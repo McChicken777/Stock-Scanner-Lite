@@ -604,35 +604,56 @@ export default function PurchaseOrdersPage() {
             <p className="font-semibold text-muted-foreground">No purchase orders yet</p>
             <p className="text-sm text-muted-foreground mt-1">Create a PO to track supplier orders and stock arrivals.</p>
           </div>
-        ) : (
-          <div className="space-y-2">
-            {pos.map((po) => (
-              <Link key={po.id} href={`/work/purchase-orders/${po.id}`}>
-                <div className="border-2 border-border rounded-xl p-3 space-y-2 hover:border-primary/40 transition-colors cursor-pointer">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm">PO #{po.id}</p>
-                      {po.supplierName && <p className="text-xs text-muted-foreground">{po.supplierName}</p>}
-                      {po.expectedDate && (
-                        <p className="text-xs text-muted-foreground">
-                          Expected: {new Date(po.expectedDate).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge className={`${statusColors[po.status] ?? ""} text-[10px] font-bold flex items-center gap-1`}>
-                        {statusIcons[po.status]}
-                        {po.status.replace("_", " ")}
-                      </Badge>
-                      <p className="text-xs text-muted-foreground">{po.itemCount} item{po.itemCount !== 1 ? "s" : ""}</p>
-                    </div>
+        ) : (() => {
+          const OPEN_STATUSES = ["draft", "ordered", "partially_arrived"];
+          const openPos = pos.filter((p) => OPEN_STATUSES.includes(p.status));
+          const closedPos = pos.filter((p) => !OPEN_STATUSES.includes(p.status));
+          const renderPOCard = (po: PurchaseOrder) => (
+            <Link key={po.id} href={`/work/purchase-orders/${po.id}`}>
+              <div className={`border-2 rounded-xl p-3 space-y-2 hover:border-primary/40 transition-colors cursor-pointer ${OPEN_STATUSES.includes(po.status) ? "border-amber-200 bg-amber-50/50" : "border-border"}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">PO #{po.id}</p>
+                    {po.supplierName && <p className="text-xs text-muted-foreground">{po.supplierName}</p>}
+                    {po.expectedDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Expected: {new Date(po.expectedDate).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
-                  {po.notes && <p className="text-xs text-muted-foreground truncate">{po.notes}</p>}
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className={`${statusColors[po.status] ?? ""} text-[10px] font-bold flex items-center gap-1`}>
+                      {statusIcons[po.status]}
+                      {po.status.replace("_", " ")}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground">{po.itemCount} item{po.itemCount !== 1 ? "s" : ""} · {po.totalOrdered} units</p>
+                  </div>
                 </div>
-              </Link>
-            ))}
-          </div>
-        )}
+                {po.notes && <p className="text-xs text-muted-foreground truncate">{po.notes}</p>}
+              </div>
+            </Link>
+          );
+          return (
+            <div className="space-y-4">
+              {openPos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5" /> Open Orders ({openPos.length})
+                  </p>
+                  {openPos.map(renderPOCard)}
+                </div>
+              )}
+              {closedPos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Completed / Cancelled ({closedPos.length})
+                  </p>
+                  {closedPos.map(renderPOCard)}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

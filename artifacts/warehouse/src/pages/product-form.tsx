@@ -291,17 +291,31 @@ export default function ProductFormPage() {
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               <FormField
                 control={form.control}
                 name="minStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Min Stock</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Reorder At</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Reorder point — trigger reorder below this</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Trigger reorder</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="bufferStock"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alert At</FormLabel>
+                    <FormControl>
+                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
+                    </FormControl>
+                    <p className="text-[10px] text-muted-foreground mt-1">Email alert below</p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -311,11 +325,11 @@ export default function ProductFormPage() {
                 name="targetStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Target Stock</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target</FormLabel>
                     <FormControl>
-                      <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
+                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Restock to this level</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Restock to this</p>
                     <FormMessage />
                   </FormItem>
                 )}
