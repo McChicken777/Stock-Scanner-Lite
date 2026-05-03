@@ -211,8 +211,184 @@ export interface StockValuation {
   categories: StockValuationCategory[];
 }
 
+export interface Customer {
+  id: number;
+  name: string;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface CreateCustomerRequest {
+  name: string;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  notes?: string | null;
+}
+
+export type QuoteSummaryStatus =
+  (typeof QuoteSummaryStatus)[keyof typeof QuoteSummaryStatus];
+
+export const QuoteSummaryStatus = {
+  draft: "draft",
+  sent: "sent",
+  approved: "approved",
+  rejected: "rejected",
+  converted: "converted",
+} as const;
+
+export interface QuoteSummary {
+  id: number;
+  quoteNumber: string;
+  status: QuoteSummaryStatus;
+  customerId?: number | null;
+  customerName?: string | null;
+  customerNameLookup?: string | null;
+  customerDisplayName?: string | null;
+  total: number;
+  validUntil?: string | null;
+  workProjectId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type Quote = QuoteSummary & {
+  customerContact?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  notes?: string | null;
+  terms?: string | null;
+  subtotal?: number;
+  discount?: number;
+  taxRate?: number;
+  taxAmount?: number;
+};
+
+export interface QuoteItem {
+  id: number;
+  productId?: number | null;
+  name: string;
+  description?: string | null;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  sortOrder: number;
+}
+
+export type QuoteRevisionSnapshot = { [key: string]: unknown };
+
+export interface QuoteRevision {
+  id: number;
+  revisionNumber: number;
+  note?: string | null;
+  snapshot: QuoteRevisionSnapshot;
+  createdAt: string;
+}
+
+export type QuoteFull = Quote & {
+  customer?: Customer | null;
+  items: QuoteItem[];
+  revisions: QuoteRevision[];
+};
+
+export interface CreateQuoteItemRequest {
+  productId?: number | null;
+  name: string;
+  description?: string | null;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface CreateQuoteRequest {
+  customerId?: number | null;
+  customerName?: string | null;
+  customerContact?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  validUntil?: string | null;
+  notes?: string | null;
+  terms?: string | null;
+  discount?: number;
+  taxRate?: number;
+  revisionNote?: string | null;
+  items: CreateQuoteItemRequest[];
+}
+
+export type SetQuoteStatusRequestStatus =
+  (typeof SetQuoteStatusRequestStatus)[keyof typeof SetQuoteStatusRequestStatus];
+
+export const SetQuoteStatusRequestStatus = {
+  draft: "draft",
+  sent: "sent",
+  approved: "approved",
+  rejected: "rejected",
+} as const;
+
+export interface SetQuoteStatusRequest {
+  status: SetQuoteStatusRequestStatus;
+}
+
+export type ConvertQuoteRequestPriority =
+  (typeof ConvertQuoteRequestPriority)[keyof typeof ConvertQuoteRequestPriority];
+
+export const ConvertQuoteRequestPriority = {
+  low: "low",
+  normal: "normal",
+  high: "high",
+  urgent: "urgent",
+} as const;
+
+export interface ConvertQuoteRequest {
+  deadline: string;
+  priority?: ConvertQuoteRequestPriority;
+}
+
 export type ListHistoryParams = {
   productId?: number;
   locationId?: string;
   limit?: number;
+};
+
+export type DeleteCustomer200 = {
+  ok: boolean;
+};
+
+export type ListQuotesParams = {
+  status?: ListQuotesStatus;
+  customerId?: number;
+  workProjectId?: number;
+  from?: string;
+  to?: string;
+};
+
+export type ListQuotesStatus =
+  (typeof ListQuotesStatus)[keyof typeof ListQuotesStatus];
+
+export const ListQuotesStatus = {
+  draft: "draft",
+  sent: "sent",
+  approved: "approved",
+  rejected: "rejected",
+  converted: "converted",
+} as const;
+
+export type DeleteQuote200 = {
+  ok: boolean;
+};
+
+export type ConvertQuoteToWorkProject200Project = {
+  id: number;
+  name: string;
+};
+
+export type ConvertQuoteToWorkProject200 = {
+  quote: Quote;
+  project: ConvertQuoteToWorkProject200Project;
 };

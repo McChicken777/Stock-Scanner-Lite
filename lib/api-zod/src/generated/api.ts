@@ -317,6 +317,428 @@ export const GetStockValuationResponse = zod.object({
 });
 
 /**
+ * @summary List customers for the current company
+ */
+export const ListCustomersResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const ListCustomersResponse = zod.array(ListCustomersResponseItem);
+
+/**
+ * @summary Create a customer
+ */
+export const CreateCustomerBody = zod.object({
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const CreateCustomerResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Get a single customer
+ */
+export const GetCustomerParams = zod.object({
+  customerId: zod.coerce.number(),
+});
+
+export const GetCustomerResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a customer
+ */
+export const UpdateCustomerParams = zod.object({
+  customerId: zod.coerce.number(),
+});
+
+export const UpdateCustomerBody = zod.object({
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+});
+
+export const UpdateCustomerResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  contactPerson: zod.string().nullish(),
+  email: zod.string().nullish(),
+  phone: zod.string().nullish(),
+  address: zod.string().nullish(),
+  notes: zod.string().nullish(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a customer
+ */
+export const DeleteCustomerParams = zod.object({
+  customerId: zod.coerce.number(),
+});
+
+export const DeleteCustomerResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary List quotes (filterable by status, customerId, workProjectId, from, to)
+ */
+export const ListQuotesQueryParams = zod.object({
+  status: zod
+    .enum(["draft", "sent", "approved", "rejected", "converted"])
+    .optional(),
+  customerId: zod.coerce.number().optional(),
+  workProjectId: zod.coerce.number().optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
+});
+
+export const ListQuotesResponseItem = zod.object({
+  id: zod.number(),
+  quoteNumber: zod.string(),
+  status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+  customerId: zod.number().nullish(),
+  customerName: zod.string().nullish(),
+  customerNameLookup: zod.string().nullish(),
+  customerDisplayName: zod.string().nullish(),
+  total: zod.number(),
+  validUntil: zod.coerce.date().nullish(),
+  workProjectId: zod.number().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListQuotesResponse = zod.array(ListQuotesResponseItem);
+
+/**
+ * @summary Create a quote
+ */
+export const CreateQuoteBody = zod.object({
+  customerId: zod.number().nullish(),
+  customerName: zod.string().nullish(),
+  customerContact: zod.string().nullish(),
+  customerEmail: zod.string().nullish(),
+  customerPhone: zod.string().nullish(),
+  customerAddress: zod.string().nullish(),
+  validUntil: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  terms: zod.string().nullish(),
+  discount: zod.number().optional(),
+  taxRate: zod.number().optional(),
+  revisionNote: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      productId: zod.number().nullish(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+    }),
+  ),
+});
+
+export const CreateQuoteResponse = zod
+  .object({
+    id: zod.number(),
+    quoteNumber: zod.string(),
+    status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+    customerId: zod.number().nullish(),
+    customerName: zod.string().nullish(),
+    customerNameLookup: zod.string().nullish(),
+    customerDisplayName: zod.string().nullish(),
+    total: zod.number(),
+    validUntil: zod.coerce.date().nullish(),
+    workProjectId: zod.number().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerContact: zod.string().nullish(),
+      customerEmail: zod.string().nullish(),
+      customerPhone: zod.string().nullish(),
+      customerAddress: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      terms: zod.string().nullish(),
+      subtotal: zod.number().optional(),
+      discount: zod.number().optional(),
+      taxRate: zod.number().optional(),
+      taxAmount: zod.number().optional(),
+    }),
+  );
+
+/**
+ * @summary Get a quote with items, customer and revisions
+ */
+export const GetQuoteParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+export const GetQuoteResponse = zod
+  .object({
+    id: zod.number(),
+    quoteNumber: zod.string(),
+    status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+    customerId: zod.number().nullish(),
+    customerName: zod.string().nullish(),
+    customerNameLookup: zod.string().nullish(),
+    customerDisplayName: zod.string().nullish(),
+    total: zod.number(),
+    validUntil: zod.coerce.date().nullish(),
+    workProjectId: zod.number().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerContact: zod.string().nullish(),
+      customerEmail: zod.string().nullish(),
+      customerPhone: zod.string().nullish(),
+      customerAddress: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      terms: zod.string().nullish(),
+      subtotal: zod.number().optional(),
+      discount: zod.number().optional(),
+      taxRate: zod.number().optional(),
+      taxAmount: zod.number().optional(),
+    }),
+  )
+  .and(
+    zod.object({
+      customer: zod
+        .object({
+          id: zod.number(),
+          name: zod.string(),
+          contactPerson: zod.string().nullish(),
+          email: zod.string().nullish(),
+          phone: zod.string().nullish(),
+          address: zod.string().nullish(),
+          notes: zod.string().nullish(),
+          createdAt: zod.coerce.date(),
+        })
+        .nullish(),
+      items: zod.array(
+        zod.object({
+          id: zod.number(),
+          productId: zod.number().nullish(),
+          name: zod.string(),
+          description: zod.string().nullish(),
+          quantity: zod.number(),
+          unitPrice: zod.number(),
+          lineTotal: zod.number(),
+          sortOrder: zod.number(),
+        }),
+      ),
+      revisions: zod.array(
+        zod.object({
+          id: zod.number(),
+          revisionNumber: zod.number(),
+          note: zod.string().nullish(),
+          snapshot: zod.record(zod.string(), zod.unknown()),
+          createdAt: zod.coerce.date(),
+        }),
+      ),
+    }),
+  );
+
+/**
+ * @summary Update a quote (only when not converted)
+ */
+export const UpdateQuoteParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+export const UpdateQuoteBody = zod.object({
+  customerId: zod.number().nullish(),
+  customerName: zod.string().nullish(),
+  customerContact: zod.string().nullish(),
+  customerEmail: zod.string().nullish(),
+  customerPhone: zod.string().nullish(),
+  customerAddress: zod.string().nullish(),
+  validUntil: zod.coerce.date().nullish(),
+  notes: zod.string().nullish(),
+  terms: zod.string().nullish(),
+  discount: zod.number().optional(),
+  taxRate: zod.number().optional(),
+  revisionNote: zod.string().nullish(),
+  items: zod.array(
+    zod.object({
+      productId: zod.number().nullish(),
+      name: zod.string(),
+      description: zod.string().nullish(),
+      quantity: zod.number(),
+      unitPrice: zod.number(),
+    }),
+  ),
+});
+
+export const UpdateQuoteResponse = zod
+  .object({
+    id: zod.number(),
+    quoteNumber: zod.string(),
+    status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+    customerId: zod.number().nullish(),
+    customerName: zod.string().nullish(),
+    customerNameLookup: zod.string().nullish(),
+    customerDisplayName: zod.string().nullish(),
+    total: zod.number(),
+    validUntil: zod.coerce.date().nullish(),
+    workProjectId: zod.number().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerContact: zod.string().nullish(),
+      customerEmail: zod.string().nullish(),
+      customerPhone: zod.string().nullish(),
+      customerAddress: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      terms: zod.string().nullish(),
+      subtotal: zod.number().optional(),
+      discount: zod.number().optional(),
+      taxRate: zod.number().optional(),
+      taxAmount: zod.number().optional(),
+    }),
+  );
+
+/**
+ * @summary Delete a quote (only when not converted)
+ */
+export const DeleteQuoteParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+export const DeleteQuoteResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * @summary Transition quote status (draft → sent → approved/rejected)
+ */
+export const SetQuoteStatusParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+export const SetQuoteStatusBody = zod.object({
+  status: zod.enum(["draft", "sent", "approved", "rejected"]),
+});
+
+export const SetQuoteStatusResponse = zod
+  .object({
+    id: zod.number(),
+    quoteNumber: zod.string(),
+    status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+    customerId: zod.number().nullish(),
+    customerName: zod.string().nullish(),
+    customerNameLookup: zod.string().nullish(),
+    customerDisplayName: zod.string().nullish(),
+    total: zod.number(),
+    validUntil: zod.coerce.date().nullish(),
+    workProjectId: zod.number().nullish(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      customerContact: zod.string().nullish(),
+      customerEmail: zod.string().nullish(),
+      customerPhone: zod.string().nullish(),
+      customerAddress: zod.string().nullish(),
+      notes: zod.string().nullish(),
+      terms: zod.string().nullish(),
+      subtotal: zod.number().optional(),
+      discount: zod.number().optional(),
+      taxRate: zod.number().optional(),
+      taxAmount: zod.number().optional(),
+    }),
+  );
+
+/**
+ * @summary Convert an approved quote to a work project (idempotent within a quote)
+ */
+export const ConvertQuoteToWorkProjectParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+export const ConvertQuoteToWorkProjectBody = zod.object({
+  deadline: zod.coerce.date(),
+  priority: zod.enum(["low", "normal", "high", "urgent"]).optional(),
+});
+
+export const ConvertQuoteToWorkProjectResponse = zod.object({
+  quote: zod
+    .object({
+      id: zod.number(),
+      quoteNumber: zod.string(),
+      status: zod.enum(["draft", "sent", "approved", "rejected", "converted"]),
+      customerId: zod.number().nullish(),
+      customerName: zod.string().nullish(),
+      customerNameLookup: zod.string().nullish(),
+      customerDisplayName: zod.string().nullish(),
+      total: zod.number(),
+      validUntil: zod.coerce.date().nullish(),
+      workProjectId: zod.number().nullish(),
+      createdAt: zod.coerce.date(),
+      updatedAt: zod.coerce.date(),
+    })
+    .and(
+      zod.object({
+        customerContact: zod.string().nullish(),
+        customerEmail: zod.string().nullish(),
+        customerPhone: zod.string().nullish(),
+        customerAddress: zod.string().nullish(),
+        notes: zod.string().nullish(),
+        terms: zod.string().nullish(),
+        subtotal: zod.number().optional(),
+        discount: zod.number().optional(),
+        taxRate: zod.number().optional(),
+        taxAmount: zod.number().optional(),
+      }),
+    ),
+  project: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+  }),
+});
+
+/**
+ * @summary Download a PDF of the quote
+ */
+export const GetQuotePdfParams = zod.object({
+  quoteId: zod.coerce.number(),
+});
+
+/**
  * @summary Get dashboard summary with low stock alerts
  */
 export const GetDashboardSummaryResponse = zod.object({

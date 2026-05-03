@@ -19,6 +19,10 @@ tags:
     description: Change history log
   - name: alerts
     description: Low stock alerts
+  - name: customers
+    description: Customer directory
+  - name: quotes
+    description: Quotes / estimates that convert into work orders
 paths:
   /healthz:
     get:
@@ -330,6 +334,262 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StockValuation"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers for the current company
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+      responses:
+        "200":
+          description: Created customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{customerId}:
+    parameters:
+      - in: path
+        name: customerId
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get a single customer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerRequest"
+      responses:
+        "200":
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
+  /quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      summary: List quotes (filterable by status, customerId, workProjectId, from, to)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [draft, sent, approved, rejected, converted]
+        - in: query
+          name: customerId
+          schema: { type: integer }
+        - in: query
+          name: workProjectId
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: List of quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuoteSummary"
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      summary: Create a quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "200":
+          description: Created quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+
+  /quotes/{quoteId}:
+    parameters:
+      - in: path
+        name: quoteId
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getQuote
+      tags: [quotes]
+      summary: Get a quote with items, customer and revisions
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteFull"
+    put:
+      operationId: updateQuote
+      tags: [quotes]
+      summary: Update a quote (only when not converted)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "200":
+          description: Updated quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+    delete:
+      operationId: deleteQuote
+      tags: [quotes]
+      summary: Delete a quote (only when not converted)
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                required: [ok]
+
+  /quotes/{quoteId}/status:
+    parameters:
+      - in: path
+        name: quoteId
+        required: true
+        schema: { type: integer }
+    put:
+      operationId: setQuoteStatus
+      tags: [quotes]
+      summary: Transition quote status (draft → sent → approved/rejected)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetQuoteStatusRequest"
+      responses:
+        "200":
+          description: Updated quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+
+  /quotes/{quoteId}/convert:
+    parameters:
+      - in: path
+        name: quoteId
+        required: true
+        schema: { type: integer }
+    post:
+      operationId: convertQuoteToWorkProject
+      tags: [quotes]
+      summary: Convert an approved quote to a work project (idempotent within a quote)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConvertQuoteRequest"
+      responses:
+        "200":
+          description: Conversion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quote: { $ref: "#/components/schemas/Quote" }
+                  project:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                    required: [id, name]
+                required: [quote, project]
+
+  /quotes/{quoteId}/pdf:
+    parameters:
+      - in: path
+        name: quoteId
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: getQuotePdf
+      tags: [quotes]
+      summary: Download a PDF of the quote
+      responses:
+        "200":
+          description: PDF document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
 
   /dashboard/summary:
     get:
@@ -827,3 +1087,148 @@ components:
         - category
         - productCount
         - totalStock
+
+    Customer:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        contactPerson: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, name, createdAt]
+
+    CreateCustomerRequest:
+      type: object
+      properties:
+        name: { type: string }
+        contactPerson: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+      required: [name]
+
+    QuoteSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        quoteNumber: { type: string }
+        status:
+          type: string
+          enum: [draft, sent, approved, rejected, converted]
+        customerId: { type: integer, nullable: true }
+        customerName: { type: string, nullable: true }
+        customerNameLookup: { type: string, nullable: true }
+        customerDisplayName: { type: string, nullable: true }
+        total: { type: number }
+        validUntil: { type: string, format: date-time, nullable: true }
+        workProjectId: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, quoteNumber, status, total, createdAt, updatedAt]
+
+    Quote:
+      allOf:
+        - $ref: "#/components/schemas/QuoteSummary"
+        - type: object
+          properties:
+            customerContact: { type: string, nullable: true }
+            customerEmail: { type: string, nullable: true }
+            customerPhone: { type: string, nullable: true }
+            customerAddress: { type: string, nullable: true }
+            notes: { type: string, nullable: true }
+            terms: { type: string, nullable: true }
+            subtotal: { type: number }
+            discount: { type: number }
+            taxRate: { type: number }
+            taxAmount: { type: number }
+
+    QuoteItem:
+      type: object
+      properties:
+        id: { type: integer }
+        productId: { type: integer, nullable: true }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        quantity: { type: number }
+        unitPrice: { type: number }
+        lineTotal: { type: number }
+        sortOrder: { type: integer }
+      required: [id, name, quantity, unitPrice, lineTotal, sortOrder]
+
+    QuoteRevision:
+      type: object
+      properties:
+        id: { type: integer }
+        revisionNumber: { type: integer }
+        note: { type: string, nullable: true }
+        snapshot: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+      required: [id, revisionNumber, snapshot, createdAt]
+
+    QuoteFull:
+      allOf:
+        - $ref: "#/components/schemas/Quote"
+        - type: object
+          properties:
+            customer:
+              nullable: true
+              $ref: "#/components/schemas/Customer"
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/QuoteItem" }
+            revisions:
+              type: array
+              items: { $ref: "#/components/schemas/QuoteRevision" }
+          required: [items, revisions]
+
+    CreateQuoteItemRequest:
+      type: object
+      properties:
+        productId: { type: integer, nullable: true }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        quantity: { type: number }
+        unitPrice: { type: number }
+      required: [name, quantity, unitPrice]
+
+    CreateQuoteRequest:
+      type: object
+      properties:
+        customerId: { type: integer, nullable: true }
+        customerName: { type: string, nullable: true }
+        customerContact: { type: string, nullable: true }
+        customerEmail: { type: string, nullable: true }
+        customerPhone: { type: string, nullable: true }
+        customerAddress: { type: string, nullable: true }
+        validUntil: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+        terms: { type: string, nullable: true }
+        discount: { type: number }
+        taxRate: { type: number }
+        revisionNote: { type: string, nullable: true }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CreateQuoteItemRequest" }
+      required: [items]
+
+    SetQuoteStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, sent, approved, rejected]
+      required: [status]
+
+    ConvertQuoteRequest:
+      type: object
+      properties:
+        deadline: { type: string, format: date }
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+      required: [deadline]

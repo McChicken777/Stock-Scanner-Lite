@@ -44,7 +44,7 @@ interface QuoteFull {
   updatedAt: string;
   customer: { id: number; name: string; email: string | null; phone: string | null } | null;
   items: { id: number; name: string; description: string | null; quantity: number | string; unitPrice: number | string; lineTotal: number | string; productId: number | null }[];
-  revisions: { id: number; revisionNumber: number; note: string | null; createdAt: string }[];
+  revisions: { id: number; revisionNumber: number; note: string | null; createdAt: string; snapshot: { quote: Record<string, unknown>; items: Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number }> } }[];
 }
 
 const statusBadge: Record<string, string> = {
@@ -65,6 +65,7 @@ export default function QuoteDetailPage() {
   const qc = useQueryClient();
 
   const [convertOpen, setConvertOpen] = useState(false);
+  const [openRevisionId, setOpenRevisionId] = useState<number | null>(null);
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
 
@@ -236,13 +237,41 @@ export default function QuoteDetailPage() {
               <History className="h-4 w-4 text-muted-foreground" />
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Revision History</p>
             </div>
-            <div className="space-y-1">
-              {quote.revisions.map((r) => (
-                <div key={r.id} className="flex items-center justify-between text-xs">
-                  <span className="font-semibold">v{r.revisionNumber} · {r.note ?? "Edited"}</span>
-                  <span className="text-muted-foreground">{format(new Date(r.createdAt), "dd MMM HH:mm")}</span>
-                </div>
-              ))}
+            <div className="space-y-2">
+              {quote.revisions.map((r) => {
+                const isOpen = openRevisionId === r.id;
+                const snapTotal = (r.snapshot?.quote as { total?: number } | undefined)?.total;
+                return (
+                  <div key={r.id} className="border border-border rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenRevisionId(isOpen ? null : r.id)}
+                      className="w-full flex items-center justify-between text-xs px-3 py-2 hover:bg-muted/50 transition-colors"
+                    >
+                      <span className="font-semibold text-left">v{r.revisionNumber} · {r.note ?? "Edited"}</span>
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        {snapTotal != null && <span className="font-mono">${Number(snapTotal).toFixed(2)}</span>}
+                        {format(new Date(r.createdAt), "dd MMM HH:mm")}
+                        <span className="text-[10px]">{isOpen ? "▲" : "▼"}</span>
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div className="bg-muted/40 border-t border-border px-3 py-2 space-y-1">
+                        {r.snapshot?.items?.length ? (
+                          r.snapshot.items.map((it, i) => (
+                            <div key={i} className="flex justify-between text-[11px] font-mono">
+                              <span className="truncate pr-2">{it.name} × {it.quantity}</span>
+                              <span>${Number(it.lineTotal).toFixed(2)}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">No item snapshot.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

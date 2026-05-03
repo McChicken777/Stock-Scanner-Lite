@@ -37,6 +37,7 @@ const quoteSchema = z.object({
   discount: z.number().min(0).default(0),
   taxRate: z.number().min(0).max(100).default(0),
   items: z.array(itemInputSchema).default([]),
+  revisionNote: z.string().nullable().optional(),
 });
 
 function computeTotals(items: { quantity: number; unitPrice: number }[], discount: number, taxRate: number) {
@@ -257,9 +258,10 @@ router.put("/:id", requireAdmin, async (req, res) => {
     const ownOk = await assertCustomerOwnership(parsed.data.customerId, companyId);
     if (ownOk !== true) { res.status(400).json({ error: ownOk }); return; }
 
-    // If quote was already sent, snapshot the previous state
-    if (existing.status !== "draft") {
-      await recordRevision(id, req.session.userId, "Edited after send");
+    // If quote was already sent, or the user supplied a revision note,
+    // snapshot the previous state so the boss can see what changed.
+    if (existing.status !== "draft" || parsed.data.revisionNote) {
+      await recordRevision(id, req.session.userId, parsed.data.revisionNote ?? "Edited after send");
     }
 
     const d = parsed.data;
