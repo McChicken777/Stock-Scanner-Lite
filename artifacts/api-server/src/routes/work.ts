@@ -8,7 +8,7 @@ import {
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
-import { requireAuth, requireAdmin } from "../middlewares/auth";
+import { requireAuth, requireAdmin, requireSupervisorOrAdmin } from "../middlewares/auth";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { seedStarterPack, STARTER_PACK_COUNT } from "../lib/seedStarterPack";
 
@@ -1337,6 +1337,20 @@ router.get("/my-steps", requireAuth, async (req, res) => {
     const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
     const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
 
+    // Fetch latest WIP location for all visible step IDs
+    const stepIds = allProcsForRoles.map((r) => r.proc.id);
+    const latestWipMap = new Map<number, { locationType: string; locationValue: string }>();
+    if (stepIds.length > 0) {
+      const wipRows = await db.select().from(wipLocationsTable)
+        .where(inArray(wipLocationsTable.stepId, stepIds))
+        .orderBy(desc(wipLocationsTable.setAt));
+      for (const row of wipRows) {
+        if (!latestWipMap.has(row.stepId)) {
+          latestWipMap.set(row.stepId, { locationType: row.locationType, locationValue: row.locationValue });
+        }
+      }
+    }
+
     const result = allProcsForRoles.map(({ proc, item, project }) => {
       const itemProcs = itemProcMap.get(item.id) ?? [];
       const myIndex = itemProcs.findIndex((p) => p.id === proc.id);
@@ -1344,11 +1358,26 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         ? itemProcs.slice(0, myIndex).find((p) => p.status !== "completed")
         : undefined;
 
+      // Previous step's WIP location (to show on the card for the next worker)
+      let previousWip: { locationType: string; locationValue: string } | null = null;
+      if (myIndex > 0) {
+        const completedPrev = itemProcs
+          .slice(0, myIndex)
+          .filter((p) => p.status === "completed")
+          .reverse();
+        for (const prev of completedPrev) {
+          const wip = latestWipMap.get(prev.id);
+          if (wip) { previousWip = wip; break; }
+        }
+      }
+
       return {
         ...proc,
         roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
         stepStatus: blockedByStep ? "blocked" : "ready",
         blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
+        wipLocation: latestWipMap.get(proc.id) ?? null,
+        previousWip,
         item: { id: item.id, name: item.name },
         project: {
           id: project.id,
@@ -1781,6 +1810,15 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
 
     await db.update(workItemStepsTable).set({ status: "in_progress" }).where(eq(workItemStepsTable.id, procedureId));
     const [log] = await db.insert(workTimeLogsTable).values({ stepId: procedureId, userId, startTime: new Date() }).returning();
+
+    // Auto-log "with_worker" WIP location — worker picked up the part
+    await db.insert(wipLocationsTable).values({
+      stepId: procedureId,
+      locationType: "with_worker",
+      locationValue: "With worker (picked up)",
+      setByUserId: userId,
+    }).catch(() => {});
+
     res.status(201).json(log);
   } catch (err) {
     req.log.error({ err }, "Failed to start timer");
@@ -1904,7 +1942,7 @@ router.post("/steps/:stepId/wip-location", requireAuth, async (req, res) => {
 
 // ─── SUPERVISOR ENDPOINTS ──────────────────────────────────────────────────────
 
-router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
+router.get("/supervisor/daily-plan", requireSupervisorOrAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
 
@@ -1946,7 +1984,8 @@ router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
     const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
 
     const readyAndActive: Array<{
-      id: number; name: string; itemName: string; projectName: string;
+      id: number; name: string; itemName: string; itemId: number;
+      projectName: string; projectId: number;
       deadline: string; priority: string; roleName: string | null;
       durationEstimate: number | null; status: "not_started" | "in_progress";
       roleId: number | null;
@@ -1964,7 +2003,9 @@ router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
           id: proc.id,
           name: proc.name,
           itemName: item.name,
+          itemId: item.id,
           projectName: project.name,
+          projectId: project.id,
           deadline: project.deadline.toISOString(),
           priority: project.priority,
           roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
@@ -1983,12 +2024,17 @@ router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
       roleGroupMap.get(key)!.push(step);
     }
 
-    const roleGroups = [...roleGroupMap.entries()].map(([, steps]) => ({
-      roleId: steps[0].roleId,
-      roleName: steps[0].roleName,
-      steps,
-      totalMinutes: steps.reduce((sum, s) => sum + (s.durationEstimate ?? 0), 0),
-    })).sort((a, b) => (a.roleName ?? "zzz").localeCompare(b.roleName ?? "zzz"));
+    const SHIFT_MINUTES = 480; // 8-hour shift
+    const roleGroups = [...roleGroupMap.entries()].map(([, steps]) => {
+      const totalMinutes = steps.reduce((sum, s) => sum + (s.durationEstimate ?? 0), 0);
+      return {
+        roleId: steps[0].roleId,
+        roleName: steps[0].roleName,
+        steps,
+        totalMinutes,
+        overCapacity: totalMinutes > SHIFT_MINUTES,
+      };
+    }).sort((a, b) => (a.roleName ?? "zzz").localeCompare(b.roleName ?? "zzz"));
 
     res.json({
       roleGroups,
@@ -2001,7 +2047,7 @@ router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/supervisor/bottlenecks", requireAuth, async (req, res) => {
+router.get("/supervisor/bottlenecks", requireSupervisorOrAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
 

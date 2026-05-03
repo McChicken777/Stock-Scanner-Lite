@@ -50,6 +50,7 @@ router.post("/login", async (req, res) => {
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.role = user.role;
+    req.session.isSupervisor = user.isSupervisor ?? false;
     req.session.companyId = user.companyId ?? 0;
     req.session.features = features;
 

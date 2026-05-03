@@ -1,16 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  AlertTriangle, Calendar, CheckSquare, Clock, Flag, User,
+  AlertTriangle, Calendar, CheckSquare, Clock, Flag, User, Zap,
 } from "lucide-react";
 
 interface DailyPlanStep {
   id: number;
   name: string;
   itemName: string;
+  itemId: number;
   projectName: string;
+  projectId: number;
   deadline: string;
   priority: string;
   roleName: string | null;
@@ -23,6 +26,7 @@ interface RoleGroup {
   roleName: string | null;
   steps: DailyPlanStep[];
   totalMinutes: number;
+  overCapacity: boolean;
 }
 
 interface DailyPlan {
@@ -68,6 +72,8 @@ function formatDeadline(dateStr: string) {
 }
 
 function DailyPlanSection({ plan }: { plan: DailyPlan }) {
+  const [, navigate] = useLocation();
+
   if (plan.totalReady + plan.totalInProgress === 0) {
     return (
       <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed">
@@ -82,26 +88,34 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
       {plan.roleGroups.map((group) => (
         <div key={group.roleId ?? "unassigned"} className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+            <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${group.overCapacity ? "text-red-600" : "text-foreground"}`}>
               <User className="h-3.5 w-3.5 text-blue-500" />
               {group.roleName ?? "Unassigned"}
+              {group.overCapacity && <Zap className="h-3.5 w-3.5 text-red-500" title="Over 8h capacity" />}
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-semibold">{group.steps.length} step{group.steps.length !== 1 ? "s" : ""}</span>
               {group.totalMinutes > 0 && (
-                <span className="flex items-center gap-0.5">
-                  <Clock className="h-3 w-3" /> ~{group.totalMinutes}m est.
+                <span className={`flex items-center gap-0.5 ${group.overCapacity ? "text-red-600 font-bold" : ""}`}>
+                  <Clock className="h-3 w-3" /> ~{group.totalMinutes >= 60 ? `${Math.round(group.totalMinutes / 60 * 10) / 10}h` : `${group.totalMinutes}m`}
+                  {group.overCapacity && " ⚠"}
                 </span>
               )}
             </div>
           </div>
+          {group.overCapacity && (
+            <p className="text-[11px] text-red-600 font-medium bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
+              Over 8h of work queued for this role — consider re-assigning some steps.
+            </p>
+          )}
           <div className="space-y-1.5">
             {group.steps.map((step) => {
               const dl = formatDeadline(step.deadline);
               return (
-                <div
+                <button
                   key={step.id}
-                  className={`rounded-lg border px-3 py-2.5 space-y-1 ${
+                  onClick={() => navigate(`/work/projects/${step.projectId}`)}
+                  className={`w-full text-left rounded-lg border px-3 py-2.5 space-y-1 transition-colors active:scale-[0.99] ${
                     step.status === "in_progress"
                       ? "bg-orange-50 border-orange-200"
                       : dl.overdue ? "bg-red-50 border-red-200" : "bg-card border-border"
@@ -131,7 +145,7 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

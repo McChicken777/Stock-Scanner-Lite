@@ -14,6 +14,8 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface WipLocation { locationType: string; locationValue: string }
+
 interface MyStep {
   id: number; itemId: number; name: string;
   status: "not_started" | "in_progress" | "completed";
@@ -22,6 +24,8 @@ interface MyStep {
   batchMode: string; durationEstimate: number | null;
   stepStatus: "ready" | "blocked";
   blockedByStep: { id: number; name: string } | null;
+  wipLocation: WipLocation | null;
+  previousWip: WipLocation | null;
   item: { id: number; name: string };
   project: { id: number; name: string; deadline: string; priority: string };
 }
@@ -106,6 +110,7 @@ function WipLocationDialog({
   const { toast } = useToast();
   const [locationType, setLocationType] = useState<"warehouse" | "zone" | "with_worker">("warehouse");
   const [zoneId, setZoneId] = useState<string>("");
+  const [warehouseNote, setWarehouseNote] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   const { data: zones = [] } = useQuery<ProductionZone[]>({
@@ -118,7 +123,8 @@ function WipLocationDialog({
     try {
       const locationValue = locationType === "zone"
         ? (zones.find((z) => z.id === Number(zoneId))?.name ?? zoneId)
-        : locationType === "with_worker" ? "With worker" : "General warehouse area";
+        : locationType === "with_worker" ? "With worker"
+        : warehouseNote.trim() ? warehouseNote.trim() : "General warehouse area";
       await apiFetch(`/api/work/steps/${stepId}/wip-location`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -182,6 +188,16 @@ function WipLocationDialog({
               ))}
             </SelectContent>
           </Select>
+        )}
+
+        {locationType === "warehouse" && (
+          <input
+            type="text"
+            placeholder="Shelf / rack / area (optional, e.g. A-12)"
+            value={warehouseNote}
+            onChange={(e) => setWarehouseNote(e.target.value)}
+            className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
         )}
 
         {locationType === "zone" && zones.length === 0 && (
@@ -272,6 +288,18 @@ function MyStepsTab() {
             </span>
           )}
         </div>
+        {step.previousWip && variant === "ready" && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">Part is at: <strong>{step.previousWip.locationValue}</strong></span>
+          </p>
+        )}
+        {variant === "inProgress" && step.wipLocation && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">Logged: {step.wipLocation.locationValue}</span>
+          </p>
+        )}
         {variant === "inProgress" && (
           <Button size="sm" onClick={() => stopMutation.mutate(step.id)} disabled={stopMutation.isPending}
             className="w-full bg-green-600 hover:bg-green-700 font-bold">

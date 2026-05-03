@@ -12,6 +12,7 @@ declare module "express-session" {
     userId: number;
     username: string;
     role: "owner" | "admin" | "worker";
+    isSupervisor: boolean;
     companyId: number;
     features: import("@workspace/db").CompanyFeatures;
   }

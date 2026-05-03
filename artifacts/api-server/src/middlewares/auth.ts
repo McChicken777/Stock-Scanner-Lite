@@ -33,6 +33,18 @@ export function requireOwner(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+export function requireSupervisorOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  if (req.session.role !== "admin" && req.session.role !== "owner" && !req.session.isSupervisor) {
+    res.status(403).json({ error: "Supervisor or admin access required" });
+    return;
+  }
+  next();
+}
+
 export function requireFeature(feature: keyof CompanyFeatures) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.session?.features?.[feature]) {
