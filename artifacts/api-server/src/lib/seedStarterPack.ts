@@ -1,5 +1,5 @@
 import {
-  db, workTemplatesTable, workTemplateProceduresTable,
+  db, workTemplatesTable, workStepsTable,
   productsTable, productComponentsTable, productProceduresTable,
 } from "@workspace/db";
 
@@ -104,7 +104,7 @@ export async function seedStarterPack(companyId: number): Promise<number> {
     }).returning();
 
     for (let i = 0; i < tmpl.topProcs.length; i++) {
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId: template.id, name: tmpl.topProcs[i].name, sortOrder: i,
         roleId: null, batchMode: "individual",
       });

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
-  db, workTemplatesTable, workTemplateProceduresTable, workProjectsTable,
-  workProjectItemsTable, workItemProceduresTable, workTimeLogsTable, inboundTable,
+  db, workTemplatesTable, workStepsTable, workProjectsTable,
+  workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
   productsTable, productComponentsTable, productProceduresTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
 } from "@workspace/db";
@@ -129,7 +129,7 @@ Rules:
 
     for (let i = 0; i < generated.topProcedures.length; i++) {
       const p = generated.topProcedures[i];
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId: template.id, name: p.name, sortOrder: i,
         roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
         durationEstimate: p.durationEstimate ?? null,
@@ -256,11 +256,11 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
     }).returning();
 
     // Clone top-level template procedures
-    const srcProcs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const srcProcs = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
     for (const p of srcProcs) {
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId: newTemplate.id, name: p.name, sortOrder: p.sortOrder,
         requiresInbound: p.requiresInbound, roleId: p.roleId ?? null,
         batchMode: p.batchMode ?? "individual", durationEstimate: p.durationEstimate ?? null,
@@ -290,9 +290,9 @@ router.put("/templates/:id/ai-edit", requireAdmin, async (req, res) => {
     if (!template) { res.status(404).json({ error: "Not found" }); return; }
 
     // Snapshot current state before editing
-    const currentProcs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const currentProcs = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
 
     // Save snapshot for undo
     await db.insert(aiSnapshotsTable).values({
@@ -345,19 +345,19 @@ Rules:
     }
 
     // Replace all template procedures
-    await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+    await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i];
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId, name: s.name, sortOrder: i,
         roleId: s.roleId ?? null, batchMode: s.batchMode ?? "individual",
         durationEstimate: s.durationEstimate ?? null,
       });
     }
 
-    const updated = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const updated = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
     res.json({ procedures: updated, canUndo: true });
   } catch (err) {
     req.log.error({ err }, "Failed to AI edit template");
@@ -391,9 +391,9 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
     }
 
     const procs = snapshot.snapshot as { name: string; sortOrder: number; requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
-    await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+    await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
     for (const p of procs) {
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId, name: p.name, sortOrder: p.sortOrder,
         requiresInbound: p.requiresInbound ?? false,
         roleId: p.roleId ?? null, batchMode: p.batchMode ?? "individual",
@@ -404,9 +404,9 @@ router.post("/templates/:id/undo", requireAdmin, async (req, res) => {
     // Remove the used snapshot
     await db.delete(aiSnapshotsTable).where(eq(aiSnapshotsTable.id, snapshot.id));
 
-    const updated = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const updated = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
     res.json({ procedures: updated });
   } catch (err) {
     req.log.error({ err }, "Failed to undo AI edit");
@@ -419,9 +419,9 @@ router.get("/templates/:id/procedures", requireAuth, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
     const companyId = req.session.companyId!;
-    const procs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const procs = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
 
     // Check if a valid (non-expired) snapshot exists for the undo button
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -456,11 +456,11 @@ router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
     let so = parsed.data.sortOrder;
     if (so === undefined) {
-      const existing = await db.select().from(workTemplateProceduresTable)
-        .where(eq(workTemplateProceduresTable.templateId, templateId));
+      const existing = await db.select().from(workStepsTable)
+        .where(eq(workStepsTable.templateId, templateId));
       so = existing.length;
     }
-    const [p] = await db.insert(workTemplateProceduresTable).values({
+    const [p] = await db.insert(workStepsTable).values({
       templateId, name: parsed.data.name, sortOrder: so,
       roleId: parsed.data.roleId ?? null,
       batchMode: parsed.data.batchMode ?? "individual",
@@ -481,8 +481,8 @@ router.put("/templates/:id/procedures/reorder", requireAdmin, async (req, res) =
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Invalid order" }); return; }
     for (const { id, sortOrder } of parsed.data.order) {
-      await db.update(workTemplateProceduresTable).set({ sortOrder })
-        .where(and(eq(workTemplateProceduresTable.id, id), eq(workTemplateProceduresTable.templateId, templateId)));
+      await db.update(workStepsTable).set({ sortOrder })
+        .where(and(eq(workStepsTable.id, id), eq(workStepsTable.templateId, templateId)));
     }
     res.status(204).send();
   } catch (err) {
@@ -496,8 +496,8 @@ router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req
     const procId = Number(req.params.procId);
     const parsed = procSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const [p] = await db.update(workTemplateProceduresTable).set(parsed.data)
-      .where(eq(workTemplateProceduresTable.id, procId)).returning();
+    const [p] = await db.update(workStepsTable).set(parsed.data)
+      .where(eq(workStepsTable.id, procId)).returning();
     if (!p) { res.status(404).json({ error: "Not found" }); return; }
     res.json(p);
   } catch (err) {
@@ -508,7 +508,7 @@ router.put("/templates/:templateId/procedures/:procId", requireAdmin, async (req
 
 router.delete("/templates/:templateId/procedures/:procId", requireAdmin, async (req, res) => {
   try {
-    await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.id, Number(req.params.procId)));
+    await db.delete(workStepsTable).where(eq(workStepsTable.id, Number(req.params.procId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete procedure");
@@ -616,25 +616,25 @@ router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
 
     let baseSortOrder = 0;
     if (parsed.data.append) {
-      const existing = await db.select().from(workTemplateProceduresTable)
-        .where(eq(workTemplateProceduresTable.templateId, templateId));
+      const existing = await db.select().from(workStepsTable)
+        .where(eq(workStepsTable.templateId, templateId));
       baseSortOrder = existing.length;
     } else {
-      await db.delete(workTemplateProceduresTable).where(eq(workTemplateProceduresTable.templateId, templateId));
+      await db.delete(workStepsTable).where(eq(workStepsTable.templateId, templateId));
     }
 
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
-      await db.insert(workTemplateProceduresTable).values({
+      await db.insert(workStepsTable).values({
         templateId, name: e.name, sortOrder: baseSortOrder + i,
         roleId: e.roleId ?? null, batchMode: e.batchMode ?? "individual",
         durationEstimate: e.durationEstimate ?? null,
       });
     }
 
-    const procs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const procs = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
     res.json(procs);
   } catch (err) {
     req.log.error({ err }, "Failed to apply preset");
@@ -662,20 +662,20 @@ router.get("/my-steps", requireAuth, async (req, res) => {
     // Get all non-completed item procedures assigned to user's roles in this company
     const allProcsForRoles = await db
       .select({
-        proc: workItemProceduresTable,
+        proc: workItemStepsTable,
         item: workProjectItemsTable,
         project: workProjectsTable,
       })
-      .from(workItemProceduresTable)
-      .innerJoin(workProjectItemsTable, eq(workItemProceduresTable.itemId, workProjectItemsTable.id))
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
       .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
       .where(and(
         eq(workProjectsTable.companyId, companyId),
         eq(workProjectsTable.status, "in_progress"),
-        inArray(workItemProceduresTable.roleId, roleIds),
-        ne(workItemProceduresTable.status, "completed"),
+        inArray(workItemStepsTable.roleId, roleIds),
+        ne(workItemStepsTable.status, "completed"),
       ))
-      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemProceduresTable.sortOrder);
+      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemStepsTable.sortOrder);
 
     if (allProcsForRoles.length === 0) {
       res.json([]);
@@ -685,12 +685,12 @@ router.get("/my-steps", requireAuth, async (req, res) => {
     // Determine READY vs BLOCKED for each procedure
     // A procedure is BLOCKED if any earlier step (lower sortOrder, same itemId) is not completed
     const itemIds = [...new Set(allProcsForRoles.map((r) => r.item.id))];
-    const allItemProcs = await db.select().from(workItemProceduresTable)
-      .where(inArray(workItemProceduresTable.itemId, itemIds))
-      .orderBy(workItemProceduresTable.sortOrder);
+    const allItemProcs = await db.select().from(workItemStepsTable)
+      .where(inArray(workItemStepsTable.itemId, itemIds))
+      .orderBy(workItemStepsTable.sortOrder);
 
     // Build a map of itemId -> sorted procedures
-    const itemProcMap = new Map<number, typeof workItemProceduresTable.$inferSelect[]>();
+    const itemProcMap = new Map<number, typeof workItemStepsTable.$inferSelect[]>();
     for (const p of allItemProcs) {
       if (!itemProcMap.has(p.itemId)) itemProcMap.set(p.itemId, []);
       itemProcMap.get(p.itemId)!.push(p);
@@ -740,11 +740,11 @@ async function getProjectWithItems(projectId: number) {
     .orderBy(workProjectItemsTable.sortOrder);
   const itemIds = items.map((i) => i.id);
 
-  let procedures: (typeof workItemProceduresTable.$inferSelect)[] = [];
+  let procedures: (typeof workItemStepsTable.$inferSelect)[] = [];
   if (itemIds.length > 0) {
-    procedures = await db.select().from(workItemProceduresTable).where(
-      sql`${workItemProceduresTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
-    ).orderBy(workItemProceduresTable.sortOrder);
+    procedures = await db.select().from(workItemStepsTable).where(
+      sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
+    ).orderBy(workItemStepsTable.sortOrder);
   }
 
   const itemsWithProcs = items.map((item) => {
@@ -809,8 +809,8 @@ router.get("/projects", requireAuth, async (req, res) => {
         let totalProcedures = 0;
         let completedProcedures = 0;
         if (itemIds.length > 0) {
-          const procs = await db.select().from(workItemProceduresTable).where(
-            sql`${workItemProceduresTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
+          const procs = await db.select().from(workItemStepsTable).where(
+            sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
           );
           totalProcedures = procs.length;
           completedProcedures = procs.filter((p) => p.status === "completed").length;
@@ -852,7 +852,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
 
       const steps = quickSteps ?? [];
       for (let i = 0; i < steps.length; i++) {
-        await db.insert(workItemProceduresTable).values({
+        await db.insert(workItemStepsTable).values({
           itemId: item.id, name: steps[i].name, sortOrder: i,
           roleId: steps[i].roleId ?? null,
           batchMode: steps[i].batchMode ?? "individual",
@@ -867,9 +867,9 @@ router.post("/projects", requireAdmin, async (req, res) => {
         if (!template) continue;
 
         // Load template's top-level procedures
-        const templateProcs = await db.select().from(workTemplateProceduresTable)
-          .where(eq(workTemplateProceduresTable.templateId, templateId))
-          .orderBy(workTemplateProceduresTable.sortOrder);
+        const templateProcs = await db.select().from(workStepsTable)
+          .where(eq(workStepsTable.templateId, templateId))
+          .orderBy(workStepsTable.sortOrder);
 
         // Load BOM components
         let bomComponents: {
@@ -912,7 +912,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
 
           // Copy template top-level procedures (with roleId/batchMode/duration)
           for (const proc of templateProcs) {
-            await db.insert(workItemProceduresTable).values({
+            await db.insert(workItemStepsTable).values({
               itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
               requiresInbound: proc.requiresInbound,
               roleId: proc.roleId ?? null,
@@ -933,7 +933,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
               }).returning();
               sortOrder++;
               for (const proc of comp.procedures) {
-                await db.insert(workItemProceduresTable).values({
+                await db.insert(workItemStepsTable).values({
                   itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
                   requiresInbound: false,
                   roleId: proc.roleId ?? null,
@@ -1029,9 +1029,9 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
     const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
     if (!template) { res.status(404).json({ error: "Template not found" }); return; }
 
-    const templateProcs = await db.select().from(workTemplateProceduresTable)
-      .where(eq(workTemplateProceduresTable.templateId, templateId))
-      .orderBy(workTemplateProceduresTable.sortOrder);
+    const templateProcs = await db.select().from(workStepsTable)
+      .where(eq(workStepsTable.templateId, templateId))
+      .orderBy(workStepsTable.sortOrder);
 
     const existingItems = await db.select().from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));
     let sortOrder = existingItems.length;
@@ -1045,7 +1045,7 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
       sortOrder++;
 
       for (const proc of templateProcs) {
-        await db.insert(workItemProceduresTable).values({
+        await db.insert(workItemStepsTable).values({
           itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
           requiresInbound: proc.requiresInbound,
           roleId: proc.roleId ?? null,
@@ -1101,7 +1101,7 @@ router.get("/active-timer", requireAuth, async (req, res) => {
       and(eq(workTimeLogsTable.userId, userId), isNull(workTimeLogsTable.endTime))
     );
     if (!active) { res.json(null); return; }
-    const [procedure] = await db.select().from(workItemProceduresTable).where(eq(workItemProceduresTable.id, active.procedureId));
+    const [procedure] = await db.select().from(workItemStepsTable).where(eq(workItemStepsTable.id, active.stepId));
     res.json({ log: active, procedure });
   } catch (err) {
     req.log.error({ err }, "Failed to get active timer");
@@ -1123,7 +1123,7 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
       return;
     }
 
-    const [procedure] = await db.select().from(workItemProceduresTable).where(eq(workItemProceduresTable.id, procedureId));
+    const [procedure] = await db.select().from(workItemStepsTable).where(eq(workItemStepsTable.id, procedureId));
     if (!procedure) { res.status(404).json({ error: "Procedure not found" }); return; }
 
     if (procedure.requiresInbound) {
@@ -1138,8 +1138,8 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
       }
     }
 
-    await db.update(workItemProceduresTable).set({ status: "in_progress" }).where(eq(workItemProceduresTable.id, procedureId));
-    const [log] = await db.insert(workTimeLogsTable).values({ procedureId, userId, startTime: new Date() }).returning();
+    await db.update(workItemStepsTable).set({ status: "in_progress" }).where(eq(workItemStepsTable.id, procedureId));
+    const [log] = await db.insert(workTimeLogsTable).values({ stepId: procedureId, userId, startTime: new Date() }).returning();
     res.status(201).json(log);
   } catch (err) {
     req.log.error({ err }, "Failed to start timer");
@@ -1153,7 +1153,7 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
     const userId = req.session.userId!;
 
     const [activeLog] = await db.select().from(workTimeLogsTable).where(
-      and(eq(workTimeLogsTable.userId, userId), eq(workTimeLogsTable.procedureId, procedureId), isNull(workTimeLogsTable.endTime))
+      and(eq(workTimeLogsTable.userId, userId), eq(workTimeLogsTable.stepId, procedureId), isNull(workTimeLogsTable.endTime))
     );
     if (!activeLog) { res.status(404).json({ error: "No active timer for this procedure" }); return; }
 
@@ -1162,9 +1162,9 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
     const [log] = await db.update(workTimeLogsTable).set({ endTime, durationSeconds })
       .where(eq(workTimeLogsTable.id, activeLog.id)).returning();
 
-    const [proc] = await db.update(workItemProceduresTable)
-      .set({ status: "completed", totalTimeSeconds: sql`${workItemProceduresTable.totalTimeSeconds} + ${durationSeconds}` })
-      .where(eq(workItemProceduresTable.id, procedureId)).returning();
+    const [proc] = await db.update(workItemStepsTable)
+      .set({ status: "completed", totalTimeSeconds: sql`${workItemStepsTable.totalTimeSeconds} + ${durationSeconds}` })
+      .where(eq(workItemStepsTable.id, procedureId)).returning();
 
     res.json({ log, procedure: proc });
   } catch (err) {
@@ -1176,9 +1176,9 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
 router.post("/procedures/:procedureId/reset", requireAdmin, async (req, res) => {
   try {
     const procedureId = Number(req.params.procedureId);
-    const [proc] = await db.update(workItemProceduresTable)
+    const [proc] = await db.update(workItemStepsTable)
       .set({ status: "not_started", totalTimeSeconds: 0 })
-      .where(eq(workItemProceduresTable.id, procedureId)).returning();
+      .where(eq(workItemStepsTable.id, procedureId)).returning();
     res.json(proc);
   } catch (err) {
     req.log.error({ err }, "Failed to reset procedure");

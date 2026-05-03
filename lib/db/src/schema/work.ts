@@ -16,8 +16,8 @@ export const workTemplatesTable = pgTable("work_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Procedures defined per template (for the top-level item)
-export const workTemplateProceduresTable = pgTable("work_template_procedures", {
+// Production steps defined per template; templateComponentId links to a BOM sub-component (null = top-level step)
+export const workStepsTable = pgTable("work_steps", {
   id: serial("id").primaryKey(),
   templateId: integer("template_id").notNull().references(() => workTemplatesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
@@ -26,7 +26,11 @@ export const workTemplateProceduresTable = pgTable("work_template_procedures", {
   roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
   batchMode: text("batch_mode").notNull().default("individual"),
   durationEstimate: integer("duration_estimate"),
+  templateComponentId: integer("template_component_id"),
 });
+
+/** @deprecated use workStepsTable */
+export const workTemplateProceduresTable = workStepsTable;
 
 // Projects / Work Orders
 export const workProjectsTable = pgTable("work_projects", {
@@ -50,8 +54,8 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
-// Procedures for each project item (copied from template procedures)
-export const workItemProceduresTable = pgTable("work_item_procedures", {
+// Steps for each project item, instantiated from work_steps at project creation time
+export const workItemStepsTable = pgTable("work_item_steps", {
   id: serial("id").primaryKey(),
   itemId: integer("item_id").notNull().references(() => workProjectItemsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
@@ -64,10 +68,13 @@ export const workItemProceduresTable = pgTable("work_item_procedures", {
   durationEstimate: integer("duration_estimate"),
 });
 
-// Time log: individual start/stop sessions per procedure per user
+/** @deprecated use workItemStepsTable */
+export const workItemProceduresTable = workItemStepsTable;
+
+// Time log: individual start/stop sessions per step per user
 export const workTimeLogsTable = pgTable("work_time_logs", {
   id: serial("id").primaryKey(),
-  procedureId: integer("procedure_id").notNull().references(() => workItemProceduresTable.id, { onDelete: "cascade" }),
+  stepId: integer("step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time"),
@@ -161,10 +168,14 @@ export const aiSnapshotsTable = pgTable("ai_snapshots", {
 });
 
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
-export type WorkTemplateProcedure = typeof workTemplateProceduresTable.$inferSelect;
+export type WorkStep = typeof workStepsTable.$inferSelect;
+/** @deprecated use WorkStep */
+export type WorkTemplateProcedure = WorkStep;
 export type WorkProject = typeof workProjectsTable.$inferSelect;
 export type WorkProjectItem = typeof workProjectItemsTable.$inferSelect;
-export type WorkItemProcedure = typeof workItemProceduresTable.$inferSelect;
+export type WorkItemStep = typeof workItemStepsTable.$inferSelect;
+/** @deprecated use WorkItemStep */
+export type WorkItemProcedure = WorkItemStep;
 export type WorkTimeLog = typeof workTimeLogsTable.$inferSelect;
 export type Role = typeof rolesTable.$inferSelect;
 export type UserRoleRecord = typeof userRolesTable.$inferSelect;
