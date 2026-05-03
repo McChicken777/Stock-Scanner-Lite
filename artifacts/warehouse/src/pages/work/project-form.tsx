@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, FolderPlus, Minus, Plus, Palette, PackageCheck, Zap, GripVertical, X, ListPlus, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +113,28 @@ export default function WorkProjectFormPage() {
     queryKey: ["/api/tasks/roles"],
     queryFn: fetchRoles,
   });
+
+  interface BomShortage { productId: number; productName: string; needed: number; have: number; shortfall: number }
+  interface BomCheckResult { templateId: number; ok: boolean; shortages: BomShortage[] }
+
+  const { data: bomResults = [] } = useQuery<BomCheckResult[]>({
+    queryKey: ["/api/work/bom-check", templateItems],
+    queryFn: async () => {
+      if (templateItems.length === 0) return [];
+      const checks = await Promise.all(
+        templateItems.map(async (ti) => {
+          const res = await fetch(`/api/work/bom-check?templateId=${ti.templateId}&quantity=${ti.quantity}`, { credentials: "include" });
+          if (!res.ok) return { templateId: ti.templateId, ok: true, shortages: [] };
+          const data = await res.json();
+          return { templateId: ti.templateId, ...data };
+        })
+      );
+      return checks;
+    },
+    enabled: templateItems.length > 0 && !quickJob,
+  });
+
+  const bomShortages = bomResults.flatMap((r) => r.shortages);
 
   const createMutation = useMutation({
     mutationFn: async (data: object) => {
@@ -438,6 +460,27 @@ export default function WorkProjectFormPage() {
                   ) : null;
                 })}
                 {paintColor && <p className="mt-1 font-medium text-primary">Paint: {paintColor}</p>}
+              </div>
+            )}
+
+            {bomShortages.length > 0 && (
+              <div className="border-2 border-amber-300 bg-amber-50 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                  <p className="font-bold text-sm text-amber-800">Stock shortage warning</p>
+                </div>
+                <p className="text-xs text-amber-700">The following BOM components may be insufficient:</p>
+                <div className="space-y-1">
+                  {bomShortages.map((s, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs bg-amber-100 rounded-lg px-2.5 py-1.5">
+                      <span className="font-medium text-amber-900 truncate">{s.productName}</span>
+                      <span className="text-amber-700 font-bold flex-shrink-0 ml-2">
+                        need {s.needed}, have {s.have}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-amber-600">You can still create the work order, but tasks may be blocked due to insufficient stock.</p>
               </div>
             )}
           </div>

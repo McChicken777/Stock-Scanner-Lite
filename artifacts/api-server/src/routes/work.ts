@@ -5,6 +5,7 @@ import {
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
+  purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -2264,6 +2265,184 @@ router.get("/supervisor/bottlenecks", requireSupervisorOrAdmin, async (req, res)
   } catch (err) {
     req.log.error({ err }, "Failed to get bottlenecks");
     res.status(500).json({ error: "Failed to get bottlenecks" });
+  }
+});
+
+// ─── REORDER QUEUE ────────────────────────────────────────────────────────────
+
+router.get("/reorder-queue", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // Get all products with totalStock < bufferStock
+    const allProducts = await db.select().from(productsTable)
+      .where(eq(productsTable.companyId, companyId));
+
+    const allStock = await db.select().from(stockTable);
+    const stockByProduct = new Map<number, number>();
+    for (const s of allStock) {
+      stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
+    }
+
+    const lowStockProducts = allProducts
+      .filter((p) => {
+        const total = stockByProduct.get(p.id) ?? 0;
+        return total < p.bufferStock;
+      })
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        itemType: p.itemType,
+        bufferStock: p.bufferStock,
+        targetStock: p.targetStock,
+        totalStock: stockByProduct.get(p.id) ?? 0,
+        shortfall: p.targetStock - (stockByProduct.get(p.id) ?? 0),
+        supplierId: p.supplierId,
+        supplierSku: p.supplierSku,
+      }));
+
+    // Find pending POs for each product
+    if (lowStockProducts.length === 0) { res.json([]); return; }
+
+    const productIds = lowStockProducts.map((p) => p.id);
+    const pendingPoItems = await db.select({
+      item: purchaseOrderItemsTable,
+      po: purchaseOrdersTable,
+    })
+      .from(purchaseOrderItemsTable)
+      .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+      .where(and(
+        inArray(purchaseOrderItemsTable.productId, productIds),
+        eq(purchaseOrdersTable.companyId, companyId),
+        inArray(purchaseOrdersTable.status, ["draft", "ordered", "partially_arrived"]),
+      ));
+
+    const pendingPoByProduct = new Map<number, { poId: number; quantity: number; status: string }>();
+    for (const row of pendingPoItems) {
+      const existing = pendingPoByProduct.get(row.item.productId);
+      if (!existing) {
+        pendingPoByProduct.set(row.item.productId, {
+          poId: row.po.id,
+          quantity: row.item.quantityOrdered - row.item.quantityArrived,
+          status: row.po.status,
+        });
+      }
+    }
+
+    res.json(lowStockProducts.map((p) => ({
+      ...p,
+      pendingPo: pendingPoByProduct.get(p.id) ?? null,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get reorder queue");
+    res.status(500).json({ error: "Failed to get reorder queue" });
+  }
+});
+
+// ─── BOM STOCK CHECK ──────────────────────────────────────────────────────────
+
+router.get("/bom-check", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const templateId = Number(req.query.templateId);
+    const quantity = Math.max(1, Number(req.query.quantity) || 1);
+
+    if (!templateId) { res.status(400).json({ error: "templateId required" }); return; }
+
+    const [template] = await db.select().from(workTemplatesTable)
+      .where(and(eq(workTemplatesTable.id, templateId), eq(workTemplatesTable.companyId, companyId)));
+    if (!template?.productId) { res.json({ ok: true, shortages: [] }); return; }
+
+    const components = await db.select({
+      comp: productComponentsTable,
+      product: productsTable,
+    })
+      .from(productComponentsTable)
+      .innerJoin(productsTable, eq(productComponentsTable.componentProductId, productsTable.id))
+      .where(eq(productComponentsTable.parentProductId, template.productId));
+
+    if (components.length === 0) { res.json({ ok: true, shortages: [] }); return; }
+
+    const allStock = await db.select().from(stockTable);
+    const stockByProduct = new Map<number, number>();
+    for (const s of allStock) {
+      stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
+    }
+
+    const shortages = components
+      .map((c) => {
+        const needed = c.comp.quantity * quantity;
+        const have = stockByProduct.get(c.comp.componentProductId) ?? 0;
+        return {
+          productId: c.comp.componentProductId,
+          productName: c.product.name,
+          needed,
+          have,
+          shortfall: Math.max(0, needed - have),
+        };
+      })
+      .filter((s) => s.shortfall > 0);
+
+    res.json({ ok: shortages.length === 0, shortages });
+  } catch (err) {
+    req.log.error({ err }, "Failed to check BOM stock");
+    res.status(500).json({ error: "Failed to check BOM stock" });
+  }
+});
+
+// ─── SHORTAGE FLAGS ───────────────────────────────────────────────────────────
+
+router.get("/shortage-flags", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const flags = await db.select().from(shortageFlagsTable)
+      .where(eq(shortageFlagsTable.companyId, companyId))
+      .orderBy(sql`${shortageFlagsTable.createdAt} desc`);
+    res.json(flags);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list shortage flags");
+    res.status(500).json({ error: "Failed to list shortage flags" });
+  }
+});
+
+router.post("/shortage-flags", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      productName: z.string().min(1),
+      note: z.string().optional(),
+      stepId: z.number().int().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [flag] = await db.insert(shortageFlagsTable).values({
+      productName: parsed.data.productName,
+      note: parsed.data.note ?? null,
+      stepId: parsed.data.stepId ?? null,
+      companyId,
+    }).returning();
+
+    res.status(201).json(flag);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create shortage flag");
+    res.status(500).json({ error: "Failed to create shortage flag" });
+  }
+});
+
+router.put("/shortage-flags/:id/resolve", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const id = Number(req.params.id);
+    const [flag] = await db.update(shortageFlagsTable)
+      .set({ resolvedAt: new Date() })
+      .where(and(eq(shortageFlagsTable.id, id), eq(shortageFlagsTable.companyId, companyId)))
+      .returning();
+    if (!flag) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(flag);
+  } catch (err) {
+    req.log.error({ err }, "Failed to resolve shortage flag");
+    res.status(500).json({ error: "Failed to resolve shortage flag" });
   }
 });
 

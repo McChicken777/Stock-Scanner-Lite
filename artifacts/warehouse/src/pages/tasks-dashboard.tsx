@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   Play, CheckCircle2, AlertCircle, Calendar, Flag, Timer, User,
-  Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X,
+  Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X, AlertTriangle, TrendingDown,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -222,12 +223,87 @@ function WipLocationDialog({
   );
 }
 
+// ─── Shortage Flag Dialog ─────────────────────────────────────────────────────
+
+function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [productName, setProductName] = useState("");
+  const [note, setNote] = useState("");
+
+  const flagMutation = useMutation({
+    mutationFn: (data: { productName: string; note?: string; stepId?: number }) =>
+      fetch("/api/work/shortage-flags", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+        return r.json();
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
+      toast({ title: "Shortage flagged — admin will be notified" });
+      onClose();
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-background rounded-2xl border-2 border-rose-300 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-black text-base flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-rose-600" /> Flag Shortage
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">Report a missing or low part to admin</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <input
+          type="text"
+          placeholder="Part / product name (required)"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+          className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+          autoFocus
+        />
+        <input
+          type="text"
+          placeholder="Note (optional, e.g. needed for this job)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+        />
+
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
+          <Button
+            className="flex-1 h-11 font-bold bg-rose-600 hover:bg-rose-700"
+            disabled={!productName.trim() || flagMutation.isPending}
+            onClick={() => flagMutation.mutate({ productName: productName.trim(), note: note.trim() || undefined, stepId })}
+          >
+            <AlertTriangle className="h-4 w-4 mr-1.5" />
+            {flagMutation.isPending ? "Flagging…" : "Flag Shortage"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── My Steps Tab ────────────────────────────────────────────────────────────
 
 function MyStepsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [wipStepId, setWipStepId] = useState<number | null>(null);
+  const [shortageStepId, setShortageStepId] = useState<number | null>(null);
 
   const { data: steps = [], isLoading } = useQuery<MyStep[]>({
     queryKey: ["/api/work/my-steps"],
@@ -325,16 +401,28 @@ function MyStepsTab() {
           </p>
         )}
         {variant === "inProgress" && (
-          <Button size="sm" onClick={() => stopMutation.mutate(step.id)} disabled={stopMutation.isPending}
-            className="w-full bg-green-600 hover:bg-green-700 font-bold">
-            <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Complete
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => stopMutation.mutate(step.id)} disabled={stopMutation.isPending}
+              className="flex-1 bg-green-600 hover:bg-green-700 font-bold">
+              <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Complete
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 w-8 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
+              onClick={() => setShortageStepId(step.id)}>
+              <AlertTriangle className="h-4 w-4" />
+            </Button>
+          </div>
         )}
         {variant === "ready" && (
-          <Button size="sm" onClick={() => startMutation.mutate(step.id)} disabled={startMutation.isPending}
-            className="w-full bg-green-600 hover:bg-green-700 font-bold">
-            <Play className="h-4 w-4 mr-1.5" /> Start
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => startMutation.mutate(step.id)} disabled={startMutation.isPending}
+              className="flex-1 bg-green-600 hover:bg-green-700 font-bold">
+              <Play className="h-4 w-4 mr-1.5" /> Start
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 w-8 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
+              onClick={() => setShortageStepId(step.id)}>
+              <AlertTriangle className="h-4 w-4" />
+            </Button>
+          </div>
         )}
       </div>
     );
@@ -369,6 +457,9 @@ function MyStepsTab() {
       </div>
       {wipStepId !== null && (
         <WipLocationDialog stepId={wipStepId} onClose={() => setWipStepId(null)} />
+      )}
+      {shortageStepId !== null && (
+        <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />
       )}
     </>
   );
@@ -707,11 +798,18 @@ export default function TasksDashboardPage() {
 
   return (
     <div className="p-4 space-y-4 pb-24">
-      <div>
-        <h1 className="text-2xl font-bold">My Queue</h1>
-        <p className="text-xs text-muted-foreground">
-          {user?.username ? `${user.username} · ` : ""}Production steps across all active orders
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">My Queue</h1>
+          <p className="text-xs text-muted-foreground">
+            {user?.username ? `${user.username} · ` : ""}Production steps across all active orders
+          </p>
+        </div>
+        <Link href="/work/reorder-queue">
+          <Button size="sm" variant="outline" className="h-8 font-bold text-xs border-rose-200 text-rose-700 hover:bg-rose-50 flex-shrink-0">
+            <TrendingDown className="h-3.5 w-3.5 mr-1" /> Reorder
+          </Button>
+        </Link>
       </div>
 
       {/* Tab switcher */}

@@ -35,6 +35,8 @@ import WorkProjectFormPage from "@/pages/work/project-form";
 import WorkTemplatesPage from "@/pages/work/templates";
 import WorkInboundPage from "@/pages/work/inbound";
 import WorkPrintTagPage from "@/pages/work/print-tag";
+import ReorderQueuePage from "@/pages/work/reorder-queue";
+import PurchaseOrdersPage from "@/pages/work/purchase-orders";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +103,9 @@ function ProtectedRoutes() {
         <Route path="/work/projects/:id" component={WorkProjectDetailPage} />
         <Route path="/work/templates" component={WorkTemplatesPage} />
         <Route path="/work/inbound" component={WorkInboundPage} />
+        <Route path="/work/reorder-queue" component={ReorderQueuePage} />
+        <Route path="/work/purchase-orders/:id" component={PurchaseOrdersPage} />
+        <Route path="/work/purchase-orders" component={PurchaseOrdersPage} />
 
         <Route component={NotFound} />
       </Switch>

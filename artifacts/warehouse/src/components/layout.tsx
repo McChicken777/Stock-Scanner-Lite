@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -182,8 +182,12 @@ function WorkOrdersBottomNav() {
     { href: "/tasks", icon: CheckSquare, label: "Tasks" },
     { href: "/work/projects", icon: FolderKanban, label: "Projects" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/orders", icon: Truck, label: "Orders" },
-    ...(isAdmin ? [{ href: "/work/templates", icon: Tag, label: "Templates" }] : []),
+    ...(isAdmin
+      ? [
+          { href: "/work/reorder-queue", icon: TrendingDown, label: "Reorder" },
+          { href: "/work/purchase-orders", icon: ShoppingCart, label: "POs" },
+        ]
+      : [{ href: "/orders", icon: Truck, label: "Orders" }]),
   ];
 
   return (
