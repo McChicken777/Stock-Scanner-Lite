@@ -15,6 +15,8 @@ import companyRouter from "./company";
 import ownerRouter from "./owner";
 import purchasingRouter from "./purchasing";
 import attendanceRouter from "./attendance";
+import customersRouter from "./customers";
+import quotesRouter from "./quotes";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -35,5 +37,7 @@ router.use("/orders", requireAuth, ordersRouter);
 router.use("/suppliers", requireAuth, suppliersRouter);
 router.use("/purchase-orders", requireAuth, purchasingRouter);
 router.use("/attendance", requireAuth, attendanceRouter);
+router.use("/customers", requireAuth, customersRouter);
+router.use("/quotes", requireAuth, quotesRouter);
 
 export default router;

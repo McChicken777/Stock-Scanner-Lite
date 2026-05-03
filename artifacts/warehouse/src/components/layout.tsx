@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock, BookTemplate, Wrench
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock, BookTemplate, Wrench, Users, FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -103,6 +103,20 @@ function UserMenu() {
             <Link href="/admin/suppliers">
               <DropdownMenuItem className="cursor-pointer">
                 <Building2 className="mr-2 h-4 w-4" /> Suppliers
+              </DropdownMenuItem>
+            </Link>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold py-1">
+              Front of House
+            </DropdownMenuLabel>
+            <Link href="/customers">
+              <DropdownMenuItem className="cursor-pointer">
+                <Users className="mr-2 h-4 w-4 text-blue-600" /> Customers
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/quotes">
+              <DropdownMenuItem className="cursor-pointer">
+                <FileText className="mr-2 h-4 w-4 text-purple-600" /> Quotes
               </DropdownMenuItem>
             </Link>
           </>

@@ -10,3 +10,5 @@ export * from "./inbound";
 export * from "./orders";
 export * from "./purchasing";
 export * from "./attendance";
+export * from "./customers";
+export * from "./quotes";

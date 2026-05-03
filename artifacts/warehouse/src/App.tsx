@@ -41,6 +41,11 @@ import WorkInboundPage from "@/pages/work/inbound";
 import WorkPrintTagPage from "@/pages/work/print-tag";
 import ReorderQueuePage from "@/pages/work/reorder-queue";
 import PurchaseOrdersPage from "@/pages/work/purchase-orders";
+import CustomersPage from "@/pages/customers";
+import CustomerDetailPage from "@/pages/customer-detail";
+import QuotesPage from "@/pages/quotes";
+import QuoteFormPage from "@/pages/quote-form";
+import QuoteDetailPage from "@/pages/quote-detail";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +119,14 @@ function ProtectedRoutes() {
         <Route path="/work/reorder-queue" component={ReorderQueuePage} />
         <Route path="/work/purchase-orders/:id" component={PurchaseOrdersPage} />
         <Route path="/work/purchase-orders" component={PurchaseOrdersPage} />
+
+        {/* Customers & Quotes */}
+        <Route path="/customers" component={CustomersPage} />
+        <Route path="/customers/:id" component={CustomerDetailPage} />
+        <Route path="/quotes" component={QuotesPage} />
+        <Route path="/quotes/new" component={QuoteFormPage} />
+        <Route path="/quotes/:id/edit" component={QuoteFormPage} />
+        <Route path="/quotes/:id" component={QuoteDetailPage} />
 
         <Route component={NotFound} />
       </Switch>

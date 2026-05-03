@@ -52,7 +52,7 @@ app.use(
     store: new PgSession({
       conString: process.env.DATABASE_URL,
       tableName: "session",
-      createTableIfMissing: true,
+      createTableIfMissing: false,
     }),
     name: "wms_sid",
     secret: process.env.SESSION_SECRET || "change-me-in-production",

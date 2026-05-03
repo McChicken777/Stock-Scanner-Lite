@@ -1,6 +1,6 @@
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp } from "lucide-react";
+import { Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp, FileText, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
@@ -21,6 +21,14 @@ export default function Dashboard() {
     queryFn: async () => {
       const res = await fetch("/api/stock/valuation", { credentials: "include" });
       if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const { data: quoteCounts } = useQuery<Record<string, number>>({
+    queryKey: ["/api/quotes/counts"],
+    queryFn: async () => {
+      const res = await fetch("/api/quotes/counts", { credentials: "include" });
+      if (!res.ok) return {};
       return res.json();
     },
   });
@@ -140,6 +148,39 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {quoteCounts && (
+        <Card className="border-2 border-purple-200 bg-purple-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-purple-800">
+              <FileText className="h-4 w-4" /> Quotes Pipeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {[
+                { key: "draft", label: "Draft", color: "text-slate-700" },
+                { key: "sent", label: "Sent", color: "text-blue-700" },
+                { key: "approved", label: "Approved", color: "text-green-700" },
+                { key: "converted", label: "Converted", color: "text-purple-700" },
+              ].map((s) => (
+                <div key={s.key} className="bg-background border border-border rounded-lg p-2 text-center">
+                  <p className={`text-xl font-black font-mono ${s.color}`}>{quoteCounts[s.key] ?? 0}</p>
+                  <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/quotes" className="text-xs font-semibold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg py-2 text-center flex items-center justify-center gap-1">
+                <FileText className="h-3.5 w-3.5" /> View Quotes
+              </Link>
+              <Link href="/customers" className="text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg py-2 text-center flex items-center justify-center gap-1">
+                <Users className="h-3.5 w-3.5" /> Customers
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {summary.lowStockProducts.length > 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
