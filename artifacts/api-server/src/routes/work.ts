@@ -5,7 +5,7 @@ import {
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
 } from "@workspace/db";
-import { eq, and, isNull, sql, inArray, ne } from "drizzle-orm";
+import { eq, and, isNull, or, sql, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -1025,7 +1025,8 @@ router.get("/batch-queue", requireAuth, async (req, res) => {
       eq(workProjectsTable.status, "in_progress"),
       inArray(workItemStepsTable.batchMode, ["free_batch", "type_batch"]),
     ];
-    if (!isAdmin) baseConditions.push(inArray(workItemStepsTable.roleId!, roleIds));
+    // Non-admins see steps assigned to their roles OR steps with no role (accessible to all workers)
+    if (!isAdmin) baseConditions.push(or(isNull(workItemStepsTable.roleId), inArray(workItemStepsTable.roleId, roleIds))!);
 
     // Fetch both not_started (ready candidates) and in_progress (active batches)
     const allBatchRows = await db
@@ -1127,6 +1128,34 @@ router.post("/batch-start", requireAuth, async (req, res) => {
           throw Object.assign(new Error(`You do not have the role required to start ${unauthorized.length} of the selected steps`), { statusCode: 403 });
         }
       }
+      // READY check: all prior steps (lower sortOrder, same itemId) must be completed
+      const candidateIds = verified.filter((s) => s.status === "not_started").map((s) => s.id);
+      if (candidateIds.length > 0) {
+        const candidateRows = await tx
+          .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId, sortOrder: workItemStepsTable.sortOrder })
+          .from(workItemStepsTable)
+          .where(inArray(workItemStepsTable.id, candidateIds));
+        const candidateItemIds = [...new Set(candidateRows.map((r) => r.itemId))];
+        const allItemSteps = await tx
+          .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId, sortOrder: workItemStepsTable.sortOrder, status: workItemStepsTable.status })
+          .from(workItemStepsTable)
+          .where(inArray(workItemStepsTable.itemId, candidateItemIds));
+        const stepMap = new Map<number, typeof allItemSteps>();
+        for (const s of allItemSteps) {
+          if (!stepMap.has(s.itemId)) stepMap.set(s.itemId, []);
+          stepMap.get(s.itemId)!.push(s);
+        }
+        const blocked = candidateRows.filter(({ id, itemId, sortOrder }) => {
+          const siblings = stepMap.get(itemId) ?? [];
+          return siblings.some((s) => s.sortOrder < sortOrder && s.status !== "completed" && s.id !== id);
+        });
+        if (blocked.length > 0) {
+          throw Object.assign(
+            new Error(`${blocked.length} step${blocked.length !== 1 ? "s" : ""} cannot be started — prior steps are not yet completed`),
+            { statusCode: 400 },
+          );
+        }
+      }
       const toStart = verified.filter((s) => s.status === "not_started").map((s) => s.id);
       if (toStart.length > 0) {
         await tx.update(workItemStepsTable).set({ status: "in_progress" }).where(inArray(workItemStepsTable.id, toStart));
@@ -1209,6 +1238,15 @@ router.post("/batch-complete", requireAuth, async (req, res) => {
             { statusCode: 403 }
           );
         }
+      }
+
+      // Guard: steps must be in_progress (started) or already completed; not_started means unstarted/blocked
+      const notStarted = verified.filter((s) => s.status === "not_started");
+      if (notStarted.length > 0) {
+        throw Object.assign(
+          new Error(`${notStarted.length} step${notStarted.length !== 1 ? "s" : ""} must be started before completing — use batch-start first`),
+          { statusCode: 400 },
+        );
       }
 
       // Idempotent: only update steps not already completed
