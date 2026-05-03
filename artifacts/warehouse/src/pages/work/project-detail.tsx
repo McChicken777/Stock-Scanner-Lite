@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useRoute, Link } from "wouter";
+import { useState, useEffect, useRef } from "react";
+import { useRoute, Link, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck
+  PackageCheck, Truck, Printer,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -352,11 +352,14 @@ function AddItemsModal({
 export default function WorkProjectDetailPage() {
   const [, params] = useRoute("/work/projects/:id");
   const projectId = Number(params?.id);
+  const search = useSearch();
+  const deepLinkItemId = new URLSearchParams(search).get("item");
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
+  const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [showAddItems, setShowAddItems] = useState(false);
   const [editingProjectColor, setEditingProjectColor] = useState(false);
   const [projectColorDraft, setProjectColorDraft] = useState("");
@@ -426,6 +429,16 @@ export default function WorkProjectDetailPage() {
 
   const activeTimerProcedureId = activeTimer?.log?.procedureId ?? null;
 
+  // Scroll to deep-linked item when data loads
+  useEffect(() => {
+    if (!deepLinkItemId || !project) return;
+    const id = Number(deepLinkItemId);
+    const el = itemRefs.current.get(id);
+    if (el) {
+      setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "start" }), 300);
+    }
+  }, [deepLinkItemId, project]);
+
   if (isLoading) {
     return (
       <div className="p-4 space-y-4">
@@ -455,6 +468,11 @@ export default function WorkProjectDetailPage() {
         <Badge className={priorityColors[project.priority] + " text-xs font-bold uppercase"}>
           {project.priority}
         </Badge>
+        <Link href={`/work/projects/${projectId}/print-tag`}>
+          <button className="p-2 rounded-full hover:bg-secondary-foreground/10 transition-colors" title="Print job tags">
+            <Printer className="h-4 w-4" />
+          </button>
+        </Link>
         {isAdmin && (
           <button
             onClick={() => setEditMode((e) => !e)}
@@ -582,17 +600,25 @@ export default function WorkProjectDetailPage() {
             </div>
           ) : (
             project.items.map((item) => (
-              <ItemCard
+              <div
                 key={item.id}
-                item={item}
-                isAdmin={isAdmin}
-                activeTimerProcedureId={activeTimerProcedureId}
-                projectId={projectId}
-                editMode={editMode}
-                onDelete={() => deleteItemMutation.mutate(item.id)}
-                onColorChange={(color) => updateItemColorMutation.mutate({ itemId: item.id, paintColor: color })}
-                inboundStatus={project.inbound?.status ?? null}
-              />
+                ref={(el) => { if (el) itemRefs.current.set(item.id, el); else itemRefs.current.delete(item.id); }}
+                className={cn(
+                  "rounded-xl transition-all",
+                  deepLinkItemId && Number(deepLinkItemId) === item.id ? "ring-2 ring-primary ring-offset-1" : "",
+                )}
+              >
+                <ItemCard
+                  item={item}
+                  isAdmin={isAdmin}
+                  activeTimerProcedureId={activeTimerProcedureId}
+                  projectId={projectId}
+                  editMode={editMode}
+                  onDelete={() => deleteItemMutation.mutate(item.id)}
+                  onColorChange={(color) => updateItemColorMutation.mutate({ itemId: item.id, paintColor: color })}
+                  inboundStatus={project.inbound?.status ?? null}
+                />
+              </div>
             ))
           )}
         </div>

@@ -16,6 +16,8 @@ import {
 
 interface WipLocation { locationType: string; locationValue: string }
 
+interface PartNeeded { partName: string; quantity: number; itemType: string }
+
 interface MyStep {
   id: number; itemId: number; name: string;
   status: "not_started" | "in_progress" | "completed";
@@ -26,6 +28,7 @@ interface MyStep {
   blockedByStep: { id: number; name: string } | null;
   wipLocation: WipLocation | null;
   previousWip: WipLocation | null;
+  partsNeeded: PartNeeded[];
   item: { id: number; name: string };
   project: { id: number; name: string; deadline: string; priority: string };
 }
@@ -288,6 +291,19 @@ function MyStepsTab() {
             </span>
           )}
         </div>
+        {step.partsNeeded.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-1">
+            <p className="text-[10px] uppercase tracking-wider font-bold text-amber-700 flex items-center gap-1">
+              <Layers className="h-3 w-3" /> Parts needed
+            </p>
+            {step.partsNeeded.map((part, i) => (
+              <p key={i} className="text-xs text-amber-900 flex items-center justify-between">
+                <span className="font-medium truncate">{part.partName}</span>
+                <span className="ml-2 text-amber-700 font-bold flex-shrink-0">×{part.quantity}</span>
+              </p>
+            ))}
+          </div>
+        )}
         {step.previousWip && variant === "ready" && (
           <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
             <MapPin className="h-3 w-3 flex-shrink-0" />

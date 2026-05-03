@@ -66,6 +66,7 @@ export const workItemStepsTable = pgTable("work_item_steps", {
   roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
   batchMode: text("batch_mode").notNull().default("individual"),
   durationEstimate: integer("duration_estimate"),
+  templateStepId: integer("template_step_id").references(() => workStepsTable.id, { onDelete: "set null" }),
 });
 
 /** @deprecated use workItemStepsTable */

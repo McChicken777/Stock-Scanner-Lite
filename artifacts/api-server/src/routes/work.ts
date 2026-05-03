@@ -1337,6 +1337,53 @@ router.get("/my-steps", requireAuth, async (req, res) => {
     const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
     const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
 
+    // Fetch template step → component → product info for "parts needed" display
+    const templateStepIds = allProcsForRoles
+      .map((r) => r.proc.templateStepId)
+      .filter((id): id is number => id !== null && id !== undefined);
+    const partsNeededMap = new Map<number, { partName: string; quantity: number; itemType: string }[]>();
+    if (templateStepIds.length > 0) {
+      const tmplSteps = await db.select({
+        id: workStepsTable.id,
+        templateComponentId: workStepsTable.templateComponentId,
+      }).from(workStepsTable).where(inArray(workStepsTable.id, templateStepIds));
+
+      const compIds = tmplSteps
+        .map((s) => s.templateComponentId)
+        .filter((id): id is number => id !== null && id !== undefined);
+
+      if (compIds.length > 0) {
+        const components = await db.select({
+          compId: productComponentsTable.id,
+          componentProductId: productComponentsTable.componentProductId,
+          quantity: productComponentsTable.quantity,
+        }).from(productComponentsTable).where(inArray(productComponentsTable.id, compIds));
+
+        const productIds = components.map((c) => c.componentProductId);
+        const products = productIds.length > 0
+          ? await db.select({ id: productsTable.id, name: productsTable.name, itemType: productsTable.itemType })
+              .from(productsTable).where(inArray(productsTable.id, productIds))
+          : [];
+        const productMap = new Map(products.map((p) => [p.id, p]));
+        const compMap = new Map(components.map((c) => [c.compId, c]));
+
+        for (const proc of allProcsForRoles) {
+          const tmplStep = tmplSteps.find((s) => s.id === proc.proc.templateStepId);
+          if (!tmplStep?.templateComponentId) continue;
+          const comp = compMap.get(tmplStep.templateComponentId);
+          if (!comp) continue;
+          const product = productMap.get(comp.componentProductId);
+          if (!product) continue;
+          if (!partsNeededMap.has(proc.proc.id)) partsNeededMap.set(proc.proc.id, []);
+          partsNeededMap.get(proc.proc.id)!.push({
+            partName: product.name,
+            quantity: comp.quantity,
+            itemType: product.itemType,
+          });
+        }
+      }
+    }
+
     // Fetch latest WIP location for all visible step IDs
     const stepIds = allProcsForRoles.map((r) => r.proc.id);
     const latestWipMap = new Map<number, { locationType: string; locationValue: string }>();
@@ -1378,6 +1425,7 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
         wipLocation: latestWipMap.get(proc.id) ?? null,
         previousWip,
+        partsNeeded: partsNeededMap.get(proc.id) ?? [],
         item: { id: item.id, name: item.name },
         project: {
           id: project.id,
@@ -1588,6 +1636,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
               roleId: proc.roleId ?? null,
               batchMode: proc.batchMode ?? "individual",
               durationEstimate: proc.durationEstimate ?? null,
+              templateStepId: proc.id,
             });
           }
 
@@ -1603,12 +1652,20 @@ router.post("/projects", requireAdmin, async (req, res) => {
               }).returning();
               sortOrder++;
               for (const proc of comp.procedures) {
+                // Look up template step id for this component procedure
+                const [tmplStep] = await db.select({ id: workStepsTable.id }).from(workStepsTable)
+                  .where(and(
+                    eq(workStepsTable.templateId, templateId),
+                    eq(workStepsTable.name, proc.name),
+                    eq(workStepsTable.sortOrder, proc.sortOrder),
+                  ));
                 await db.insert(workItemStepsTable).values({
                   itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
                   requiresInbound: false,
                   roleId: proc.roleId ?? null,
                   batchMode: proc.batchMode ?? "individual",
                   durationEstimate: proc.durationEstimate ?? null,
+                  templateStepId: tmplStep?.id ?? null,
                 });
               }
             }
@@ -1817,7 +1874,9 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
       locationType: "with_worker",
       locationValue: "With worker (picked up)",
       setByUserId: userId,
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      req.log.warn({ err, stepId: procedureId }, "Failed to auto-log WIP location on step start");
+    });
 
     res.status(201).json(log);
   } catch (err) {
