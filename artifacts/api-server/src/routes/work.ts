@@ -533,11 +533,12 @@ router.post("/templates/:id/procedures", requireAdmin, async (req, res) => {
     let so = parsed.data.sortOrder;
     if (so === undefined) {
       const existing = await db.select().from(workStepsTable)
-        .where(eq(workStepsTable.templateId, templateId));
+        .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)));
       so = existing.length;
     }
     const [p] = await db.insert(workStepsTable).values({
       templateId, name: parsed.data.name, sortOrder: so,
+      templateComponentId: null,
       roleId: parsed.data.roleId ?? null,
       batchMode: parsed.data.batchMode ?? "individual",
       durationEstimate: parsed.data.durationEstimate ?? null,
