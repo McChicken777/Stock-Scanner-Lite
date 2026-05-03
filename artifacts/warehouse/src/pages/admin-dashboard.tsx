@@ -1,8 +1,32 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, CheckCircle2, Clock, Zap, Users, Wrench, Calendar, Flag } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Zap, Users, Wrench, Calendar, Flag, UserCheck } from "lucide-react";
 import { Link } from "wouter";
+
+interface AttendanceLiveRow {
+  userId: number;
+  username: string;
+  role: string;
+  status: "clocked_in" | "clocked_out" | "sick" | "vacation" | "absent";
+  clockIn: string | null;
+  workSeconds: number;
+  note: string | null;
+}
+
+async function fetchLive(): Promise<AttendanceLiveRow[]> {
+  const res = await fetch("/api/attendance/live", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed");
+  return res.json();
+}
+
+const STATUS_STYLES: Record<AttendanceLiveRow["status"], { label: string; cls: string }> = {
+  clocked_in: { label: "In", cls: "bg-green-100 text-green-700 border-green-300" },
+  clocked_out: { label: "Out", cls: "bg-gray-100 text-gray-700 border-gray-300" },
+  sick: { label: "Sick", cls: "bg-orange-100 text-orange-700 border-orange-300" },
+  vacation: { label: "Vacation", cls: "bg-blue-100 text-blue-700 border-blue-300" },
+  absent: { label: "Absent", cls: "bg-red-50 text-red-600 border-red-200" },
+};
 
 interface Task {
   id: number;
@@ -30,6 +54,12 @@ export default function AdminDashboardPage() {
     queryKey: ["/api/tasks/tasks"],
     queryFn: fetchTasks,
     refetchInterval: 10000,
+  });
+  const { data: live = [] } = useQuery({
+    queryKey: ["/api/attendance/live"],
+    queryFn: fetchLive,
+    refetchInterval: 15000,
+    enabled: user?.role === "admin",
   });
 
   if (user?.role !== "admin") {
@@ -123,6 +153,41 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* Who's In Today */}
+      {live.length > 0 && (() => {
+        const counts = live.reduce((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
+        return (
+          <div className="bg-card border-2 border-border rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <UserCheck className="h-4 w-4" /> Who's In Today
+              </p>
+              <Link href="/attendance/live">
+                <button className="text-[10px] font-bold uppercase text-primary hover:underline">View all</button>
+              </Link>
+            </div>
+            <div className="flex gap-2 text-[10px] font-bold flex-wrap">
+              <span className="px-2 py-0.5 rounded border bg-green-100 text-green-700 border-green-300">In {counts.clocked_in ?? 0}</span>
+              <span className="px-2 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-300">Out {counts.clocked_out ?? 0}</span>
+              <span className="px-2 py-0.5 rounded border bg-orange-100 text-orange-700 border-orange-300">Sick {counts.sick ?? 0}</span>
+              <span className="px-2 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-300">Vac {counts.vacation ?? 0}</span>
+              <span className="px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200">Absent {counts.absent ?? 0}</span>
+            </div>
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {live.map((r) => {
+                const s = STATUS_STYLES[r.status];
+                return (
+                  <div key={r.userId} className="flex items-center justify-between py-1 px-2 rounded bg-background border text-[12px]">
+                    <span className="font-bold truncate">{r.username}</span>
+                    <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${s.cls}`}>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Blocked Tasks Section */}
       {blocked.length > 0 && (
