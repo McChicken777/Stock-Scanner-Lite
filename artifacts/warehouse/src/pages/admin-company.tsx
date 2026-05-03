@@ -13,6 +13,7 @@ interface Company {
   id: number;
   name: string;
   plan: "basic" | "pro";
+  workHoursPerDay: number;
   features: {
     inventory: boolean;
     alerts: boolean;
@@ -44,6 +45,7 @@ export default function AdminCompanyPage() {
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState("");
   const [editingName, setEditingName] = useState(false);
+  const [workHours, setWorkHours] = useState("8");
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/company"],
@@ -52,7 +54,25 @@ export default function AdminCompanyPage() {
 
   useEffect(() => {
     if (company && !editingName) setCompanyName(company.name);
-  }, [company?.name]);
+    if (company) setWorkHours(String((company.workHoursPerDay ?? 480) / 60));
+  }, [company?.name, company?.workHoursPerDay]);
+
+  const updateHoursMutation = useMutation({
+    mutationFn: async (hours: number) => {
+      const res = await fetch("/api/company", {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workHoursPerDay: Math.round(hours * 60) }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ title: "Work hours updated!" });
+    },
+    onError: () => toast({ title: "Failed to update work hours", variant: "destructive" }),
+  });
 
   const updatePlanMutation = useMutation({
     mutationFn: async (plan: "basic" | "pro") => {
@@ -179,6 +199,35 @@ export default function AdminCompanyPage() {
                 <p className="text-xs text-muted-foreground">Define production steps</p>
               </button>
             </Link>
+          </div>
+        </div>
+
+        {/* Work hours per day */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Standard Work Hours / Day</p>
+            <p className="text-xs text-muted-foreground mt-1">Used to calculate overtime in attendance reports</p>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Input
+              type="number"
+              min="1" max="24" step="0.5"
+              value={workHours}
+              onChange={(e) => setWorkHours(e.target.value)}
+              className="h-10 flex-1 border-2"
+            />
+            <span className="text-sm text-muted-foreground font-bold">hours</span>
+            <Button
+              size="sm"
+              onClick={() => {
+                const n = Number(workHours);
+                if (Number.isFinite(n) && n > 0 && n <= 24) updateHoursMutation.mutate(n);
+              }}
+              disabled={updateHoursMutation.isPending || !workHours}
+              className="h-10"
+            >
+              {updateHoursMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            </Button>
           </div>
         </div>
 

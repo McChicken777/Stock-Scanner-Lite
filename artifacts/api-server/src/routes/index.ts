@@ -14,6 +14,7 @@ import suppliersRouter from "./suppliers";
 import companyRouter from "./company";
 import ownerRouter from "./owner";
 import purchasingRouter from "./purchasing";
+import attendanceRouter from "./attendance";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -33,5 +34,6 @@ router.use("/tasks", requireAuth, tasksRouter);
 router.use("/orders", requireAuth, ordersRouter);
 router.use("/suppliers", requireAuth, suppliersRouter);
 router.use("/purchase-orders", requireAuth, purchasingRouter);
+router.use("/attendance", requireAuth, attendanceRouter);
 
 export default router;

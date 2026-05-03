@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, serial, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, serial, jsonb, pgEnum, integer } from "drizzle-orm/pg-core";
 
 export const companyPlanEnum = pgEnum("company_plan", ["basic", "pro"]);
 
@@ -35,6 +35,7 @@ export const companiesTable = pgTable("companies", {
   name: text("name").notNull(),
   plan: companyPlanEnum("plan").notNull().default("pro"),
   features: jsonb("features").notNull().$type<CompanyFeatures>().$defaultFn(() => ({ ...PLAN_FEATURES.pro })),
+  workHoursPerDay: integer("work_hours_per_day").notNull().default(480),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

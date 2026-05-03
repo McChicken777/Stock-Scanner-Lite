@@ -27,6 +27,9 @@ import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import AdminZonesPage from "@/pages/admin-zones";
 import SupervisorPage from "@/pages/supervisor";
+import AttendancePage from "@/pages/attendance";
+import AttendanceLivePage from "@/pages/attendance-live";
+import AttendanceReportPage from "@/pages/attendance-report";
 
 // Work Order Pages
 import WorkProjectsPage from "@/pages/work/projects";
@@ -92,6 +95,9 @@ function ProtectedRoutes() {
         <Route path="/admin/dashboard" component={AdminDashboardPage} />
         <Route path="/admin/zones" component={AdminZonesPage} />
         <Route path="/supervisor" component={SupervisorPage} />
+        <Route path="/attendance" component={AttendancePage} />
+        <Route path="/attendance/live" component={AttendanceLivePage} />
+        <Route path="/attendance/report" component={AttendanceReportPage} />
         <Route path="/owner" component={OwnerPanelPage} />
         <Route path="/tasks" component={TasksDashboardPage} />
         <Route path="/orders" component={OrdersPage} />

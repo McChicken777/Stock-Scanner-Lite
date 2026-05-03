@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -74,6 +74,13 @@ function UserMenu() {
               </DropdownMenuItem>
             </Link>
           </>
+        )}
+        {user.role !== "owner" && (
+          <Link href="/attendance">
+            <DropdownMenuItem className="cursor-pointer font-semibold text-emerald-600 focus:text-emerald-600">
+              <Clock className="mr-2 h-4 w-4" /> Attendance
+            </DropdownMenuItem>
+          </Link>
         )}
         {(user.role === "admin" || user.isSupervisor) && (
           <Link href="/supervisor">

@@ -9,3 +9,4 @@ export * from "./work";
 export * from "./inbound";
 export * from "./orders";
 export * from "./purchasing";
+export * from "./attendance";
