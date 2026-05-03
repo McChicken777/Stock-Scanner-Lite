@@ -247,9 +247,19 @@ export default function ReorderQueuePage() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-xl font-black text-amber-700 leading-none">{item.totalStock}</p>
-                      <p className="text-[10px] text-muted-foreground">of {item.bufferStock} min</p>
+                      <p className="text-[10px] text-muted-foreground">of {item.minStock} min</p>
                     </div>
                   </div>
+
+                  {/* Worker shortage flag badges for this specific product */}
+                  {activeFlags.filter((f) => f.productName.trim().toLowerCase() === item.name.trim().toLowerCase()).map((f) => (
+                    <div key={f.id} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
+                      <AlertTriangle className="h-3 w-3 text-rose-600 flex-shrink-0" />
+                      <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wide">Flagged by worker</span>
+                      {f.flaggedByUsername && <span className="text-[10px] text-rose-600">({f.flaggedByUsername})</span>}
+                      {f.note && <span className="text-[10px] text-rose-600 truncate">— {f.note}</span>}
+                    </div>
+                  ))}
 
                   <div className="space-y-1 text-xs">
                     <div className="flex items-center gap-3">
@@ -261,7 +271,7 @@ export default function ReorderQueuePage() {
                     </div>
                     <div className="flex items-center gap-1 text-red-700 font-bold">
                       <RefreshCw className="h-3 w-3" />
-                      Short by {item.shortfall} (min: {item.bufferStock})
+                      Short by {item.shortfall} (min: {item.minStock})
                     </div>
                     {item.supplierName && (
                       <span className="text-muted-foreground">
