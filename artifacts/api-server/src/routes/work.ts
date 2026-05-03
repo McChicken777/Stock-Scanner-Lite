@@ -1072,15 +1072,29 @@ router.get("/batch-queue", requireAuth, async (req, res) => {
 // the next query — consistent with the individual /procedures/:id/stop flow.
 router.post("/batch-complete", requireAuth, async (req, res) => {
   try {
+    const userId = req.session.userId!;
     const companyId = req.session.companyId!;
+    const isAdmin = req.session.role === "admin" || req.session.role === "owner";
+
     const parsed = z.object({ stepIds: z.array(z.number().int()).min(1).max(200) }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "stepIds required" }); return; }
     const { stepIds } = parsed.data;
 
+    // For non-admins, get the caller's assigned roles to enforce step-level access control
+    let callerRoleIds: number[] = [];
+    if (!isAdmin) {
+      const userRoles = await db.select().from(userRolesTable).where(eq(userRolesTable.userId, userId));
+      callerRoleIds = userRoles.map((r) => r.roleId);
+    }
+
     const result = await db.transaction(async (tx) => {
-      // Within the transaction: verify ownership and read current status atomically
+      // Within the transaction: verify company ownership + read roleId and status atomically
       const verified = await tx
-        .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+        .select({
+          id: workItemStepsTable.id,
+          status: workItemStepsTable.status,
+          roleId: workItemStepsTable.roleId,
+        })
         .from(workItemStepsTable)
         .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
         .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
@@ -1088,6 +1102,20 @@ router.post("/batch-complete", requireAuth, async (req, res) => {
 
       if (verified.length !== stepIds.length) {
         throw Object.assign(new Error("One or more steps not found or unauthorized"), { statusCode: 403 });
+      }
+
+      // Role-based access: non-admins may only complete steps whose roleId is in their own roles
+      // (steps with no roleId are accessible to all workers in the company)
+      if (!isAdmin) {
+        const unauthorized = verified.filter(
+          (s) => s.roleId !== null && !callerRoleIds.includes(s.roleId)
+        );
+        if (unauthorized.length > 0) {
+          throw Object.assign(
+            new Error(`You do not have the role required to complete ${unauthorized.length} of the selected steps`),
+            { statusCode: 403 }
+          );
+        }
       }
 
       // Idempotent: only update steps not already completed

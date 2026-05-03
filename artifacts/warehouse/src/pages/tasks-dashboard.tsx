@@ -206,11 +206,14 @@ function MyStepsTab() {
 
 // ─── Batch Queue Tab ──────────────────────────────────────────────────────────
 
+interface ConfirmState { stepIds: number[]; label: string }
+
 function BatchQueueTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   const { data: queue, isLoading } = useQuery<BatchQueue>({
     queryKey: ["/api/work/batch-queue"],
@@ -227,37 +230,30 @@ function BatchQueueTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/work/batch-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
       setSelectedIds((prev) => { const next = new Set(prev); stepIds.forEach((id) => next.delete(id)); return next; });
+      setConfirm(null);
       const msg = data.alreadyDone > 0
         ? `${data.completed} done · ${data.alreadyDone} already complete`
         : `${data.completed} step${data.completed !== 1 ? "s" : ""} marked complete`;
       toast({ title: msg });
     },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+    onError: (err: Error) => { setConfirm(null); toast({ title: err.message, variant: "destructive" }); },
   });
 
+  const requestComplete = (stepIds: number[], label: string) => setConfirm({ stepIds, label });
+
   const toggle = (id: number) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
 
   const toggleGroup = (ids: number[], allSelected: boolean) => setSelectedIds((prev) => {
     const next = new Set(prev);
-    if (allSelected) ids.forEach((id) => next.delete(id));
-    else ids.forEach((id) => next.add(id));
+    if (allSelected) ids.forEach((id) => next.delete(id)); else ids.forEach((id) => next.add(id));
     return next;
   });
 
   const toggleExpand = (key: string) => setExpandedGroups((prev) => {
-    const next = new Set(prev);
-    next.has(key) ? next.delete(key) : next.add(key);
-    return next;
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
   });
-
-  const completeSelected = () => {
-    if (selectedIds.size === 0) return;
-    batchComplete.mutate([...selectedIds]);
-  };
 
   if (isLoading) return <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}</div>;
 
@@ -277,15 +273,32 @@ function BatchQueueTab() {
 
   return (
     <div className="space-y-5">
-      {/* Action bar */}
-      {selectedIds.size > 0 && (
-        <div className="sticky top-16 z-30 flex items-center justify-between gap-2 bg-green-600 text-white rounded-xl px-3 py-2 shadow-lg">
+      {/* Confirmation dialog */}
+      {confirm && (
+        <div className="sticky top-16 z-30 rounded-xl border-2 border-green-400 bg-green-50 px-4 py-3 shadow-lg space-y-2">
+          <p className="text-sm font-bold text-green-900">Mark {confirm.stepIds.length} step{confirm.stepIds.length !== 1 ? "s" : ""} complete?</p>
+          <p className="text-xs text-green-700 leading-snug">{confirm.label}</p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="h-7 text-xs flex-1"
+              onClick={() => setConfirm(null)} disabled={batchComplete.isPending}>Cancel</Button>
+            <Button size="sm" className="h-7 text-xs flex-1 bg-green-600 hover:bg-green-700 font-bold"
+              onClick={() => batchComplete.mutate(confirm.stepIds)} disabled={batchComplete.isPending}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+              {batchComplete.isPending ? "Saving…" : "Confirm Done"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Selection action bar (when no confirm is active) */}
+      {selectedIds.size > 0 && !confirm && (
+        <div className="sticky top-16 z-30 flex items-center justify-between gap-2 bg-purple-700 text-white rounded-xl px-3 py-2 shadow-lg">
           <span className="text-sm font-bold">{selectedIds.size} selected</span>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-white bg-white hover:bg-green-50"
+            <Button size="sm" variant="outline" className="h-7 text-xs text-purple-700 border-white bg-white hover:bg-purple-50"
               onClick={() => setSelectedIds(new Set())}>Clear</Button>
-            <Button size="sm" className="h-7 text-xs bg-white text-green-700 hover:bg-green-50 font-bold"
-              onClick={completeSelected} disabled={batchComplete.isPending}>
+            <Button size="sm" className="h-7 text-xs bg-white text-purple-700 hover:bg-purple-50 font-bold"
+              onClick={() => requestComplete([...selectedIds], `${selectedIds.size} selected step${selectedIds.size !== 1 ? "s" : ""} across all groups`)}>
               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Mark All Done
             </Button>
           </div>
@@ -301,39 +314,39 @@ function BatchQueueTab() {
           {freeBatchGroups.map((group) => {
             const allIds = group.items.map((i) => i.id);
             const allSelected = allIds.every((id) => selectedIds.has(id));
+            const projectSummary = [...new Map(group.items.map((i) => [i.projectId, i])).values()]
+              .map((i) => i.projectName).join(", ");
             return (
               <div key={group.stepName} className={`rounded-xl border-2 overflow-hidden ${priorityBg[group.topPriority]}`}>
-                {/* Group header */}
                 <div className="flex items-center justify-between gap-2 px-3 py-2.5 bg-white/60">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <button onClick={() => toggleGroup(allIds, allSelected)} className="flex-shrink-0">
-                      {allSelected
-                        ? <SquareCheck className="h-4 w-4 text-purple-600" />
-                        : <Square className="h-4 w-4 text-muted-foreground" />}
+                      {allSelected ? <SquareCheck className="h-4 w-4 text-purple-600" /> : <Square className="h-4 w-4 text-muted-foreground" />}
                     </button>
                     <div className="min-w-0">
                       <p className="font-bold text-sm leading-tight truncate">{group.stepName}</p>
-                      <p className="text-xs text-muted-foreground">{group.items.length} item{group.items.length !== 1 ? "s" : ""}{group.roleName ? ` · ${group.roleName}` : ""}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {group.items.length} item{group.items.length !== 1 ? "s" : ""}
+                        {group.roleName ? ` · ${group.roleName}` : ""}
+                        {" · "}{projectSummary}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <PriorityBadge p={group.topPriority} />
                     <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 font-bold"
-                      onClick={() => batchComplete.mutate(allIds)} disabled={batchComplete.isPending}>
+                      onClick={() => requestComplete(allIds, `"${group.stepName}" for ${group.items.length} item${group.items.length !== 1 ? "s" : ""} across ${projectSummary}`)}>
                       <CheckCircle2 className="h-3 w-3 mr-1" /> Done ({group.items.length})
                     </Button>
                   </div>
                 </div>
-                {/* Items */}
                 <div className="divide-y divide-border/40">
                   {group.items.map((item) => {
                     const dl = formatDeadline(item.deadline);
                     return (
                       <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-white/30">
                         <button onClick={() => toggle(item.id)} className="flex-shrink-0">
-                          {selectedIds.has(item.id)
-                            ? <SquareCheck className="h-4 w-4 text-purple-600" />
-                            : <Square className="h-4 w-4 text-muted-foreground" />}
+                          {selectedIds.has(item.id) ? <SquareCheck className="h-4 w-4 text-purple-600" /> : <Square className="h-4 w-4 text-muted-foreground" />}
                         </button>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{item.name}</p>
@@ -364,18 +377,23 @@ function BatchQueueTab() {
             const expanded = expandedGroups.has(key);
             const allIds = group.items.map((i) => i.id);
             const allSelected = allIds.every((id) => selectedIds.has(id));
+            // Project/priority summary: deduplicate projects, show each with its priority
+            const projectSummaryParts = [...new Map(group.items.map((i) => [i.projectId, i])).values()]
+              .map((i) => `${i.projectName} (${i.priority})`);
+            const projectSummary = projectSummaryParts.join(", ");
             return (
               <div key={key} className={`rounded-xl border-2 overflow-hidden ${priorityBg[group.topPriority]}`}>
-                {/* Group header */}
                 <div className="flex items-center gap-2 px-3 py-2.5 bg-white/60">
                   <button onClick={() => toggleGroup(allIds, allSelected)} className="flex-shrink-0">
-                    {allSelected
-                      ? <SquareCheck className="h-4 w-4 text-indigo-600" />
-                      : <Square className="h-4 w-4 text-muted-foreground" />}
+                    {allSelected ? <SquareCheck className="h-4 w-4 text-indigo-600" /> : <Square className="h-4 w-4 text-muted-foreground" />}
                   </button>
                   <button className="flex-1 min-w-0 text-left" onClick={() => toggleExpand(key)}>
                     <p className="font-bold text-sm leading-tight truncate">{group.templateName}</p>
-                    <p className="text-xs text-muted-foreground">{group.stepName} · {group.items.length} item{group.items.length !== 1 ? "s" : ""}{group.roleName ? ` · ${group.roleName}` : ""}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {group.stepName} · {group.items.length} item{group.items.length !== 1 ? "s" : ""}
+                      {group.roleName ? ` · ${group.roleName}` : ""}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{projectSummary}</p>
                   </button>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <PriorityBadge p={group.topPriority} />
@@ -383,12 +401,11 @@ function BatchQueueTab() {
                       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <Button size="sm" className="h-7 text-xs bg-green-600 hover:bg-green-700 font-bold"
-                      onClick={() => batchComplete.mutate(allIds)} disabled={batchComplete.isPending}>
+                      onClick={() => requestComplete(allIds, `"${group.stepName}" for ${group.items.length} ${group.templateName} item${group.items.length !== 1 ? "s" : ""} — ${projectSummary}`)}>
                       <CheckCircle2 className="h-3 w-3 mr-1" /> Done ({group.items.length})
                     </Button>
                   </div>
                 </div>
-                {/* Expanded items */}
                 {expanded && (
                   <div className="divide-y divide-border/40">
                     {group.items.map((item) => {
@@ -396,9 +413,7 @@ function BatchQueueTab() {
                       return (
                         <div key={item.id} className="flex items-center gap-2.5 px-3 py-2 bg-white/30">
                           <button onClick={() => toggle(item.id)} className="flex-shrink-0">
-                            {selectedIds.has(item.id)
-                              ? <SquareCheck className="h-4 w-4 text-indigo-600" />
-                              : <Square className="h-4 w-4 text-muted-foreground" />}
+                            {selectedIds.has(item.id) ? <SquareCheck className="h-4 w-4 text-indigo-600" /> : <Square className="h-4 w-4 text-muted-foreground" />}
                           </button>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{item.name}</p>
