@@ -23,6 +23,12 @@ interface PurchaseOrder {
   createdAt: string;
 }
 
+interface WaitingProject {
+  projectId: number;
+  projectName: string;
+  quantity: number;
+}
+
 interface POItem {
   id: number;
   poId: number;
@@ -32,6 +38,7 @@ interface POItem {
   supplierSku: string | null;
   quantityOrdered: number;
   quantityArrived: number;
+  waitingProjects: WaitingProject[];
 }
 
 interface PODetail {
@@ -161,7 +168,8 @@ function PODetailPage({ poId }: { poId: number }) {
       }),
     onSuccess: (data) => {
       invalidate();
-      toast({ title: `Stock updated — PO now ${data.poStatus.replace("_", " ")}` });
+      const stepNote = data.affectedStepCount > 0 ? ` · ${data.affectedStepCount} work step${data.affectedStepCount !== 1 ? "s" : ""} can now proceed` : "";
+      toast({ title: `Stock updated — PO now ${data.poStatus.replace("_", " ")}${stepNote}` });
       setArriveItemId(null);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
@@ -305,6 +313,19 @@ function PODetailPage({ poId }: { poId: number }) {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
+
+                  {/* Waiting projects — which work orders need this product */}
+                  {item.waitingProjects.length > 0 && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 space-y-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Waiting Work Orders ({item.waitingProjects.length})</p>
+                      {item.waitingProjects.map((wp) => (
+                        <div key={wp.projectId} className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-purple-900 truncate">{wp.projectName}</span>
+                          <span className="text-purple-600 font-mono ml-2 flex-shrink-0">need {wp.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {canEdit && !fullyArrived && (
                     <div className="flex gap-2">

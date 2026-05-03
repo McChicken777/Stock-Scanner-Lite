@@ -44,6 +44,7 @@ const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   itemType: z.enum(["purchased_part", "manufactured_part", "final_product"]).default("purchased_part"),
   category: z.string().default(""),
+  minStock: z.coerce.number().min(0, "Must be positive"),
   bufferStock: z.coerce.number().min(0, "Must be positive"),
   targetStock: z.coerce.number().min(0, "Must be positive"),
   supplierId: z.coerce.number().optional().or(z.literal("")),
@@ -112,6 +113,7 @@ export default function ProductFormPage() {
       name: "",
       itemType: "purchased_part",
       category: "",
+      minStock: 0,
       bufferStock: 0,
       targetStock: 0,
       supplierId: "",
@@ -131,9 +133,10 @@ export default function ProductFormPage() {
         name: p.name,
         itemType: normalizeItemType(p.itemType),
         category: p.category || "",
+        minStock: (p as Product & { minStock?: number }).minStock ?? 0,
         bufferStock: p.bufferStock,
         targetStock: p.targetStock || 0,
-        supplierId: p.supplierId ? String(p.supplierId) : "",
+        supplierId: p.supplierId ?? "",
         supplierProductName: p.supplierProductName || "",
         supplierSku: p.supplierSku || "",
         alertEmail: p.alertEmail || "",
@@ -145,6 +148,7 @@ export default function ProductFormPage() {
     const payload = {
       ...data,
       category: data.category || "",
+      minStock: data.minStock,
       supplierId: isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null,
       supplierProductName: isPurchased ? (data.supplierProductName || null) : null,
       supplierSku: isPurchased ? (data.supplierSku || null) : null,
@@ -290,14 +294,14 @@ export default function ProductFormPage() {
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="bufferStock"
+                name="minStock"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Min Stock</FormLabel>
                     <FormControl>
                       <Input type="number" min="0" className="h-14 text-lg border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Alert threshold</p>
+                    <p className="text-xs text-muted-foreground mt-1">Reorder point — trigger reorder below this</p>
                     <FormMessage />
                   </FormItem>
                 )}

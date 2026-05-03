@@ -198,8 +198,8 @@ router.post("/templates/confirm-generate", requireAdmin, async (req, res) => {
       const part = parts[pi];
       const [partProduct] = await db.insert(productsTable).values({
         name: part.name, category: "Component",
-        itemType: part.itemType ?? "manufactured_part" as "manufactured_part",
-        bufferStock: 0, targetStock: 0, companyId,
+        itemType: (part.itemType ?? "manufactured_part") as "manufactured_part",
+        minStock: 0, bufferStock: 0, targetStock: 0, companyId,
       }).returning();
       const [compEntry] = await db.insert(productComponentsTable).values({
         parentProductId: product.id, componentProductId: partProduct.id, quantity: 1, sortOrder: pi,
@@ -2330,13 +2330,13 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
       activeReservations.map((r) => [r.productId, r.reserved ?? 0])
     );
 
-    // Filter by available stock (total - reserved) < bufferStock (= min stock threshold)
+    // Filter by available stock (total - reserved) < minStock (= explicit reorder point)
     const lowStockProducts = allProducts
       .filter((p) => {
         const total = stockByProduct.get(p.id) ?? 0;
         const reserved = reservedByProduct.get(p.id) ?? 0;
         const available = Math.max(0, total - reserved);
-        return available < p.bufferStock;
+        return available < p.minStock;
       })
       .map((p) => {
         const total = stockByProduct.get(p.id) ?? 0;
@@ -2347,13 +2347,13 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           name: p.name,
           category: p.category,
           itemType: p.itemType,
-          minStock: p.bufferStock,
+          minStock: p.minStock,
           bufferStock: p.bufferStock,
           targetStock: p.targetStock,
           totalStock: total,
           reserved,
           available,
-          shortfall: Math.max(0, p.bufferStock - available),
+          shortfall: Math.max(0, p.minStock - available),
           supplierId: p.supplierId,
           supplierSku: p.supplierSku,
         };

@@ -17,6 +17,8 @@ export const productsTable = pgTable("products", {
   name: text("name").notNull(),
   category: text("category").notNull().default(""),
   itemType: itemTypeEnum("item_type").notNull().default("purchased_part"),
+  /** minStock: the reorder point — trigger reorder when available stock falls below this */
+  minStock: integer("min_stock").notNull().default(0),
   bufferStock: integer("buffer_stock").notNull().default(0),
   targetStock: integer("target_stock").notNull().default(0),
   supplierId: integer("supplier_id"),

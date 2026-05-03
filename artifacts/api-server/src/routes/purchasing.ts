@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import {
   db, purchaseOrdersTable, purchaseOrderItemsTable, productsTable,
-  stockTable, locationsTable, suppliersTable, workItemStepsTable, productComponentsTable, workProjectsTable, workProjectItemsTable,
+  stockTable, locationsTable, suppliersTable, workItemStepsTable, productComponentsTable,
+  workProjectsTable, workProjectItemsTable, stockReservationsTable,
 } from "@workspace/db";
 import { eq, and, sum, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -104,6 +105,33 @@ router.get("/:id", requireAuth, async (req, res) => {
       .innerJoin(productsTable, eq(purchaseOrderItemsTable.productId, productsTable.id))
       .where(eq(purchaseOrderItemsTable.poId, id));
 
+    // For each PO item, find which projects have active reservations for that product
+    const productIds = items.map((i) => i.item.productId);
+    const waitingReservations = productIds.length > 0
+      ? await db.select({
+          productId: stockReservationsTable.productId,
+          workOrderId: stockReservationsTable.workOrderId,
+          projectName: workProjectsTable.name,
+          quantity: stockReservationsTable.quantity,
+        })
+          .from(stockReservationsTable)
+          .innerJoin(workProjectsTable, eq(stockReservationsTable.workOrderId, workProjectsTable.id))
+          .where(and(
+            eq(stockReservationsTable.companyId, companyId),
+            eq(stockReservationsTable.status, "active"),
+            inArray(stockReservationsTable.productId, productIds),
+          ))
+      : [];
+
+    // Group by productId
+    const waitingByProduct = new Map<number, { projectId: number; projectName: string; quantity: number }[]>();
+    for (const r of waitingReservations) {
+      if (r.workOrderId == null) continue;
+      const existing = waitingByProduct.get(r.productId) ?? [];
+      existing.push({ projectId: r.workOrderId, projectName: r.projectName, quantity: r.quantity });
+      waitingByProduct.set(r.productId, existing);
+    }
+
     res.json({
       ...poRow.po,
       supplierName: poRow.supplierName ?? null,
@@ -112,6 +140,7 @@ router.get("/:id", requireAuth, async (req, res) => {
         productName: i.productName,
         productCategory: i.productCategory,
         supplierSku: i.supplierSku,
+        waitingProjects: waitingByProduct.get(i.item.productId) ?? [],
       })),
     });
   } catch (err) {
@@ -360,10 +389,13 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
                     inArray(workItemStepsTable.templateStepId, templateStepIds),
                     eq(workItemStepsTable.status, "not_started"),
                   ));
+                const count = affectedCount[0]?.count ?? 0;
                 req.log.info(
-                  { arrivedProductId, affectedSteps: affectedCount[0]?.count ?? 0 },
+                  { arrivedProductId, affectedSteps: count },
                   "PO arrive: stock incremented; affected not_started steps will be re-evaluated on next load"
                 );
+                // Store for response so caller can inform admin
+                (res as { locals: Record<string, unknown> }).locals.affectedStepCount = count;
               }
             }
           }
@@ -373,7 +405,12 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
       req.log.warn({ err }, "Non-fatal: failed to log affected steps after PO arrive");
     }
 
-    res.json({ item: updatedItem, poStatus: newPoStatus });
+    const affectedStepCount = (res as { locals?: Record<string, unknown> }).locals?.affectedStepCount;
+    res.json({
+      item: updatedItem,
+      poStatus: newPoStatus,
+      affectedStepCount: typeof affectedStepCount === "number" ? affectedStepCount : 0,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to mark item as arrived");
     res.status(500).json({ error: "Failed to mark item as arrived" });
