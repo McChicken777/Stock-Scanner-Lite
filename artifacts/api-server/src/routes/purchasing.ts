@@ -12,7 +12,7 @@ const router: IRouter = Router();
 
 // ─── LIST PURCHASE ORDERS ──────────────────────────────────────────────────────
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const pos = await db.select({

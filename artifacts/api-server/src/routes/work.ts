@@ -2467,6 +2467,7 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
     );
 
     const shortages = components
+      .filter((c) => c.product.itemType === "purchased_part")
       .map((c) => {
         const needed = c.comp.quantity * quantity;
         const total = stockByProduct.get(c.comp.componentProductId) ?? 0;
@@ -2475,6 +2476,7 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
         return {
           productId: c.comp.componentProductId,
           productName: c.product.name,
+          itemType: c.product.itemType,
           needed,
           have: available,
           totalStock: total,
@@ -2520,11 +2522,21 @@ router.post("/shortage-flags", requireAuth, async (req, res) => {
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
+    // Derive projectId from stepId → item → project when not explicitly provided
+    let resolvedProjectId = parsed.data.projectId ?? null;
+    if (!resolvedProjectId && parsed.data.stepId) {
+      const [row] = await db.select({ projectId: workProjectItemsTable.projectId })
+        .from(workItemStepsTable)
+        .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+        .where(eq(workItemStepsTable.id, parsed.data.stepId));
+      if (row?.projectId) resolvedProjectId = row.projectId;
+    }
+
     const [flag] = await db.insert(shortageFlagsTable).values({
       productName: parsed.data.productName,
       productId: parsed.data.productId ?? null,
       quantityNeeded: parsed.data.quantityNeeded ?? null,
-      projectId: parsed.data.projectId ?? null,
+      projectId: resolvedProjectId,
       flaggedByUsername: username,
       note: parsed.data.note ?? null,
       stepId: parsed.data.stepId ?? null,
