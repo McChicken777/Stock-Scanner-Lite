@@ -74,3 +74,9 @@ CREATE INDEX IF NOT EXISTS quotes_customer_id_idx ON quotes(customer_id);
 CREATE INDEX IF NOT EXISTS quotes_work_project_id_idx ON quotes(work_project_id);
 CREATE INDEX IF NOT EXISTS quote_items_quote_id_idx ON quote_items(quote_id);
 CREATE INDEX IF NOT EXISTS quote_revisions_quote_id_idx ON quote_revisions(quote_id);
+
+-- Guarantee uniqueness of generated quote numbers per company so
+-- concurrent creates can never reuse a number (the server retries
+-- on conflict).
+CREATE UNIQUE INDEX IF NOT EXISTS quotes_company_quote_number_uq
+  ON quotes(company_id, quote_number);

@@ -5,7 +5,7 @@ import {
   workTemplatesTable, workStepsTable, productComponentsTable, companiesTable,
   rolesTable, inboundTable,
 } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -48,6 +48,21 @@ function computeTotals(items: { quantity: number; unitPrice: number }[], discoun
   return { subtotal: +subtotal.toFixed(2), taxAmount, total };
 }
 
+async function assertItemProductsOwnership(
+  items: Array<{ productId?: number | null }>,
+  companyId: number,
+): Promise<true | string> {
+  const ids = Array.from(
+    new Set(items.map((it) => it.productId).filter((v): v is number => typeof v === "number")),
+  );
+  if (ids.length === 0) return true;
+  const rows = await db.select({ id: productsTable.id })
+    .from(productsTable)
+    .where(and(inArray(productsTable.id, ids), eq(productsTable.companyId, companyId)));
+  if (rows.length !== ids.length) return "One or more productId values are invalid";
+  return true;
+}
+
 async function assertCustomerOwnership(customerId: number | null | undefined, companyId: number): Promise<true | string> {
   if (customerId === null || customerId === undefined) return true;
   const [c] = await db.select({ id: customersTable.id }).from(customersTable)
@@ -55,13 +70,27 @@ async function assertCustomerOwnership(customerId: number | null | undefined, co
   return c ? true : "Invalid customerId";
 }
 
-async function nextQuoteNumber(companyId: number): Promise<string> {
+async function nextQuoteNumber(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  companyId: number,
+): Promise<string> {
   const year = new Date().getFullYear();
-  const [{ count }] = await db.select({ count: sql<number>`COUNT(*)` })
+  const prefix = `Q-${year}-`;
+  // Use the existing max sequence rather than a count, so deletes
+  // never cause a duplicate. Combined with the unique index on
+  // (company_id, quote_number) this is concurrency-safe; on conflict
+  // the caller will simply retry.
+  const startPos = prefix.length + 1;
+  const [{ max }] = await tx.select({
+    max: sql<number>`COALESCE(MAX(CAST(SUBSTRING(${quotesTable.quoteNumber} FROM ${sql.raw(String(startPos))}) AS INTEGER)), 0)`,
+  })
     .from(quotesTable)
-    .where(eq(quotesTable.companyId, companyId));
-  const seq = (Number(count) + 1).toString().padStart(4, "0");
-  return `Q-${year}-${seq}`;
+    .where(and(
+      eq(quotesTable.companyId, companyId),
+      sql`${quotesTable.quoteNumber} LIKE ${prefix + "%"}`,
+    ));
+  const seq = (Number(max) + 1).toString().padStart(4, "0");
+  return `${prefix}${seq}`;
 }
 
 async function loadQuoteFull(quoteId: number, companyId: number) {
@@ -179,42 +208,75 @@ router.post("/", requireAdmin, async (req, res) => {
     const ownOk = await assertCustomerOwnership(d.customerId, companyId);
     if (ownOk !== true) { res.status(400).json({ error: ownOk }); return; }
 
+    if (!d.customerId && !(d.customerName && d.customerName.trim())) {
+      res.status(400).json({ error: "Either customerId or customerName is required" });
+      return;
+    }
+
+    const prodOk = await assertItemProductsOwnership(d.items, companyId);
+    if (prodOk !== true) { res.status(400).json({ error: prodOk }); return; }
+
     const totals = computeTotals(d.items, d.discount, d.taxRate);
-    const quoteNumber = await nextQuoteNumber(companyId);
 
-    const [quote] = await db.insert(quotesTable).values({
-      quoteNumber,
-      status: "draft",
-      customerId: d.customerId ?? null,
-      customerName: d.customerName ?? null,
-      customerContact: d.customerContact ?? null,
-      customerEmail: d.customerEmail ?? null,
-      customerPhone: d.customerPhone ?? null,
-      customerAddress: d.customerAddress ?? null,
-      validUntil: d.validUntil ? new Date(d.validUntil) : null,
-      notes: d.notes ?? null,
-      terms: d.terms ?? null,
-      subtotal: totals.subtotal,
-      discount: d.discount,
-      taxRate: d.taxRate,
-      taxAmount: totals.taxAmount,
-      total: totals.total,
-      companyId,
-    }).returning();
+    const insertQuote = async () => db.transaction(async (tx) => {
+      const quoteNumber = await nextQuoteNumber(tx, companyId);
+      const [q] = await tx.insert(quotesTable).values({
+        quoteNumber,
+        status: "draft",
+        customerId: d.customerId ?? null,
+        customerName: d.customerName ?? null,
+        customerContact: d.customerContact ?? null,
+        customerEmail: d.customerEmail ?? null,
+        customerPhone: d.customerPhone ?? null,
+        customerAddress: d.customerAddress ?? null,
+        validUntil: d.validUntil ? new Date(d.validUntil) : null,
+        notes: d.notes ?? null,
+        terms: d.terms ?? null,
+        subtotal: totals.subtotal,
+        discount: d.discount,
+        taxRate: d.taxRate,
+        taxAmount: totals.taxAmount,
+        total: totals.total,
+        companyId,
+      }).returning();
 
-    if (d.items.length > 0) {
-      await db.insert(quoteItemsTable).values(
-        d.items.map((it, idx) => ({
-          quoteId: quote.id,
-          productId: it.productId ?? null,
-          name: it.name,
-          description: it.description ?? null,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          lineTotal: +(it.quantity * it.unitPrice).toFixed(2),
-          sortOrder: it.sortOrder ?? idx,
-        })),
-      );
+      if (d.items.length > 0) {
+        await tx.insert(quoteItemsTable).values(
+          d.items.map((it, idx) => ({
+            quoteId: q.id,
+            productId: it.productId ?? null,
+            name: it.name,
+            description: it.description ?? null,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            lineTotal: +(it.quantity * it.unitPrice).toFixed(2),
+            sortOrder: it.sortOrder ?? idx,
+          })),
+        );
+      }
+      return q;
+    });
+
+    // Retry up to 5 times on quote_number unique conflict (concurrent creates).
+    let quote: Awaited<ReturnType<typeof insertQuote>> | undefined;
+    let lastErr: unknown = undefined;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        quote = await insertQuote();
+        break;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("quotes_company_quote_number_uq")) {
+          lastErr = e;
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!quote) {
+      req.log.error({ err: lastErr }, "Quote number contention exhausted retries");
+      res.status(409).json({ error: "Quote number contention, please retry" });
+      return;
     }
 
     const full = await loadQuoteFull(quote.id, companyId);
@@ -257,6 +319,14 @@ router.put("/:id", requireAdmin, async (req, res) => {
 
     const ownOk = await assertCustomerOwnership(parsed.data.customerId, companyId);
     if (ownOk !== true) { res.status(400).json({ error: ownOk }); return; }
+
+    if (!parsed.data.customerId && !(parsed.data.customerName && parsed.data.customerName.trim())) {
+      res.status(400).json({ error: "Either customerId or customerName is required" });
+      return;
+    }
+
+    const prodOk = await assertItemProductsOwnership(parsed.data.items, companyId);
+    if (prodOk !== true) { res.status(400).json({ error: prodOk }); return; }
 
     // If quote was already sent, or the user supplied a revision note,
     // snapshot the previous state so the boss can see what changed.
