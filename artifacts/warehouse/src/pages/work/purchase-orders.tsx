@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -411,6 +411,11 @@ export default function PurchaseOrdersPage() {
   const isNewRoute = rawId === "new";
   const detailId = rawId && !isNewRoute ? Number(rawId) : null;
 
+  // Read prefill product from reorder-queue link (?productId=123)
+  const prefillProductId = isNewRoute
+    ? (Number(new URLSearchParams(window.location.search).get("productId")) || null)
+    : null;
+
   const [showCreate, setShowCreate] = useState(isNewRoute ?? false);
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newExpectedDate, setNewExpectedDate] = useState("");
@@ -426,6 +431,20 @@ export default function PurchaseOrdersPage() {
     queryFn: () => apiFetch("/api/suppliers"),
   });
 
+  const { data: products = [] } = useQuery<{ id: number; name: string; supplierId: number | null }[]>({
+    queryKey: ["/api/products"],
+    queryFn: () => apiFetch("/api/products"),
+    enabled: !!prefillProductId,
+  });
+  const prefillProduct = prefillProductId ? products.find((p) => p.id === prefillProductId) ?? null : null;
+
+  // Auto-select the prefill product's supplier when it loads
+  useEffect(() => {
+    if (prefillProduct?.supplierId && !newSupplierId) {
+      setNewSupplierId(String(prefillProduct.supplierId));
+    }
+  }, [prefillProduct?.supplierId]);
+
   const createMutation = useMutation({
     mutationFn: (data: object) =>
       apiFetch("/api/purchase-orders", {
@@ -433,7 +452,17 @@ export default function PurchaseOrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: (po: PurchaseOrder) => {
+    onSuccess: async (po: PurchaseOrder) => {
+      // If navigated here from the reorder queue, auto-add the flagged product as a line item
+      if (prefillProductId) {
+        try {
+          await apiFetch(`/api/purchase-orders/${po.id}/items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productId: prefillProductId, quantityOrdered: 1 }),
+          });
+        } catch { /* user can add items manually from PO detail */ }
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: "Purchase order created" });
       setShowCreate(false);
@@ -485,6 +514,14 @@ export default function PurchaseOrdersPage() {
         {showCreate && (
           <div className="border-2 border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3">
             <p className="font-bold text-sm">New Purchase Order</p>
+            {prefillProduct && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
+                <Package2 className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                <span className="text-xs font-semibold text-amber-800">
+                  Will include: <span className="font-bold">{prefillProduct.name}</span>
+                </span>
+              </div>
+            )}
             <select
               value={newSupplierId}
               onChange={(e) => setNewSupplierId(e.target.value)}

@@ -16,6 +16,7 @@ interface ReorderItem {
   name: string;
   category: string;
   itemType: string;
+  minStock: number;
   bufferStock: number;
   targetStock: number;
   totalStock: number;
@@ -25,6 +26,7 @@ interface ReorderItem {
   pendingPo: { poId: number; quantity: number; status: string } | null;
   supplierId: number | null;
   supplierSku: string | null;
+  supplierName: string | null;
 }
 
 interface ShortageFlag {
@@ -261,6 +263,11 @@ export default function ReorderQueuePage() {
                       <RefreshCw className="h-3 w-3" />
                       Short by {item.shortfall} (min: {item.bufferStock})
                     </div>
+                    {item.supplierName && (
+                      <span className="text-muted-foreground">
+                        Supplier: <span className="font-semibold">{item.supplierName}</span>
+                      </span>
+                    )}
                     {item.supplierSku && (
                       <span className="text-muted-foreground font-mono">SKU: {item.supplierSku}</span>
                     )}

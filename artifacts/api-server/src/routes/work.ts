@@ -6,6 +6,7 @@ import {
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
+  suppliersTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -1708,6 +1709,29 @@ router.post("/projects", requireAdmin, async (req, res) => {
       }
     }
 
+    // ── Reserve purchased-part BOM components for this work order ────────────────
+    // Ensures reorder queue and BOM checks reflect stock already committed to open orders
+    if (!quickJob) {
+      for (const { templateId, quantity } of (templateItems ?? [])) {
+        const [tmpl] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
+        if (!tmpl?.productId) continue;
+        const bomComps = await db.select().from(productComponentsTable)
+          .where(eq(productComponentsTable.parentProductId, tmpl.productId));
+        for (const comp of bomComps) {
+          const [compProduct] = await db.select({ itemType: productsTable.itemType })
+            .from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+          if (compProduct?.itemType !== "purchased_part") continue;
+          await db.insert(stockReservationsTable).values({
+            companyId,
+            productId: comp.componentProductId,
+            quantity: comp.quantity * quantity,
+            workOrderId: project.id,
+            status: "active",
+          });
+        }
+      }
+    }
+
     if (requiresExternalParts) {
       await db.insert(inboundTable).values({ projectId: project.id, status: "expected", companyId });
     }
@@ -2278,7 +2302,14 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
     const allProducts = await db.select().from(productsTable)
       .where(eq(productsTable.companyId, companyId));
 
-    const allStock = await db.select().from(stockTable);
+    // Only count stock in this company's own locations (multi-tenant safety)
+    const companyLocationIds = (await db.select({ id: locationsTable.id })
+      .from(locationsTable)
+      .where(eq(locationsTable.companyId, companyId)))
+      .map((l) => l.id);
+    const allStock = companyLocationIds.length > 0
+      ? await db.select().from(stockTable).where(inArray(stockTable.locationId, companyLocationIds))
+      : [];
     const stockByProduct = new Map<number, number>();
     for (const s of allStock) {
       stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
@@ -2299,7 +2330,7 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
       activeReservations.map((r) => [r.productId, r.reserved ?? 0])
     );
 
-    // Filter by available stock (total - reserved) < bufferStock
+    // Filter by available stock (total - reserved) < bufferStock (= min stock threshold)
     const lowStockProducts = allProducts
       .filter((p) => {
         const total = stockByProduct.get(p.id) ?? 0;
@@ -2316,6 +2347,7 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           name: p.name,
           category: p.category,
           itemType: p.itemType,
+          minStock: p.bufferStock,
           bufferStock: p.bufferStock,
           targetStock: p.targetStock,
           totalStock: total,
@@ -2325,7 +2357,8 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           supplierId: p.supplierId,
           supplierSku: p.supplierSku,
         };
-      });
+      })
+      .sort((a, b) => b.shortfall - a.shortfall);
 
     // Find pending POs for each product
     if (lowStockProducts.length === 0) { res.json([]); return; }
@@ -2355,8 +2388,18 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
       }
     }
 
+    // Resolve supplier names for display and linking
+    const supplierIds = [...new Set(lowStockProducts.map((p) => p.supplierId).filter((id): id is number => id != null))];
+    const supplierRows = supplierIds.length > 0
+      ? await db.select({ id: suppliersTable.id, name: suppliersTable.name })
+          .from(suppliersTable)
+          .where(inArray(suppliersTable.id, supplierIds))
+      : [];
+    const supplierNameById = new Map(supplierRows.map((s) => [s.id, s.name]));
+
     res.json(lowStockProducts.map((p) => ({
       ...p,
+      supplierName: p.supplierId ? (supplierNameById.get(p.supplierId) ?? null) : null,
       pendingPo: pendingPoByProduct.get(p.id) ?? null,
     })));
   } catch (err) {
@@ -2391,9 +2434,17 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
 
     const componentProductIds = components.map((c) => c.comp.componentProductId);
 
-    // Total stock per component product
-    const allStock = await db.select().from(stockTable)
-      .where(inArray(stockTable.productId, componentProductIds));
+    // Total stock per component product — only count this company's locations (multi-tenant safety)
+    const bomLocationIds = (await db.select({ id: locationsTable.id })
+      .from(locationsTable)
+      .where(eq(locationsTable.companyId, companyId)))
+      .map((l) => l.id);
+    const allStock = bomLocationIds.length > 0
+      ? await db.select().from(stockTable).where(and(
+          inArray(stockTable.productId, componentProductIds),
+          inArray(stockTable.locationId, bomLocationIds),
+        ))
+      : [];
     const stockByProduct = new Map<number, number>();
     for (const s of allStock) {
       stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
