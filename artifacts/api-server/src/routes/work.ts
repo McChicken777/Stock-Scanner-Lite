@@ -941,6 +941,162 @@ router.post("/templates/:templateId/components/:componentId/apply-preset", requi
   }
 });
 
+// ─── BATCH QUEUE ──────────────────────────────────────────────────────────────
+
+const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+
+function topPriority(items: { priority: string }[]): string {
+  return items.reduce((best, i) =>
+    (PRIORITY_ORDER[i.priority] ?? 99) < (PRIORITY_ORDER[best] ?? 99) ? i.priority : best
+  , "low");
+}
+
+// GET /work/batch-queue — ready batch steps scoped to user's roles
+router.get("/batch-queue", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    const isAdmin = req.session.role === "admin" || req.session.role === "owner";
+
+    const userRoles = await db.select().from(userRolesTable).where(eq(userRolesTable.userId, userId));
+    const roleIds = userRoles.map((r) => r.roleId);
+
+    if (!isAdmin && roleIds.length === 0) {
+      res.json({ freeBatchGroups: [], typeBatchGroups: [], totalCount: 0 });
+      return;
+    }
+
+    const batchConditions = [
+      eq(workProjectsTable.companyId, companyId),
+      eq(workProjectsTable.status, "in_progress"),
+      eq(workItemStepsTable.status, "not_started"),
+      inArray(workItemStepsTable.batchMode, ["free_batch", "type_batch"]),
+    ];
+    if (!isAdmin) batchConditions.push(inArray(workItemStepsTable.roleId!, roleIds));
+
+    const batchRows = await db
+      .select({ step: workItemStepsTable, item: workProjectItemsTable, project: workProjectsTable })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(...batchConditions))
+      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder);
+
+    if (batchRows.length === 0) {
+      res.json({ freeBatchGroups: [], typeBatchGroups: [], totalCount: 0 });
+      return;
+    }
+
+    // Filter to READY steps only (all earlier steps on same item are completed)
+    const itemIds = [...new Set(batchRows.map((r) => r.item.id))];
+    const allItemSteps = await db.select().from(workItemStepsTable)
+      .where(inArray(workItemStepsTable.itemId, itemIds))
+      .orderBy(workItemStepsTable.sortOrder);
+    const itemStepMap = new Map<number, typeof workItemStepsTable.$inferSelect[]>();
+    for (const s of allItemSteps) {
+      if (!itemStepMap.has(s.itemId)) itemStepMap.set(s.itemId, []);
+      itemStepMap.get(s.itemId)!.push(s);
+    }
+
+    const readyRows = batchRows.filter(({ step, item }) => {
+      const itemSteps = itemStepMap.get(item.id) ?? [];
+      const myIndex = itemSteps.findIndex((s) => s.id === step.id);
+      if (myIndex <= 0) return true;
+      return itemSteps.slice(0, myIndex).every((s) => s.status === "completed");
+    });
+
+    if (readyRows.length === 0) {
+      res.json({ freeBatchGroups: [], typeBatchGroups: [], totalCount: 0 });
+      return;
+    }
+
+    const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
+
+    const itemData = readyRows.map(({ step, item, project }) => ({
+      id: step.id,
+      name: item.name,
+      stepName: step.name,
+      batchMode: step.batchMode,
+      roleId: step.roleId,
+      roleName: step.roleId ? (roleMap.get(step.roleId) ?? null) : null,
+      projectId: project.id,
+      projectName: project.name,
+      priority: project.priority as string,
+      deadline: project.deadline,
+      durationEstimate: step.durationEstimate,
+    }));
+
+    // Free batch: group by step name (normalised)
+    const freeBatchMap = new Map<string, typeof itemData>();
+    for (const item of itemData.filter((i) => i.batchMode === "free_batch")) {
+      const key = item.stepName.toLowerCase().trim();
+      if (!freeBatchMap.has(key)) freeBatchMap.set(key, []);
+      freeBatchMap.get(key)!.push(item);
+    }
+    const freeBatchGroups = Array.from(freeBatchMap.values()).map((items) => ({
+      stepName: items[0].stepName,
+      roleId: items[0].roleId,
+      roleName: items[0].roleName,
+      topPriority: topPriority(items),
+      items,
+    }));
+
+    // Type batch: group by template name (strip trailing " #N" and sub-part suffix)
+    const typeBatchMap = new Map<string, typeof itemData>();
+    for (const item of itemData.filter((i) => i.batchMode === "type_batch")) {
+      const templateName = item.name.replace(/ #\d+$/, "").replace(/ › .*$/, "");
+      if (!typeBatchMap.has(templateName)) typeBatchMap.set(templateName, []);
+      typeBatchMap.get(templateName)!.push(item);
+    }
+    const typeBatchGroups = Array.from(typeBatchMap.entries()).map(([templateName, items]) => ({
+      templateName,
+      stepName: items[0].stepName,
+      roleId: items[0].roleId,
+      roleName: items[0].roleName,
+      topPriority: topPriority(items),
+      items,
+    }));
+
+    res.json({ freeBatchGroups, typeBatchGroups, totalCount: readyRows.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get batch queue");
+    res.status(500).json({ error: "Failed to get batch queue" });
+  }
+});
+
+// POST /work/batch-complete — bulk complete an array of step IDs
+router.post("/batch-complete", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ stepIds: z.array(z.number().int()).min(1).max(200) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "stepIds required" }); return; }
+    const { stepIds } = parsed.data;
+
+    // Verify all steps belong to this company
+    const verified = await db
+      .select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(inArray(workItemStepsTable.id, stepIds), eq(workProjectsTable.companyId, companyId)));
+
+    if (verified.length !== stepIds.length) {
+      res.status(403).json({ error: "One or more steps not found or unauthorized" });
+      return;
+    }
+
+    await db.update(workItemStepsTable)
+      .set({ status: "completed" })
+      .where(inArray(workItemStepsTable.id, stepIds));
+
+    res.json({ completed: stepIds.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to batch complete steps");
+    res.status(500).json({ error: "Failed to batch complete steps" });
+  }
+});
+
 // ─── MY STEPS (role-based worker view) ───────────────────────────────────────
 
 router.get("/my-steps", requireAuth, async (req, res) => {
