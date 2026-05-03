@@ -4,8 +4,9 @@ import {
   workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
+  productionZonesTable, wipLocationsTable,
 } from "@workspace/db";
-import { eq, and, isNull, or, sql, inArray, ne } from "drizzle-orm";
+import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { anthropic } from "@workspace/integrations-anthropic-ai";
@@ -1823,6 +1824,277 @@ router.post("/procedures/:procedureId/reset", requireAdmin, async (req, res) => 
   } catch (err) {
     req.log.error({ err }, "Failed to reset procedure");
     res.status(500).json({ error: "Failed to reset procedure" });
+  }
+});
+
+// ─── PRODUCTION ZONES ─────────────────────────────────────────────────────────
+
+router.get("/production-zones", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const zones = await db.select().from(productionZonesTable)
+      .where(eq(productionZonesTable.companyId, companyId))
+      .orderBy(productionZonesTable.sortOrder, productionZonesTable.name);
+    res.json(zones);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list production zones");
+    res.status(500).json({ error: "Failed to list production zones" });
+  }
+});
+
+router.post("/production-zones", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
+    const [zone] = await db.insert(productionZonesTable)
+      .values({ name: parsed.data.name, companyId })
+      .returning();
+    res.status(201).json(zone);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create production zone");
+    res.status(500).json({ error: "Failed to create production zone" });
+  }
+});
+
+router.delete("/production-zones/:id", requireAdmin, async (req, res) => {
+  try {
+    await db.delete(productionZonesTable).where(eq(productionZonesTable.id, Number(req.params.id)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete production zone");
+    res.status(500).json({ error: "Failed to delete production zone" });
+  }
+});
+
+// ─── WIP LOCATIONS ────────────────────────────────────────────────────────────
+
+router.get("/steps/:stepId/wip-location", requireAuth, async (req, res) => {
+  try {
+    const stepId = Number(req.params.stepId);
+    const [loc] = await db.select().from(wipLocationsTable)
+      .where(eq(wipLocationsTable.stepId, stepId))
+      .orderBy(desc(wipLocationsTable.setAt))
+      .limit(1);
+    res.json(loc ?? null);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get wip location");
+    res.status(500).json({ error: "Failed to get wip location" });
+  }
+});
+
+router.post("/steps/:stepId/wip-location", requireAuth, async (req, res) => {
+  try {
+    const stepId = Number(req.params.stepId);
+    const userId = req.session.userId!;
+    const parsed = z.object({
+      locationType: z.enum(["warehouse", "zone", "with_worker"]),
+      locationValue: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid location data" }); return; }
+    const [loc] = await db.insert(wipLocationsTable)
+      .values({ stepId, locationType: parsed.data.locationType, locationValue: parsed.data.locationValue ?? null, setByUserId: userId })
+      .returning();
+    res.status(201).json(loc);
+  } catch (err) {
+    req.log.error({ err }, "Failed to set wip location");
+    res.status(500).json({ error: "Failed to set wip location" });
+  }
+});
+
+// ─── SUPERVISOR ENDPOINTS ──────────────────────────────────────────────────────
+
+router.get("/supervisor/daily-plan", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // All non-completed steps for in_progress projects
+    const allSteps = await db
+      .select({
+        proc: workItemStepsTable,
+        item: workProjectItemsTable,
+        project: workProjectsTable,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        ne(workItemStepsTable.status, "completed"),
+      ))
+      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemStepsTable.sortOrder);
+
+    if (allSteps.length === 0) {
+      res.json({ roleGroups: [], totalReady: 0, totalInProgress: 0 });
+      return;
+    }
+
+    // Determine readiness: need all steps per item to check blocking
+    const itemIds = [...new Set(allSteps.map((r) => r.item.id))];
+    const allItemProcs = await db.select().from(workItemStepsTable)
+      .where(inArray(workItemStepsTable.itemId, itemIds))
+      .orderBy(workItemStepsTable.sortOrder);
+
+    const itemProcMap = new Map<number, typeof workItemStepsTable.$inferSelect[]>();
+    for (const p of allItemProcs) {
+      if (!itemProcMap.has(p.itemId)) itemProcMap.set(p.itemId, []);
+      itemProcMap.get(p.itemId)!.push(p);
+    }
+
+    const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
+
+    const readyAndActive: Array<{
+      id: number; name: string; itemName: string; projectName: string;
+      deadline: string; priority: string; roleName: string | null;
+      durationEstimate: number | null; status: "not_started" | "in_progress";
+      roleId: number | null;
+    }> = [];
+
+    for (const { proc, item, project } of allSteps) {
+      const itemProcs = itemProcMap.get(item.id) ?? [];
+      const myIndex = itemProcs.findIndex((p) => p.id === proc.id);
+      const blockedBy = myIndex > 0
+        ? itemProcs.slice(0, myIndex).find((p) => p.status !== "completed")
+        : undefined;
+
+      if (!blockedBy || proc.status === "in_progress") {
+        readyAndActive.push({
+          id: proc.id,
+          name: proc.name,
+          itemName: item.name,
+          projectName: project.name,
+          deadline: project.deadline.toISOString(),
+          priority: project.priority,
+          roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
+          durationEstimate: proc.durationEstimate,
+          status: proc.status as "not_started" | "in_progress",
+          roleId: proc.roleId,
+        });
+      }
+    }
+
+    // Group by role
+    const roleGroupMap = new Map<string, typeof readyAndActive>();
+    for (const step of readyAndActive) {
+      const key = step.roleId != null ? String(step.roleId) : "null";
+      if (!roleGroupMap.has(key)) roleGroupMap.set(key, []);
+      roleGroupMap.get(key)!.push(step);
+    }
+
+    const roleGroups = [...roleGroupMap.entries()].map(([, steps]) => ({
+      roleId: steps[0].roleId,
+      roleName: steps[0].roleName,
+      steps,
+      totalMinutes: steps.reduce((sum, s) => sum + (s.durationEstimate ?? 0), 0),
+    })).sort((a, b) => (a.roleName ?? "zzz").localeCompare(b.roleName ?? "zzz"));
+
+    res.json({
+      roleGroups,
+      totalReady: readyAndActive.filter((s) => s.status === "not_started").length,
+      totalInProgress: readyAndActive.filter((s) => s.status === "in_progress").length,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get supervisor daily plan");
+    res.status(500).json({ error: "Failed to get supervisor daily plan" });
+  }
+});
+
+router.get("/supervisor/bottlenecks", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // All in_progress projects
+    const projects = await db.select().from(workProjectsTable)
+      .where(and(eq(workProjectsTable.companyId, companyId), eq(workProjectsTable.status, "in_progress")));
+
+    const projectIds = projects.map((p) => p.id);
+    if (projectIds.length === 0) {
+      res.json({ roleBottlenecks: [], overdueProjects: [], allBlockedItems: [] });
+      return;
+    }
+
+    const allItems = await db.select().from(workProjectItemsTable)
+      .where(inArray(workProjectItemsTable.projectId, projectIds));
+    const itemIds = allItems.map((i) => i.id);
+
+    const allProcs = itemIds.length > 0
+      ? await db.select().from(workItemStepsTable)
+          .where(inArray(workItemStepsTable.itemId, itemIds))
+          .orderBy(workItemStepsTable.itemId, workItemStepsTable.sortOrder)
+      : [];
+
+    const allRoles = await db.select().from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleMap = new Map(allRoles.map((r) => [r.id, r.name]));
+
+    // Overdue projects
+    const now = new Date();
+    const overdueProjects = projects
+      .filter((p) => new Date(p.deadline) < now)
+      .map((p) => ({ id: p.id, name: p.name, deadline: p.deadline.toISOString(), priority: p.priority }));
+
+    // Per-item step readiness
+    const itemProcMap = new Map<number, typeof workItemStepsTable.$inferSelect[]>();
+    for (const p of allProcs) {
+      if (!itemProcMap.has(p.itemId)) itemProcMap.set(p.itemId, []);
+      itemProcMap.get(p.itemId)!.push(p);
+    }
+
+    const roleStats = new Map<number | null, { readyCount: number; blockedCount: number; roleName: string | null }>();
+
+    const allBlockedItems: { id: number; name: string; projectName: string; blockedStep: string }[] = [];
+
+    for (const item of allItems) {
+      const procs = itemProcMap.get(item.id) ?? [];
+      const remaining = procs.filter((p) => p.status !== "completed");
+      if (remaining.length === 0) continue;
+
+      const project = projects.find((p) => p.id === item.projectId)!;
+      let allBlocked = true;
+
+      for (const proc of remaining) {
+        const myIndex = procs.findIndex((p) => p.id === proc.id);
+        const blockedBy = myIndex > 0
+          ? procs.slice(0, myIndex).find((p) => p.status !== "completed")
+          : undefined;
+
+        const isBlocked = !!blockedBy && proc.status !== "in_progress";
+        const roleId = proc.roleId ?? null;
+        const roleName = roleId !== null ? (roleMap.get(roleId) ?? null) : null;
+
+        if (!roleStats.has(roleId)) roleStats.set(roleId, { readyCount: 0, blockedCount: 0, roleName });
+        if (isBlocked) {
+          roleStats.get(roleId)!.blockedCount++;
+        } else {
+          roleStats.get(roleId)!.readyCount++;
+          allBlocked = false;
+        }
+      }
+
+      if (allBlocked) {
+        const firstBlocked = remaining[0];
+        const myIndex = procs.findIndex((p) => p.id === firstBlocked.id);
+        const blockedBy = myIndex > 0 ? procs.slice(0, myIndex).find((p) => p.status !== "completed") : undefined;
+        allBlockedItems.push({
+          id: item.id,
+          name: item.name,
+          projectName: project?.name ?? "",
+          blockedStep: blockedBy?.name ?? firstBlocked.name,
+        });
+      }
+    }
+
+    // Role bottlenecks: roles where blocked > ready (pressure)
+    const roleBottlenecks = [...roleStats.entries()]
+      .map(([roleId, stats]) => ({ roleId, ...stats }))
+      .filter((r) => r.blockedCount > 0)
+      .sort((a, b) => b.blockedCount - a.blockedCount);
+
+    res.json({ roleBottlenecks, overdueProjects, allBlockedItems });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get bottlenecks");
+    res.status(500).json({ error: "Failed to get bottlenecks" });
   }
 });
 

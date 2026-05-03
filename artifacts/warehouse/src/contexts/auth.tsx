@@ -13,6 +13,7 @@ export interface AuthUser {
   id: number;
   username: string;
   role: "owner" | "admin" | "worker";
+  isSupervisor: boolean;
   companyId: number | null;
   features: CompanyFeatures;
 }

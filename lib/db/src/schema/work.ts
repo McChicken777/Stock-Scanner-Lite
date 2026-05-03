@@ -157,6 +157,28 @@ export const stepPresetEntriesTable = pgTable("step_preset_entries", {
   durationEstimate: integer("duration_estimate"),
 });
 
+// Production zones: named physical areas in the warehouse (e.g. "CNC Bay", "Paint Booth")
+export const productionZonesTable = pgTable("production_zones", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// WIP location type: where in the factory a work-item-step currently lives
+export const wipLocationTypeEnum = pgEnum("wip_location_type", ["warehouse", "zone", "with_worker"]);
+
+// WIP locations: tracks where a step's output is currently located
+export const wipLocationsTable = pgTable("wip_locations", {
+  id: serial("id").primaryKey(),
+  stepId: integer("step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
+  locationType: wipLocationTypeEnum("location_type").notNull(),
+  locationValue: text("location_value"),
+  setByUserId: integer("set_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  setAt: timestamp("set_at").defaultNow().notNull(),
+});
+
 // AI snapshots: stores previous template/item state for undo after AI edits
 export const aiSnapshotsTable = pgTable("ai_snapshots", {
   id: serial("id").primaryKey(),
@@ -186,3 +208,5 @@ export type ProcedureInput = typeof procedureInputsTable.$inferSelect;
 export type StepPreset = typeof stepPresetsTable.$inferSelect;
 export type StepPresetEntry = typeof stepPresetEntriesTable.$inferSelect;
 export type AiSnapshot = typeof aiSnapshotsTable.$inferSelect;
+export type ProductionZone = typeof productionZonesTable.$inferSelect;
+export type WipLocation = typeof wipLocationsTable.$inferSelect;

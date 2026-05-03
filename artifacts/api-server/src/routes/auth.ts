@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, companiesTable, workTemplatesTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
+import { eq, count, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import type { CompanyFeatures } from "@workspace/db";
@@ -57,6 +57,7 @@ router.post("/login", async (req, res) => {
       id: user.id,
       username: user.username,
       role: user.role,
+      isSupervisor: user.isSupervisor,
       companyId: user.companyId,
       features,
     });
@@ -96,10 +97,14 @@ router.get("/me", requireAuth, async (req, res) => {
     }
   }
 
+  const [meUser] = await db.select({ isSupervisor: usersTable.isSupervisor })
+    .from(usersTable).where(eq(usersTable.id, req.session.userId!));
+
   res.json({
     id: req.session.userId,
     username: req.session.username,
     role: req.session.role,
+    isSupervisor: meUser?.isSupervisor ?? false,
     companyId: req.session.companyId,
     features,
   });
@@ -109,7 +114,7 @@ router.get("/users", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const users = await db
-      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, createdAt: usersTable.createdAt })
+      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, isSupervisor: usersTable.isSupervisor, createdAt: usersTable.createdAt })
       .from(usersTable)
       .where(eq(usersTable.companyId, companyId))
       .orderBy(usersTable.username);
@@ -146,6 +151,25 @@ router.post("/users", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to create user");
     res.status(500).json({ error: "Failed to create user" });
+  }
+});
+
+router.patch("/users/:userId/supervisor", requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const parsed = z.object({ isSupervisor: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "isSupervisor boolean required" }); return; }
+    const companyId = req.session.companyId!;
+    const [user] = await db
+      .update(usersTable)
+      .set({ isSupervisor: parsed.data.isSupervisor })
+      .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)))
+      .returning({ id: usersTable.id, isSupervisor: usersTable.isSupervisor });
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    res.json(user);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update supervisor flag");
+    res.status(500).json({ error: "Failed to update supervisor flag" });
   }
 });
 

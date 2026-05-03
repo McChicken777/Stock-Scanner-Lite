@@ -20,12 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye } from "lucide-react";
 
 interface UserEntry {
   id: number;
   username: string;
   role: "admin" | "worker";
+  isSupervisor: boolean;
   createdAt: string;
 }
 
@@ -55,6 +56,20 @@ async function createUser(data: { username: string; password: string; role: "adm
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
     throw new Error(d.error || "Failed to create user");
+  }
+  return res.json();
+}
+
+async function toggleSupervisor(userId: number, isSupervisor: boolean) {
+  const res = await fetch(`/api/auth/users/${userId}/supervisor`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isSupervisor }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || "Failed to update supervisor flag");
   }
   return res.json();
 }
@@ -175,6 +190,18 @@ export default function AdminUsersPage() {
     },
   });
 
+  const supervisorMutation = useMutation({
+    mutationFn: ({ userId, isSupervisor }: { userId: number; isSupervisor: boolean }) =>
+      toggleSupervisor(userId, isSupervisor),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/users"] });
+      toast({ title: vars.isSupervisor ? "Supervisor access granted" : "Supervisor access removed" });
+    },
+    onError: (err) => {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    },
+  });
+
   if (user?.role !== "admin") {
     return (
       <div className="p-6 text-center text-muted-foreground">
@@ -284,7 +311,22 @@ export default function AdminUsersPage() {
                   </Badge>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
+                {u.role === "worker" && (
+                  <button
+                    title={u.isSupervisor ? "Remove supervisor access" : "Grant supervisor access"}
+                    onClick={() => supervisorMutation.mutate({ userId: u.id, isSupervisor: !u.isSupervisor })}
+                    disabled={supervisorMutation.isPending}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                      u.isSupervisor
+                        ? "bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200"
+                        : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                    }`}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {u.isSupervisor ? "Supervisor" : "Supervisor"}
+                  </button>
+                )}
                 {u.role === "worker" && (
                   <Dialog open={rolesOpen && selectedUserId === u.id} onOpenChange={(open) => {
                     if (!open) setSelectedUserId(null);

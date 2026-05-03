@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   Play, CheckCircle2, AlertCircle, Calendar, Flag, Timer, User,
-  Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap,
+  Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -89,11 +92,123 @@ const batchLabels: Record<string, string> = {
   free_batch: "Batch", type_batch: "Type batch", individual: "",
 };
 
+// ─── WIP Location Dialog ─────────────────────────────────────────────────────
+
+interface ProductionZone { id: number; name: string }
+
+function WipLocationDialog({
+  stepId,
+  onClose,
+}: {
+  stepId: number;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [locationType, setLocationType] = useState<"warehouse" | "zone" | "with_worker">("warehouse");
+  const [zoneId, setZoneId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const { data: zones = [] } = useQuery<ProductionZone[]>({
+    queryKey: ["/api/work/production-zones"],
+    queryFn: () => apiFetch("/api/work/production-zones"),
+  });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const locationValue = locationType === "zone"
+        ? (zones.find((z) => z.id === Number(zoneId))?.name ?? zoneId)
+        : locationType === "with_worker" ? "With worker" : "General warehouse area";
+      await apiFetch(`/api/work/steps/${stepId}/wip-location`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locationType, locationValue }),
+      });
+      toast({ title: "Location recorded" });
+      onClose();
+    } catch {
+      toast({ title: "Failed to save location", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-black text-base">Where is this part now?</p>
+            <p className="text-xs text-muted-foreground">Optional — helps supervisors track WIP</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {(["warehouse", "zone", "with_worker"] as const).map((type) => {
+            const labels: Record<string, string> = { warehouse: "Warehouse", zone: "Zone", with_worker: "With me" };
+            const icons: Record<string, React.ReactNode> = {
+              warehouse: <MapPin className="h-5 w-5" />,
+              zone: <MapPin className="h-5 w-5" />,
+              with_worker: <User className="h-5 w-5" />,
+            };
+            return (
+              <button
+                key={type}
+                onClick={() => setLocationType(type)}
+                className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 text-xs font-bold transition-all ${
+                  locationType === type
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {icons[type]}
+                {labels[type]}
+              </button>
+            );
+          })}
+        </div>
+
+        {locationType === "zone" && zones.length > 0 && (
+          <Select value={zoneId} onValueChange={setZoneId}>
+            <SelectTrigger className="h-11 border-2">
+              <SelectValue placeholder="Select zone…" />
+            </SelectTrigger>
+            <SelectContent>
+              {zones.map((z) => (
+                <SelectItem key={z.id} value={String(z.id)}>{z.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {locationType === "zone" && zones.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center">No zones configured. Ask an admin to add production zones.</p>
+        )}
+
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Skip</Button>
+          <Button
+            className="flex-1 h-11 font-bold"
+            disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
+            onClick={save}
+          >
+            {saving ? "Saving…" : "Save Location"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── My Steps Tab ────────────────────────────────────────────────────────────
 
 function MyStepsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [wipStepId, setWipStepId] = useState<number | null>(null);
 
   const { data: steps = [], isLoading } = useQuery<MyStep[]>({
     queryKey: ["/api/work/my-steps"],
@@ -109,18 +224,20 @@ function MyStepsTab() {
 
   const stopMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/work/procedures/${id}/stop`, { method: "POST" }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] }); toast({ title: "Step completed!" }); },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+      toast({ title: "Step completed!" });
+      setWipStepId(id);
+    },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const inProgress = steps.filter((s) => s.status === "in_progress");
   const ready = steps.filter((s) => s.status === "not_started" && s.stepStatus === "ready");
-  const blocked = steps.filter((s) => s.status === "not_started" && s.stepStatus === "blocked");
 
-  const StepCard = ({ step, variant }: { step: MyStep; variant: "ready" | "inProgress" | "blocked" }) => {
+  const StepCard = ({ step, variant }: { step: MyStep; variant: "ready" | "inProgress" }) => {
     const dl = formatDeadline(step.project.deadline);
     const bg = variant === "inProgress" ? "bg-orange-50 border-orange-300"
-      : variant === "blocked" ? "bg-red-50 border-red-200"
       : dl.overdue ? "bg-red-50 border-red-300" : "bg-green-50 border-green-200";
     return (
       <div className={`rounded-xl border-2 p-3 space-y-2 ${bg}`}>
@@ -155,11 +272,6 @@ function MyStepsTab() {
             </span>
           )}
         </div>
-        {variant === "blocked" && step.blockedByStep && (
-          <p className="text-xs text-red-600 font-medium flex items-center gap-1">
-            <AlertCircle className="h-3 w-3 flex-shrink-0" />Waiting for: {step.blockedByStep.name}
-          </p>
-        )}
         {variant === "inProgress" && (
           <Button size="sm" onClick={() => stopMutation.mutate(step.id)} disabled={stopMutation.isPending}
             className="w-full bg-green-600 hover:bg-green-700 font-bold">
@@ -177,37 +289,36 @@ function MyStepsTab() {
   };
 
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>;
-  if (steps.length === 0) return (
+  if (inProgress.length === 0 && ready.length === 0) return (
     <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
-      <p className="font-semibold text-muted-foreground">No steps assigned to your roles</p>
-      <p className="text-sm text-muted-foreground mt-1">Steps appear here when work orders are created with role assignments.</p>
+      <p className="font-semibold text-muted-foreground">No steps ready for your roles</p>
+      <p className="text-sm text-muted-foreground mt-1">Steps appear here once earlier steps in the sequence are completed.</p>
     </div>
   );
 
   return (
-    <div className="space-y-5">
-      {inProgress.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-            In Progress ({inProgress.length})
-          </h2>
-          {inProgress.map((s) => <StepCard key={s.id} step={s} variant="inProgress" />)}
-        </div>
+    <>
+      <div className="space-y-5">
+        {inProgress.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+              In Progress ({inProgress.length})
+            </h2>
+            {inProgress.map((s) => <StepCard key={s.id} step={s} variant="inProgress" />)}
+          </div>
+        )}
+        {ready.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">Ready to Start ({ready.length})</h2>
+            {ready.map((s) => <StepCard key={s.id} step={s} variant="ready" />)}
+          </div>
+        )}
+      </div>
+      {wipStepId !== null && (
+        <WipLocationDialog stepId={wipStepId} onClose={() => setWipStepId(null)} />
       )}
-      {ready.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">Ready to Start ({ready.length})</h2>
-          {ready.map((s) => <StepCard key={s.id} step={s} variant="ready" />)}
-        </div>
-      )}
-      {blocked.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-red-600">Blocked ({blocked.length})</h2>
-          {blocked.map((s) => <StepCard key={s.id} step={s} variant="blocked" />)}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 

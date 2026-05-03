@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -58,6 +58,11 @@ function UserMenu() {
                 <ShieldCheck className="mr-2 h-4 w-4" /> Manage Users
               </DropdownMenuItem>
             </Link>
+            <Link href="/admin/zones">
+              <DropdownMenuItem className="cursor-pointer">
+                <MapPin className="mr-2 h-4 w-4" /> Production Zones
+              </DropdownMenuItem>
+            </Link>
             <Link href="/admin/company">
               <DropdownMenuItem className="cursor-pointer">
                 <Building2 className="mr-2 h-4 w-4" /> Company & Plan
@@ -69,6 +74,13 @@ function UserMenu() {
               </DropdownMenuItem>
             </Link>
           </>
+        )}
+        {(user.role === "admin" || user.isSupervisor) && (
+          <Link href="/supervisor">
+            <DropdownMenuItem className="cursor-pointer font-semibold text-indigo-600 focus:text-indigo-600">
+              <Eye className="mr-2 h-4 w-4" /> Supervisor View
+            </DropdownMenuItem>
+          </Link>
         )}
         <DropdownMenuItem
           className="text-destructive focus:text-destructive cursor-pointer"

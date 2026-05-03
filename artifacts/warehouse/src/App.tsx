@@ -25,6 +25,8 @@ import TasksDashboardPage from "@/pages/tasks-dashboard";
 import OrdersPage from "@/pages/orders";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
+import AdminZonesPage from "@/pages/admin-zones";
+import SupervisorPage from "@/pages/supervisor";
 
 // Work Order Pages
 import WorkProjectsPage from "@/pages/work/projects";
@@ -85,6 +87,8 @@ function ProtectedRoutes() {
         <Route path="/admin/procedures" component={AdminProceduresPage} />
         <Route path="/admin/procedure-inputs/:procId" component={AdminProcedureInputsPage} />
         <Route path="/admin/dashboard" component={AdminDashboardPage} />
+        <Route path="/admin/zones" component={AdminZonesPage} />
+        <Route path="/supervisor" component={SupervisorPage} />
         <Route path="/owner" component={OwnerPanelPage} />
         <Route path="/tasks" component={TasksDashboardPage} />
         <Route path="/orders" component={OrdersPage} />
