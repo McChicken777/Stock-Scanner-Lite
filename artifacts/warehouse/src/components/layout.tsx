@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
-  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock
+  HardHat, LogOut, FolderKanban, Tag, Boxes, Building2, Crown, PackageCheck, CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock, BookTemplate, Wrench
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -63,6 +63,38 @@ function UserMenu() {
                 <MapPin className="mr-2 h-4 w-4" /> Production Zones
               </DropdownMenuItem>
             </Link>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold py-1">
+              Work Setup
+            </DropdownMenuLabel>
+            <Link href="/work/templates">
+              <DropdownMenuItem className="cursor-pointer flex-col items-start gap-0">
+                <div className="flex items-center w-full">
+                  <BookTemplate className="mr-2 h-4 w-4 text-emerald-600" />
+                  <span className="font-semibold">Item Templates</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground ml-6">Reusable products with steps & BOM</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/admin/procedures">
+              <DropdownMenuItem className="cursor-pointer flex-col items-start gap-0">
+                <div className="flex items-center w-full">
+                  <Wrench className="mr-2 h-4 w-4 text-indigo-600" />
+                  <span className="font-semibold">Procedures</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground ml-6">Reusable steps for quick jobs</span>
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/admin/roles">
+              <DropdownMenuItem className="cursor-pointer flex-col items-start gap-0">
+                <div className="flex items-center w-full">
+                  <HardHat className="mr-2 h-4 w-4 text-purple-600" />
+                  <span className="font-semibold">Roles</span>
+                </div>
+                <span className="text-[10px] text-muted-foreground ml-6">Who does which step</span>
+              </DropdownMenuItem>
+            </Link>
+            <DropdownMenuSeparator />
             <Link href="/admin/company">
               <DropdownMenuItem className="cursor-pointer">
                 <Building2 className="mr-2 h-4 w-4" /> Company & Plan
