@@ -271,9 +271,8 @@ function WorkerBottomNav() {
   const [location] = useLocation();
 
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
+    { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/attendance", icon: Clock, label: "Attendance" },
   ];
 
   return (

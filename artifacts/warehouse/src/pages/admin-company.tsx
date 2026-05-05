@@ -429,7 +429,7 @@ export default function AdminCompanyPage() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Company Holidays</p>
           </div>
-          <p className="text-xs text-muted-foreground -mt-2">Days listed here are treated as non-overtime days (all hours count as regular).</p>
+          <p className="text-xs text-muted-foreground -mt-2">Days listed here are full overtime days — all hours worked count as overtime (zero regular-hours threshold).</p>
 
           {/* Add holiday form */}
           <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">

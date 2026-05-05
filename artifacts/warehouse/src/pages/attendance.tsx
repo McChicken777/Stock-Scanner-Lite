@@ -426,7 +426,7 @@ interface PendingLeave {
 function LeaveApprovalPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [notes, setNotes] = React.useState<Record<number, string>>({});
+  const [notes, setNotes] = useState<Record<number, string>>({});
 
   const { data: pending = [], isLoading } = useQuery<PendingLeave[]>({
     queryKey: ["/api/leave/pending"],
