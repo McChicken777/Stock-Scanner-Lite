@@ -238,14 +238,14 @@ export default function AttendancePage() {
   });
 
   const absence = useMutation({
-    mutationFn: (type: "sick" | "vacation") => api("/api/attendance/absence", {
+    mutationFn: () => api("/api/attendance/absence", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, note: note.trim() || undefined }),
+      body: JSON.stringify({ type: "sick", note: note.trim() || undefined }),
     }),
-    onSuccess: (_d, type) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/attendance/today"] });
       setNote("");
-      toast({ title: type === "sick" ? "Marked as sick today" : "Vacation day recorded" });
+      toast({ title: "Marked as sick today" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -337,27 +337,23 @@ export default function AttendancePage() {
         <div className="rounded-2xl border-2 border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Declare absence today</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sick today?</p>
           </div>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Optional note (e.g. flu, family event)…"
+            placeholder="Optional note (e.g. flu)…"
             rows={2}
             className="w-full px-3 py-2 rounded-lg border-2 border-input bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="outline" className="h-12 border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
-              disabled={absence.isPending || !!today?.workSeconds}
-              onClick={() => absence.mutate("sick")}>
-              <Heart className="h-4 w-4 mr-1.5" /> Sick Today
-            </Button>
-            <Button variant="outline" className="h-12 border-sky-200 text-sky-700 hover:bg-sky-50 font-bold"
-              disabled={absence.isPending || !!today?.workSeconds}
-              onClick={() => absence.mutate("vacation")}>
-              <Plane className="h-4 w-4 mr-1.5" /> Vacation Today
-            </Button>
-          </div>
+          <Button variant="outline" className="w-full h-12 border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
+            disabled={absence.isPending || !!today?.workSeconds}
+            onClick={() => absence.mutate()}>
+            <Heart className="h-4 w-4 mr-1.5" /> Mark Sick Today
+          </Button>
+          <p className="text-[11px] text-muted-foreground text-center">
+            For vacation, use "Leave Requests" below — it needs manager approval.
+          </p>
           {today?.workSeconds ? (
             <p className="text-xs text-muted-foreground text-center">You already worked today; absence cannot be declared.</p>
           ) : null}

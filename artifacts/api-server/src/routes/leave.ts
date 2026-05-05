@@ -39,12 +39,12 @@ async function insertAttendanceDays(userId: number, companyId: number, type: "si
       // Only overwrite if it's not a real worked day
       if (!(existing.type === "work" && (existing.clockIn || existing.workSeconds > 0))) {
         await db.update(attendanceLogsTable)
-          .set({ type, note: note ?? null, clockIn: null, clockOut: null, workSeconds: 0, overtimeSeconds: 0 })
+          .set({ type, status: "approved", note: note ?? null, clockIn: null, clockOut: null, workSeconds: 0, overtimeSeconds: 0 })
           .where(eq(attendanceLogsTable.id, existing.id));
       }
     } else {
       try {
-        await db.insert(attendanceLogsTable).values({ userId, companyId, date, type, note: note ?? null });
+        await db.insert(attendanceLogsTable).values({ userId, companyId, date, type, status: "approved", note: note ?? null });
       } catch {
         // Ignore unique constraint violations (race condition)
       }

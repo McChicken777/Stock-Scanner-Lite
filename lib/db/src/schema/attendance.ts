@@ -3,6 +3,7 @@ import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 
 export const attendanceTypeEnum = pgEnum("attendance_type", ["work", "sick", "vacation"]);
+export const attendanceStatusEnum = pgEnum("attendance_status", ["pending", "approved", "rejected"]);
 
 export const attendanceLogsTable = pgTable("attendance_logs", {
   id: serial("id").primaryKey(),
@@ -10,6 +11,7 @@ export const attendanceLogsTable = pgTable("attendance_logs", {
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   date: date("date").notNull(),
   type: attendanceTypeEnum("type").notNull(),
+  status: attendanceStatusEnum("status").notNull().default("approved"),
   clockIn: timestamp("clock_in"),
   clockOut: timestamp("clock_out"),
   workSeconds: integer("work_seconds").notNull().default(0),

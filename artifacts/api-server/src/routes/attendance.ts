@@ -119,7 +119,7 @@ router.post("/clock-in", requireAuth, async (req, res) => {
         return;
       }
       const [updated] = await db.update(attendanceLogsTable)
-        .set({ clockIn: new Date(), clockOut: null })
+        .set({ clockIn: new Date(), clockOut: null, status: "approved" })
         .where(and(eq(attendanceLogsTable.id, existing.id), eq(attendanceLogsTable.companyId, companyId)))
         .returning();
       res.json(updated);
@@ -128,7 +128,7 @@ router.post("/clock-in", requireAuth, async (req, res) => {
 
     try {
       const [created] = await db.insert(attendanceLogsTable).values({
-        userId, companyId, date: today, type: "work", clockIn: new Date(),
+        userId, companyId, date: today, type: "work", status: "approved", clockIn: new Date(),
       }).returning();
       res.status(201).json(created);
     } catch (err: unknown) {
@@ -182,7 +182,7 @@ router.post("/clock-out", requireAuth, async (req, res) => {
 });
 
 const absenceSchema = z.object({
-  type: z.enum(["sick", "vacation"]),
+  type: z.literal("sick"),
   note: z.string().max(500).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
@@ -191,6 +191,10 @@ router.post("/absence", requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
     const companyId = req.session.companyId!;
+    if (req.body && req.body.type === "vacation") {
+      res.status(400).json({ error: "Vacations require manager approval. Submit a request via /api/leave." });
+      return;
+    }
     const parsed = absenceSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -208,7 +212,7 @@ router.post("/absence", requireAuth, async (req, res) => {
         return;
       }
       const [updated] = await db.update(attendanceLogsTable)
-        .set({ type: parsed.data.type, note: parsed.data.note ?? null, clockIn: null, clockOut: null, workSeconds: 0, overtimeSeconds: 0 })
+        .set({ type: parsed.data.type, status: "approved", note: parsed.data.note ?? null, clockIn: null, clockOut: null, workSeconds: 0, overtimeSeconds: 0 })
         .where(and(eq(attendanceLogsTable.id, existing.id), eq(attendanceLogsTable.companyId, companyId)))
         .returning();
       res.json(updated);
@@ -217,7 +221,7 @@ router.post("/absence", requireAuth, async (req, res) => {
 
     try {
       const [created] = await db.insert(attendanceLogsTable).values({
-        userId, companyId, date, type: parsed.data.type, note: parsed.data.note ?? null,
+        userId, companyId, date, type: parsed.data.type, status: "approved", note: parsed.data.note ?? null,
       }).returning();
       res.status(201).json(created);
     } catch (err: unknown) {
@@ -256,7 +260,7 @@ router.get("/live", requireAuth, async (req, res) => {
         let status: "clocked_in" | "clocked_out" | "sick" | "vacation" | "absent" = "absent";
         if (log) {
           if (log.type === "sick") status = "sick";
-          else if (log.type === "vacation") status = "vacation";
+          else if (log.type === "vacation" && log.status === "approved") status = "vacation";
           else if (log.clockIn && !log.clockOut) status = "clocked_in";
           else if (log.clockOut) status = "clocked_out";
         }
@@ -337,7 +341,8 @@ router.get("/report", requireAuth, async (req, res) => {
 
     const logs = await db.select({
       id: attendanceLogsTable.id, userId: attendanceLogsTable.userId, date: attendanceLogsTable.date,
-      type: attendanceLogsTable.type, clockIn: attendanceLogsTable.clockIn, clockOut: attendanceLogsTable.clockOut,
+      type: attendanceLogsTable.type, status: attendanceLogsTable.status,
+      clockIn: attendanceLogsTable.clockIn, clockOut: attendanceLogsTable.clockOut,
       workSeconds: attendanceLogsTable.workSeconds, overtimeSeconds: attendanceLogsTable.overtimeSeconds,
       note: attendanceLogsTable.note, username: usersTable.username,
     })
@@ -354,7 +359,9 @@ router.get("/report", requireAuth, async (req, res) => {
         usersById.set(l.userId, u);
       }
       if (l.type === "sick") u.sickDays += 1;
-      else if (l.type === "vacation") u.vacationDays += 1;
+      else if (l.type === "vacation") {
+        if (l.status === "approved") u.vacationDays += 1;
+      }
       else {
         let work = l.workSeconds ?? 0;
         if (l.clockIn && !l.clockOut) {
