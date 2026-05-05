@@ -119,11 +119,6 @@ function UserMenu() {
                 <Building2 className="mr-2 h-4 w-4" /> Company & Plan
               </DropdownMenuItem>
             </Link>
-            <Link href="/admin/dashboard">
-              <DropdownMenuItem className="cursor-pointer">
-                <LayoutDashboard className="mr-2 h-4 w-4 text-blue-600" /> Admin Dashboard
-              </DropdownMenuItem>
-            </Link>
             <Link href="/admin/leave-inbox">
               <DropdownMenuItem className="cursor-pointer">
                 <Inbox className="mr-2 h-4 w-4 text-violet-600" /> Leave Inbox
@@ -327,12 +322,6 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
                 <p className="text-sm font-semibold">Company & Plan</p>
-              </div>
-            </Link>
-            <Link href="/admin/dashboard" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <LayoutDashboard className="h-5 w-5 text-blue-600 shrink-0" />
-                <p className="text-sm font-semibold">Admin Dashboard</p>
               </div>
             </Link>
             <Link href="/admin/leave-inbox" onClick={() => setSettingsOpen(false)}>

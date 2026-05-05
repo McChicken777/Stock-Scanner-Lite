@@ -1,9 +1,14 @@
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
-import { Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp, FileText, Users } from "lucide-react";
+import {
+  Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp,
+  FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
+  Flag, AlertCircle, Inbox,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
+import { useAuth } from "@/contexts/auth";
 
 interface StockValuation {
   totalValue: number;
@@ -14,7 +19,56 @@ interface StockValuation {
   productsWithoutSalePrice: number;
 }
 
+interface AttendanceLiveRow {
+  userId: number;
+  username: string;
+  role: string;
+  status: "clocked_in" | "clocked_out" | "sick" | "vacation" | "absent";
+  clockIn: string | null;
+  workSeconds: number;
+  note: string | null;
+}
+
+interface Task {
+  id: number;
+  projectId: number;
+  status: "not_started" | "in_progress" | "completed";
+  procedureName: string;
+  itemName: string;
+  roleName: string;
+  readyStatus: "READY" | "BLOCKED";
+  blockedReason: string;
+  deadline: string;
+  priority: "low" | "normal" | "high" | "urgent";
+  isOverdue: boolean;
+}
+
+interface PendingLeave {
+  id: number;
+  username: string;
+  type: "sick" | "vacation";
+  startDate: string;
+  endDate: string;
+  status: "pending";
+}
+
+const ATTENDANCE_STYLES: Record<AttendanceLiveRow["status"], { label: string; cls: string }> = {
+  clocked_in: { label: "In", cls: "bg-green-100 text-green-700 border-green-300" },
+  clocked_out: { label: "Out", cls: "bg-gray-100 text-gray-700 border-gray-300" },
+  sick: { label: "Sick", cls: "bg-orange-100 text-orange-700 border-orange-300" },
+  vacation: { label: "Vacation", cls: "bg-blue-100 text-blue-700 border-blue-300" },
+  absent: { label: "Absent", cls: "bg-red-50 text-red-600 border-red-200" },
+};
+
+function fmtDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export default function Dashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
   const { data: valuation } = useQuery<StockValuation>({
     queryKey: ["/api/stock/valuation"],
@@ -31,6 +85,39 @@ export default function Dashboard() {
       if (!res.ok) return {};
       return res.json();
     },
+  });
+
+  // Admin-only queries
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
+    queryKey: ["/api/tasks/tasks"],
+    queryFn: async () => {
+      const res = await fetch("/api/tasks/tasks", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: 10000,
+    enabled: isAdmin,
+  });
+
+  const { data: live = [] } = useQuery<AttendanceLiveRow[]>({
+    queryKey: ["/api/attendance/live"],
+    queryFn: async () => {
+      const res = await fetch("/api/attendance/live", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: 15000,
+    enabled: isAdmin,
+  });
+
+  const { data: pendingLeave = [] } = useQuery<PendingLeave[]>({
+    queryKey: ["/api/leave/pending"],
+    queryFn: async () => {
+      const res = await fetch("/api/leave/pending", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isAdmin,
   });
 
   if (isLoading) {
@@ -57,12 +144,19 @@ export default function Dashboard() {
     );
   }
 
+  // Admin task buckets
+  const ready = tasks.filter((t) => t.readyStatus === "READY" && t.status === "not_started");
+  const blocked = tasks.filter((t) => t.readyStatus === "BLOCKED" && t.status === "not_started");
+  const inProgress = tasks.filter((t) => t.status === "in_progress");
+  const completed = tasks.filter((t) => t.status === "completed");
+
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6 pb-24">
       <div className="px-1 pt-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
       </div>
 
+      {/* ── Stock metrics ── */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/locations">
           <Card className="bg-secondary text-secondary-foreground border-none hover:bg-secondary/90 transition-colors cursor-pointer active:scale-95 duration-200">
@@ -182,6 +276,160 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* ── Admin sections ── */}
+      {isAdmin && (
+        <>
+          {/* Task Overview */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Production</p>
+            {tasksLoading ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <Link href="/tasks">
+                  <div className="bg-card border-2 border-green-200 rounded-xl p-3 cursor-pointer hover:border-green-400 transition-colors">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Zap className="h-4 w-4 text-green-600" />
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Ready</p>
+                    </div>
+                    <p className="text-2xl font-black text-green-600">{ready.length}</p>
+                  </div>
+                </Link>
+                <div className="bg-card border-2 border-red-200 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Blocked</p>
+                  </div>
+                  <p className="text-2xl font-black text-red-600">{blocked.length}</p>
+                </div>
+                <div className="bg-card border-2 border-orange-200 rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Clock className="h-4 w-4 text-orange-600" />
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">In Progress</p>
+                  </div>
+                  <p className="text-2xl font-black text-orange-600">{inProgress.length}</p>
+                </div>
+                <div className="bg-card border-2 border-border rounded-xl p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="h-4 w-4 text-green-700" />
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Completed</p>
+                  </div>
+                  <p className="text-2xl font-black text-green-700">{completed.length}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Who's In Today */}
+          {live.length > 0 && (() => {
+            const counts = live.reduce((acc, r) => {
+              acc[r.status] = (acc[r.status] ?? 0) + 1; return acc;
+            }, {} as Record<string, number>);
+            return (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-primary" /> Who's In Today
+                    </span>
+                    <Link href="/attendance/live">
+                      <span className="text-[10px] font-bold uppercase text-primary hover:underline">View all</span>
+                    </Link>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex gap-2 text-[10px] font-bold flex-wrap">
+                    <span className="px-2 py-0.5 rounded border bg-green-100 text-green-700 border-green-300">In {counts.clocked_in ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-300">Out {counts.clocked_out ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-orange-100 text-orange-700 border-orange-300">Sick {counts.sick ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-300">Vac {counts.vacation ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200">Absent {counts.absent ?? 0}</span>
+                  </div>
+                  <div className="space-y-1 max-h-[180px] overflow-y-auto">
+                    {live.map((r) => {
+                      const s = ATTENDANCE_STYLES[r.status];
+                      return (
+                        <div key={r.userId} className="flex items-center justify-between py-1 px-2 rounded bg-muted/40 border text-[12px]">
+                          <span className="font-bold truncate">{r.username}</span>
+                          <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${s.cls}`}>{s.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Pending Leave Approvals */}
+          {pendingLeave.length > 0 && (
+            <Link href="/admin/leave-inbox">
+              <Card className="border-2 border-amber-200 bg-amber-50/50 cursor-pointer hover:border-amber-400 transition-colors active:scale-95">
+                <CardContent className="p-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Inbox className="h-4 w-4 text-amber-700" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-amber-900 text-sm">Leave Requests</p>
+                      <p className="text-xs text-amber-700">{pendingLeave.length} pending approval</p>
+                    </div>
+                  </div>
+                  <div className="space-y-0.5 text-right max-w-[160px]">
+                    {pendingLeave.slice(0, 2).map((r) => (
+                      <p key={r.id} className="text-[11px] text-amber-800 truncate">
+                        {r.username} · {fmtDate(r.startDate)}{r.startDate !== r.endDate ? `–${fmtDate(r.endDate)}` : ""}
+                      </p>
+                    ))}
+                    {pendingLeave.length > 2 && (
+                      <p className="text-[11px] text-amber-700">+{pendingLeave.length - 2} more</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+
+          {/* Blocked Tasks */}
+          {blocked.length > 0 && (
+            <Card className={`border-2 ${blocked.some((t) => t.isOverdue) ? "border-red-400 bg-red-50" : "border-red-200 bg-red-50/50"}`}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold text-red-700 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" /> Blocked Tasks ({blocked.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                  {blocked.map((task) => (
+                    <div key={task.id} className={`p-2 rounded border-l-4 text-[11px] ${task.isOverdue ? "bg-red-200 border-red-700" : "bg-white border-red-500"}`}>
+                      <div className="flex items-start justify-between gap-1 mb-0.5">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold">{task.procedureName}</p>
+                          <p className="text-[10px] text-muted-foreground">{task.itemName}</p>
+                        </div>
+                        {task.priority === "urgent" && <Flag className="h-3 w-3 text-red-700 flex-shrink-0" />}
+                      </div>
+                      <p className={`text-[10px] font-medium ${task.isOverdue ? "text-red-700" : "text-red-600"}`}>
+                        {task.blockedReason}
+                      </p>
+                      <div className="flex items-center gap-1 text-[10px] mt-0.5">
+                        <Calendar className="h-3 w-3" />
+                        <span className={task.isOverdue ? "font-bold text-red-700" : "text-muted-foreground"}>
+                          {new Date(task.deadline).toLocaleDateString()}{task.isOverdue ? " (OVERDUE)" : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* ── Low stock & activity (all admins/supervisors) ── */}
       {summary.lowStockProducts.length > 0 && (
         <Card className="border-destructive/50 bg-destructive/5">
           <CardHeader className="pb-2">
@@ -239,7 +487,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between items-center mt-0.5 text-xs text-muted-foreground">
                     <span>Loc: {entry.locationId}</span>
-                    <span>{new Date(entry.changedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span>{new Date(entry.changedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 </div>
               </div>
