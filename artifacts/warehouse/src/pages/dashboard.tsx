@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp,
   FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
-  Flag, AlertCircle, Inbox,
+  Flag, AlertCircle, Inbox, FolderKanban,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,6 +50,11 @@ interface PendingLeave {
   startDate: string;
   endDate: string;
   status: "pending";
+}
+
+interface WorkProject {
+  id: number;
+  status: string;
 }
 
 const ATTENDANCE_STYLES: Record<AttendanceLiveRow["status"], { label: string; cls: string }> = {
@@ -119,6 +124,17 @@ export default function Dashboard() {
     },
     enabled: isAdmin,
   });
+
+  const { data: projects = [] } = useQuery<WorkProject[]>({
+    queryKey: ["/api/work/projects"],
+    queryFn: async () => {
+      const res = await fetch("/api/work/projects", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isAdmin,
+  });
+  const openProjects = projects.filter((p) => p.status !== "completed" && p.status !== "cancelled");
 
   if (isLoading) {
     return (
@@ -279,9 +295,32 @@ export default function Dashboard() {
       {/* ── Admin sections ── */}
       {isAdmin && (
         <>
+          {/* Open Projects KPI */}
+          <Link href="/work/projects">
+            <Card className="bg-secondary text-secondary-foreground border-none hover:bg-secondary/90 transition-colors cursor-pointer active:scale-95 duration-200">
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center">
+                    <FolderKanban className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wider text-secondary-foreground/70">Open Projects</p>
+                    <p className="text-3xl font-black leading-tight">{openProjects.length}</p>
+                  </div>
+                </div>
+                {projects.length > 0 && (
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground/70">Total</p>
+                    <p className="text-sm font-bold">{projects.length}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
+
           {/* Task Overview */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Production</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Production Tasks</p>
             {tasksLoading ? (
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
