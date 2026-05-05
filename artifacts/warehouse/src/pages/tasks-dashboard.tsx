@@ -333,20 +333,25 @@ function MyStepsTab() {
   });
 
   const startMutation = useMutation({
-    mutationFn: (id: number) => apiFetch(`/api/work/procedures/${id}/start`, { method: "POST" }),
-    onSuccess: async () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
-      toast({ title: "Step started — timer running" });
-      // Auto clock-in if not already clocked in
+    mutationFn: async (id: number) => {
+      // Auto clock-in before starting the step
       try {
         const status = await fetch("/api/attendance/status", { credentials: "include" }).then(r => r.json());
         if (!status?.clockedIn) {
-          await fetch("/api/attendance/clock-in", { method: "POST", credentials: "include" });
-          queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+          const res = await fetch("/api/attendance/clock-in", { method: "POST", credentials: "include" });
+          if (res.ok) {
+            queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+            toast({ title: "Clocked in automatically" });
+          }
         }
       } catch {
-        // Non-fatal — clock-in is best effort
+        // Non-fatal — clock-in is best effort, proceed to start the step
       }
+      return apiFetch(`/api/work/procedures/${id}/start`, { method: "POST" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+      toast({ title: "Step started — timer running" });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });

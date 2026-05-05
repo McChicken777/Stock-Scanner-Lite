@@ -273,7 +273,6 @@ function WorkerBottomNav() {
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "Tasks" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/orders", icon: Truck, label: "Orders" },
     { href: "/attendance", icon: Clock, label: "Attendance" },
   ];
 

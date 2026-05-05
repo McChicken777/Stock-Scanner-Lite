@@ -61,7 +61,6 @@ function WorkerRoutes() {
     <Switch>
       <Route path="/tasks" component={TasksDashboardPage} />
       <Route path="/work/inbound" component={WorkInboundPage} />
-      <Route path="/orders" component={OrdersPage} />
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/attendance/report" component={AttendanceReportPage} />
       <Route path="/">

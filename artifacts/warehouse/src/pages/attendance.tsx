@@ -426,6 +426,7 @@ interface PendingLeave {
 function LeaveApprovalPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [notes, setNotes] = React.useState<Record<number, string>>({});
 
   const { data: pending = [], isLoading } = useQuery<PendingLeave[]>({
     queryKey: ["/api/leave/pending"],
@@ -433,14 +434,15 @@ function LeaveApprovalPanel() {
   });
 
   const resolve = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: "approved" | "rejected" }) =>
+    mutationFn: ({ id, status, managerNote }: { id: number; status: "approved" | "rejected"; managerNote?: string }) =>
       api(`/api/leave/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(managerNote ? { managerNote } : {}) }),
       }),
-    onSuccess: (_d, { status }) => {
+    onSuccess: (_d, { id, status }) => {
       qc.invalidateQueries({ queryKey: ["/api/leave/pending"] });
+      setNotes((prev) => { const n = { ...prev }; delete n[id]; return n; });
       toast({ title: status === "approved" ? "Leave approved — attendance updated" : "Leave request rejected" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
@@ -463,17 +465,24 @@ function LeaveApprovalPanel() {
           <p className="text-xs text-muted-foreground">
             {fmtDate(r.startDate)}{r.startDate !== r.endDate ? ` → ${fmtDate(r.endDate)}` : ""}
           </p>
+          <textarea
+            value={notes[r.id] ?? ""}
+            onChange={(e) => setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
+            placeholder="Optional note to worker…"
+            rows={2}
+            className="w-full px-2 py-1.5 rounded border border-input bg-background text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
           <div className="flex gap-2">
             <Button size="sm" variant="outline"
               className="flex-1 h-8 border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs"
               disabled={resolve.isPending}
-              onClick={() => resolve.mutate({ id: r.id, status: "rejected" })}>
+              onClick={() => resolve.mutate({ id: r.id, status: "rejected", managerNote: notes[r.id] })}>
               <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
             </Button>
             <Button size="sm"
               className="flex-1 h-8 bg-green-600 hover:bg-green-700 font-bold text-xs"
               disabled={resolve.isPending}
-              onClick={() => resolve.mutate({ id: r.id, status: "approved" })}>
+              onClick={() => resolve.mutate({ id: r.id, status: "approved", managerNote: notes[r.id] })}>
               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
             </Button>
           </div>
