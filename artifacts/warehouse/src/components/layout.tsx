@@ -3,8 +3,8 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
-  CheckSquare, Truck, Eye, MapPin, ShoppingCart, TrendingDown, Clock,
-  BookTemplate, Wrench, Users, FileText, Settings, Store, CalendarCheck,
+  CheckSquare, Truck, Eye, MapPin, Clock,
+  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -208,8 +208,7 @@ function AdminBottomNav() {
     location.startsWith("/work/inbound") ||
     location.startsWith("/work/reorder") ||
     location.startsWith("/work/purchase-orders") ||
-    location.startsWith("/work/templates") ||
-    location.startsWith("/supervisor");
+    location.startsWith("/work/templates");
   const isStockActive =
     location === "/" ||
     location.startsWith("/scan") ||
