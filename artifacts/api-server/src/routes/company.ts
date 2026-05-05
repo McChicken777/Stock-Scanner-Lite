@@ -39,6 +39,8 @@ router.put("/", requireAdmin, async (req, res) => {
       updates.features = { ...PLAN_FEATURES[parsed.data.plan] };
     }
     if (parsed.data.workHoursPerDay !== undefined) updates.workHoursPerDay = parsed.data.workHoursPerDay;
+    if (parsed.data.weekendOvertimeEnabled !== undefined) updates.weekendOvertimeEnabled = parsed.data.weekendOvertimeEnabled;
+    if (parsed.data.country !== undefined) updates.country = parsed.data.country;
 
     const [company] = await db.update(companiesTable).set(updates as never).where(eq(companiesTable.id, companyId)).returning();
     // Update session features

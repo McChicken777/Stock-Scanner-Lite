@@ -133,7 +133,13 @@ const PUBLIC_HOLIDAYS: Record<string, Array<{ date: string; label: string }>> = 
 
 router.get("/holidays/presets", requireAuth, (req, res) => {
   const country = String(req.query.country ?? "").toUpperCase();
-  const presets = PUBLIC_HOLIDAYS[country] ?? [];
+  const requestedYear = typeof req.query.year === "string" && /^\d{4}$/.test(req.query.year)
+    ? req.query.year
+    : String(new Date().getFullYear());
+  const presets = (PUBLIC_HOLIDAYS[country] ?? []).map((h) => ({
+    ...h,
+    date: h.date.replace(/^\d{4}/, requestedYear),
+  }));
   res.json(presets);
 });
 
