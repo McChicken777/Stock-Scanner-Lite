@@ -188,9 +188,22 @@ export default function AttendanceReportPage() {
               </Select>
             </div>
           )}
-          <Button onClick={downloadCsv} disabled={!data || data.days.length === 0} className="w-full h-11 font-bold">
-            <Download className="h-4 w-4 mr-2" /> Download CSV
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={downloadCsv} disabled={!data || data.days.length === 0} className="h-11 font-bold">
+              <Download className="h-4 w-4 mr-2" /> Download CSV
+            </Button>
+            <Button
+              onClick={() => {
+                const url = `/api/attendance/report/pdf?month=${month}&userId=${encodeURIComponent(userId)}`;
+                window.location.assign(url);
+              }}
+              disabled={!month || !userId}
+              variant="secondary"
+              className="h-11 font-bold"
+            >
+              <Download className="h-4 w-4 mr-2" /> Download PDF
+            </Button>
+          </div>
         </div>
 
         {error && <p className="text-sm text-red-600 text-center">{(error as Error).message}</p>}
