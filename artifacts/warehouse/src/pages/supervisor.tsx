@@ -1,10 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  AlertTriangle, Calendar, CheckSquare, Clock, Flag, PackageCheck, Truck, User, Zap,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertTriangle, Calendar, CheckSquare, Clock, Flag, MoreVertical, PackageCheck,
+  SkipForward, Truck, User, UserCog, Zap,
 } from "lucide-react";
 
 interface DailyPlanStep {
@@ -16,10 +23,13 @@ interface DailyPlanStep {
   projectId: number;
   deadline: string;
   priority: string;
+  roleId: number | null;
   roleName: string | null;
   durationEstimate: number | null;
   status: "not_started" | "in_progress";
 }
+
+interface RoleOption { id: number; name: string }
 
 interface RoleGroup {
   roleId: number | null;
@@ -80,7 +90,142 @@ function formatDeadline(dateStr: string) {
   return { label: `Due in ${diff}d`, overdue: false };
 }
 
-function DailyPlanSection({ plan }: { plan: DailyPlan }) {
+function StepActionsMenu({
+  step,
+  roles,
+  projectPriority,
+}: {
+  step: DailyPlanStep;
+  roles: RoleOption[];
+  projectPriority: string;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/work/supervisor/daily-plan"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work/supervisor/bottlenecks"] });
+    queryClient.invalidateQueries({ queryKey: [`/api/work/projects/${step.projectId}`] });
+  };
+
+  const handleErr = (err: unknown) =>
+    toast({ title: err instanceof Error ? err.message : "Action failed", variant: "destructive" });
+
+  const reassignMutation = useMutation({
+    mutationFn: async (roleId: number | null) => {
+      const r = await fetch(`/api/work/steps/${step.id}/role`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roleId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Failed to reassign");
+      return d;
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Step reassigned" }); },
+    onError: handleErr,
+  });
+
+  const skipMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/work/steps/${step.id}/skip`, {
+        method: "PATCH", credentials: "include",
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Failed to skip");
+      return d;
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Step skipped" }); },
+    onError: handleErr,
+  });
+
+  const urgentMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/work/projects/${step.projectId}/priority`, {
+        method: "PATCH", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: "urgent" }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Failed to mark urgent");
+      return d;
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Project marked urgent" }); },
+    onError: handleErr,
+  });
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label="Step actions"
+          onClick={(e) => e.stopPropagation()}
+          className="flex-shrink-0 p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-52">
+        <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          Step actions
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <UserCog className="h-4 w-4 mr-2" /> Change role
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="max-h-72 overflow-auto">
+              <DropdownMenuItem
+                disabled={reassignMutation.isPending || step.roleId === null}
+                onClick={() => reassignMutation.mutate(null)}
+              >
+                Unassigned {step.roleId === null && "✓"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {roles.length === 0 && (
+                <DropdownMenuItem disabled>No roles defined</DropdownMenuItem>
+              )}
+              {roles.map((r) => (
+                <DropdownMenuItem
+                  key={r.id}
+                  disabled={reassignMutation.isPending || step.roleId === r.id}
+                  onClick={() => reassignMutation.mutate(r.id)}
+                >
+                  {r.name} {step.roleId === r.id && "✓"}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+
+        <DropdownMenuItem
+          disabled={urgentMutation.isPending || projectPriority === "urgent"}
+          onClick={() => urgentMutation.mutate()}
+        >
+          <Zap className="h-4 w-4 mr-2 text-rose-500" />
+          Mark urgent {projectPriority === "urgent" && "✓"}
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={skipMutation.isPending}
+          onClick={() => {
+            if (window.confirm(`Skip "${step.name}"? It will be marked completed without a time log.`)) {
+              skipMutation.mutate();
+            }
+          }}
+          className="text-amber-700 focus:text-amber-700"
+        >
+          <SkipForward className="h-4 w-4 mr-2" /> Skip step
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[] }) {
   const [, navigate] = useLocation();
 
   if (plan.totalReady + plan.totalInProgress === 0) {
@@ -121,25 +266,30 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
             {group.steps.map((step) => {
               const dl = formatDeadline(step.deadline);
               return (
-                <button
+                <div
                   key={step.id}
-                  onClick={() => navigate(`/work/projects/${step.projectId}`)}
-                  className={`w-full text-left rounded-lg border px-3 py-2.5 space-y-1 transition-colors active:scale-[0.99] ${
+                  className={`rounded-lg border px-3 py-2.5 space-y-1 ${
                     step.status === "in_progress"
                       ? "bg-orange-50 border-orange-200"
                       : dl.overdue ? "bg-red-50 border-red-200" : "bg-card border-border"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
+                    <button
+                      className="flex-1 min-w-0 text-left active:scale-[0.99] transition-transform"
+                      onClick={() => navigate(`/work/projects/${step.projectId}`)}
+                    >
                       <p className="text-sm font-semibold leading-tight truncate">{step.name}</p>
                       <p className="text-xs text-muted-foreground truncate">{step.itemName} · {step.projectName}</p>
+                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {step.status === "in_progress" && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" /> Active
+                        </span>
+                      )}
+                      <StepActionsMenu step={step} roles={roles} projectPriority={step.priority} />
                     </div>
-                    {step.status === "in_progress" && (
-                      <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" /> Active
-                      </span>
-                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold capitalize border ${priorityColors[step.priority] ?? "bg-gray-100 text-gray-600"}`}>
@@ -154,7 +304,7 @@ function DailyPlanSection({ plan }: { plan: DailyPlan }) {
                       </span>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -300,6 +450,11 @@ export default function SupervisorPage() {
     refetchInterval: 30000,
   });
 
+  const { data: roles = [] } = useQuery<RoleOption[]>({
+    queryKey: ["/api/tasks/roles"],
+    queryFn: () => apiFetch("/api/tasks/roles"),
+  });
+
   if (!user?.isSupervisor && user?.role !== "admin") {
     return <div className="p-6 text-center text-muted-foreground">Supervisor access only.</div>;
   }
@@ -350,7 +505,7 @@ export default function SupervisorPage() {
       {tab === "plan" ? (
         planLoading
           ? <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}</div>
-          : plan ? <DailyPlanSection plan={plan} /> : null
+          : plan ? <DailyPlanSection plan={plan} roles={roles} /> : null
       ) : (
         bottlenecksLoading
           ? <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>

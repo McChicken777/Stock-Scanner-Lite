@@ -2210,6 +2210,99 @@ router.post("/steps/:stepId/wip-location", requireAuth, async (req, res) => {
   }
 });
 
+// ─── SUPERVISOR STEP ACTIONS ──────────────────────────────────────────────────
+
+// Verify a step belongs to the caller's company; returns the step row or null.
+async function getOwnedStep(stepId: number, companyId: number) {
+  const [row] = await db
+    .select({ step: workItemStepsTable })
+    .from(workItemStepsTable)
+    .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+    .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+    .where(and(eq(workItemStepsTable.id, stepId), eq(workProjectsTable.companyId, companyId)));
+  return row?.step ?? null;
+}
+
+router.patch("/steps/:id/role", requireSupervisorOrAdmin, async (req, res) => {
+  try {
+    const stepId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ roleId: z.number().int().nullable() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "roleId required (number or null)" }); return; }
+
+    const existing = await getOwnedStep(stepId, companyId);
+    if (!existing) { res.status(404).json({ error: "Step not found" }); return; }
+
+    // Validate roleId belongs to the same company (when not null)
+    if (parsed.data.roleId !== null) {
+      const [role] = await db.select().from(rolesTable)
+        .where(and(eq(rolesTable.id, parsed.data.roleId), eq(rolesTable.companyId, companyId)));
+      if (!role) { res.status(400).json({ error: "Invalid role for this company" }); return; }
+    }
+
+    const [updated] = await db.update(workItemStepsTable)
+      .set({ roleId: parsed.data.roleId })
+      .where(eq(workItemStepsTable.id, stepId))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to reassign step role");
+    res.status(500).json({ error: "Failed to reassign step role" });
+  }
+});
+
+router.patch("/steps/:id/skip", requireSupervisorOrAdmin, async (req, res) => {
+  try {
+    const stepId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+
+    const existing = await getOwnedStep(stepId, companyId);
+    if (!existing) { res.status(404).json({ error: "Step not found" }); return; }
+    if (existing.status === "completed") {
+      res.status(400).json({ error: "Step is already completed" });
+      return;
+    }
+
+    // If skipping an in-progress step, close out any open time logs (no duration recorded)
+    if (existing.status === "in_progress") {
+      const endTime = new Date();
+      await db.update(workTimeLogsTable)
+        .set({ endTime, durationSeconds: 0 })
+        .where(and(eq(workTimeLogsTable.stepId, stepId), isNull(workTimeLogsTable.endTime)));
+    }
+
+    const [updated] = await db.update(workItemStepsTable)
+      .set({ status: "completed" })
+      .where(eq(workItemStepsTable.id, stepId))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to skip step");
+    res.status(500).json({ error: "Failed to skip step" });
+  }
+});
+
+router.patch("/projects/:id/priority", requireSupervisorOrAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      priority: z.enum(["low", "normal", "high", "urgent"]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "priority must be low, normal, high, or urgent" }); return; }
+
+    const [project] = await db.update(workProjectsTable)
+      .set({ priority: parsed.data.priority })
+      .where(and(eq(workProjectsTable.id, id), eq(workProjectsTable.companyId, companyId)))
+      .returning();
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+    res.json(project);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update project priority");
+    res.status(500).json({ error: "Failed to update project priority" });
+  }
+});
+
 // ─── SUPERVISOR ENDPOINTS ──────────────────────────────────────────────────────
 
 router.get("/supervisor/daily-plan", requireSupervisorOrAdmin, async (req, res) => {
