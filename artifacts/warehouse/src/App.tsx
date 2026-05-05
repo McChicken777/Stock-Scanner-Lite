@@ -31,6 +31,7 @@ import SupervisorPage from "@/pages/supervisor";
 import AttendancePage from "@/pages/attendance";
 import AttendanceLivePage from "@/pages/attendance-live";
 import AttendanceReportPage from "@/pages/attendance-report";
+import AdminLeaveInboxPage from "@/pages/admin-leave-inbox";
 
 // Work Order Pages
 import WorkProjectsPage from "@/pages/work/projects";
@@ -128,6 +129,7 @@ function ProtectedRoutes() {
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/attendance/live" component={AttendanceLivePage} />
         <Route path="/attendance/report" component={AttendanceReportPage} />
+        <Route path="/admin/leave-inbox" component={AdminLeaveInboxPage} />
         <Route path="/owner" component={OwnerPanelPage} />
         <Route path="/tasks" component={TasksDashboardPage} />
         <Route path="/orders" component={OrdersPage} />

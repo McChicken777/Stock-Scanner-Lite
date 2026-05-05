@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leaveRequestsTable, attendanceLogsTable, usersTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
 
@@ -102,6 +102,65 @@ router.get("/mine", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get leave requests");
     res.status(500).json({ error: "Failed to get leave requests" });
+  }
+});
+
+router.get("/all", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role !== "admin") {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const companyId = req.session.companyId!;
+
+    const statusFilter = req.query.status as string | undefined;
+    const userIdFilter = req.query.userId ? Number(req.query.userId) : undefined;
+
+    const conditions = [eq(leaveRequestsTable.companyId, companyId)];
+    if (statusFilter && ["pending", "approved", "rejected"].includes(statusFilter)) {
+      conditions.push(eq(leaveRequestsTable.status, statusFilter as "pending" | "approved" | "rejected"));
+    }
+    if (userIdFilter) {
+      conditions.push(eq(leaveRequestsTable.userId, userIdFilter));
+    }
+
+    const rows = await db.select({
+      id: leaveRequestsTable.id,
+      userId: leaveRequestsTable.userId,
+      type: leaveRequestsTable.type,
+      startDate: leaveRequestsTable.startDate,
+      endDate: leaveRequestsTable.endDate,
+      status: leaveRequestsTable.status,
+      managerNote: leaveRequestsTable.managerNote,
+      createdAt: leaveRequestsTable.createdAt,
+      username: usersTable.username,
+    })
+      .from(leaveRequestsTable)
+      .innerJoin(usersTable, eq(usersTable.id, leaveRequestsTable.userId))
+      .where(and(...conditions))
+      .orderBy(desc(leaveRequestsTable.createdAt));
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get all leave requests");
+    res.status(500).json({ error: "Failed to get all leave requests" });
+  }
+});
+
+router.get("/users", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role !== "admin") {
+      res.status(403).json({ error: "Admin only" });
+      return;
+    }
+    const companyId = req.session.companyId!;
+    const rows = await db.select({ id: usersTable.id, username: usersTable.username })
+      .from(usersTable)
+      .where(eq(usersTable.companyId, companyId))
+      .orderBy(asc(usersTable.username));
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get users for leave inbox");
+    res.status(500).json({ error: "Failed to get users" });
   }
 });
 

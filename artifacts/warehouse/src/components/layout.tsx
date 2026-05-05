@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
-  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck,
+  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -122,6 +122,11 @@ function UserMenu() {
             <Link href="/admin/dashboard">
               <DropdownMenuItem className="cursor-pointer">
                 <LayoutDashboard className="mr-2 h-4 w-4 text-blue-600" /> Admin Dashboard
+              </DropdownMenuItem>
+            </Link>
+            <Link href="/admin/leave-inbox">
+              <DropdownMenuItem className="cursor-pointer">
+                <Inbox className="mr-2 h-4 w-4 text-violet-600" /> Leave Inbox
               </DropdownMenuItem>
             </Link>
             <DropdownMenuSeparator />
@@ -328,6 +333,15 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <LayoutDashboard className="h-5 w-5 text-blue-600 shrink-0" />
                 <p className="text-sm font-semibold">Admin Dashboard</p>
+              </div>
+            </Link>
+            <Link href="/admin/leave-inbox" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Inbox className="h-5 w-5 text-violet-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Leave Inbox</p>
+                  <p className="text-xs text-muted-foreground">Approve or reject all leave requests</p>
+                </div>
               </div>
             </Link>
 
