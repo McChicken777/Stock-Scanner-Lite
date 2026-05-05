@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, serial, jsonb, pgEnum, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, serial, jsonb, pgEnum, integer, boolean } from "drizzle-orm/pg-core";
 
 export const companyPlanEnum = pgEnum("company_plan", ["basic", "pro"]);
 
@@ -36,6 +36,8 @@ export const companiesTable = pgTable("companies", {
   plan: companyPlanEnum("plan").notNull().default("pro"),
   features: jsonb("features").notNull().$type<CompanyFeatures>().$defaultFn(() => ({ ...PLAN_FEATURES.pro })),
   workHoursPerDay: integer("work_hours_per_day").notNull().default(480),
+  weekendOvertimeEnabled: boolean("weekend_overtime_enabled").notNull().default(true),
+  country: text("country"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

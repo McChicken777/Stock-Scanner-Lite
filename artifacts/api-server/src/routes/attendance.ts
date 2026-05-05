@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, attendanceLogsTable, companiesTable, usersTable } from "@workspace/db";
+import { db, attendanceLogsTable, companiesTable, usersTable, companyHolidaysTable } from "@workspace/db";
 import { eq, and, gte, lte, asc, isNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
@@ -18,6 +18,51 @@ async function getCompanyThresholdSeconds(companyId: number): Promise<number> {
   const [c] = await db.select({ wh: companiesTable.workHoursPerDay }).from(companiesTable).where(eq(companiesTable.id, companyId));
   return (c?.wh ?? 480) * 60;
 }
+
+/** Returns 0 if the given date string (YYYY-MM-DD) is a weekend or company holiday, else the normal threshold. */
+async function getEffectiveThresholdSeconds(companyId: number, dateStr: string): Promise<number> {
+  const [company] = await db.select({
+    wh: companiesTable.workHoursPerDay,
+    weekendOvertimeEnabled: companiesTable.weekendOvertimeEnabled,
+  }).from(companiesTable).where(eq(companiesTable.id, companyId));
+
+  if (!company) return 480 * 60;
+
+  // Weekend check
+  if (company.weekendOvertimeEnabled) {
+    const d = new Date(dateStr + "T00:00:00Z");
+    const dow = d.getUTCDay(); // 0=Sun, 6=Sat
+    if (dow === 0 || dow === 6) return 0;
+  }
+
+  // Holiday check
+  const [holiday] = await db.select({ id: companyHolidaysTable.id })
+    .from(companyHolidaysTable)
+    .where(and(eq(companyHolidaysTable.companyId, companyId), eq(companyHolidaysTable.date, dateStr)));
+  if (holiday) return 0;
+
+  return (company.wh ?? 480) * 60;
+}
+
+router.get("/status", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    const [open] = await db.select({ id: attendanceLogsTable.id })
+      .from(attendanceLogsTable)
+      .where(and(
+        eq(attendanceLogsTable.userId, userId),
+        eq(attendanceLogsTable.companyId, companyId),
+        eq(attendanceLogsTable.type, "work"),
+        isNull(attendanceLogsTable.clockOut),
+      ))
+      .limit(1);
+    res.json({ clockedIn: !!open });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get attendance status");
+    res.status(500).json({ error: "Failed to get attendance status" });
+  }
+});
 
 router.get("/today", requireAuth, async (req, res) => {
   try {
@@ -43,7 +88,6 @@ router.post("/clock-in", requireAuth, async (req, res) => {
     const companyId = req.session.companyId!;
     const today = todayStr();
 
-    // Block if there's any open shift on any date (e.g. forgot to clock out yesterday)
     const [openShift] = await db.select().from(attendanceLogsTable)
       .where(and(
         eq(attendanceLogsTable.userId, userId),
@@ -53,7 +97,6 @@ router.post("/clock-in", requireAuth, async (req, res) => {
       ))
       .orderBy(desc(attendanceLogsTable.date))
       .limit(1);
-    // openShift with clockIn means an active session
     if (openShift && openShift.clockIn) {
       if (openShift.date === today) {
         res.status(409).json({ error: "Already clocked in" });
@@ -75,7 +118,6 @@ router.post("/clock-in", requireAuth, async (req, res) => {
         res.status(409).json({ error: `You already declared ${existing.type} today` });
         return;
       }
-      // Resume: clear clockOut, keep workSeconds accumulated
       const [updated] = await db.update(attendanceLogsTable)
         .set({ clockIn: new Date(), clockOut: null })
         .where(and(eq(attendanceLogsTable.id, existing.id), eq(attendanceLogsTable.companyId, companyId)))
@@ -90,7 +132,6 @@ router.post("/clock-in", requireAuth, async (req, res) => {
       }).returning();
       res.status(201).json(created);
     } catch (err: unknown) {
-      // Handle race-condition: unique constraint hit means another request just created the row
       if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "23505") {
         res.status(409).json({ error: "Already clocked in" });
         return;
@@ -108,7 +149,6 @@ router.post("/clock-out", requireAuth, async (req, res) => {
     const userId = req.session.userId!;
     const companyId = req.session.companyId!;
 
-    // Find the most recent open work shift for this user (handles overnight crossover)
     const [open] = await db.select().from(attendanceLogsTable)
       .where(and(
         eq(attendanceLogsTable.userId, userId),
@@ -127,7 +167,7 @@ router.post("/clock-out", requireAuth, async (req, res) => {
     const now = new Date();
     const sessionSeconds = Math.max(0, Math.round((now.getTime() - open.clockIn.getTime()) / 1000));
     const totalWork = (open.workSeconds ?? 0) + sessionSeconds;
-    const threshold = await getCompanyThresholdSeconds(companyId);
+    const threshold = await getEffectiveThresholdSeconds(companyId, open.date);
     const overtime = Math.max(0, totalWork - threshold);
 
     const [updated] = await db.update(attendanceLogsTable)
@@ -261,7 +301,32 @@ router.get("/report", requireAuth, async (req, res) => {
     const start = `${monthRaw}-01`;
     const lastDay = new Date(y, m, 0).getDate();
     const end = `${monthRaw}-${String(lastDay).padStart(2, "0")}`;
-    const threshold = await getCompanyThresholdSeconds(companyId);
+
+    // Load company settings and holidays for the month once
+    const [company] = await db.select({
+      wh: companiesTable.workHoursPerDay,
+      weekendOvertimeEnabled: companiesTable.weekendOvertimeEnabled,
+    }).from(companiesTable).where(eq(companiesTable.id, companyId));
+    const defaultThreshold = (company?.wh ?? 480) * 60;
+
+    const holidays = await db.select({ date: companyHolidaysTable.date })
+      .from(companyHolidaysTable)
+      .where(and(
+        eq(companyHolidaysTable.companyId, companyId),
+        gte(companyHolidaysTable.date, start),
+        lte(companyHolidaysTable.date, end),
+      ));
+    const holidaySet = new Set(holidays.map(h => h.date));
+
+    function thresholdForDate(dateStr: string): number {
+      if (company?.weekendOvertimeEnabled) {
+        const d = new Date(dateStr + "T00:00:00Z");
+        const dow = d.getUTCDay();
+        if (dow === 0 || dow === 6) return 0;
+      }
+      if (holidaySet.has(dateStr)) return 0;
+      return defaultThreshold;
+    }
 
     const baseConds = [
       eq(attendanceLogsTable.companyId, companyId),
@@ -295,6 +360,7 @@ router.get("/report", requireAuth, async (req, res) => {
         if (l.clockIn && !l.clockOut) {
           work += Math.max(0, Math.round((Date.now() - l.clockIn.getTime()) / 1000));
         }
+        const threshold = thresholdForDate(l.date);
         if (work > 0) u.daysWorked += 1;
         u.totalWorkSeconds += work;
         u.overtimeSeconds += Math.max(0, work - threshold);
@@ -303,13 +369,14 @@ router.get("/report", requireAuth, async (req, res) => {
 
     res.json({
       month: monthRaw,
-      thresholdSeconds: threshold,
+      thresholdSeconds: defaultThreshold,
       summaries: Array.from(usersById.values()).sort((a, b) => a.username.localeCompare(b.username)),
       days: logs.map(l => {
         let work = l.workSeconds ?? 0;
         if (l.type === "work" && l.clockIn && !l.clockOut) {
           work += Math.max(0, Math.round((Date.now() - l.clockIn.getTime()) / 1000));
         }
+        const threshold = thresholdForDate(l.date);
         const overtime = l.type === "work" ? Math.max(0, work - threshold) : 0;
         return {
           id: l.id, userId: l.userId, username: l.username, date: l.date, type: l.type,

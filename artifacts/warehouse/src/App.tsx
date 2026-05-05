@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -56,6 +56,22 @@ const queryClient = new QueryClient({
   },
 });
 
+function WorkerRoutes() {
+  return (
+    <Switch>
+      <Route path="/tasks" component={TasksDashboardPage} />
+      <Route path="/work/inbound" component={WorkInboundPage} />
+      <Route path="/orders" component={OrdersPage} />
+      <Route path="/attendance" component={AttendancePage} />
+      <Route path="/attendance/report" component={AttendanceReportPage} />
+      <Route path="/">
+        <Redirect to="/tasks" />
+      </Route>
+      <Route component={() => <Redirect to="/tasks" />} />
+    </Switch>
+  );
+}
+
 function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
 
@@ -76,6 +92,15 @@ function ProtectedRoutes() {
     return (
       <AppLayout>
         <OwnerPanelPage />
+      </AppLayout>
+    );
+  }
+
+  // Plain workers (non-supervisor) get a simplified work-only view
+  if (user.role === "worker" && !user.isSupervisor) {
+    return (
+      <AppLayout>
+        <WorkerRoutes />
       </AppLayout>
     );
   }

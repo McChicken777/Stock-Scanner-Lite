@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, LogIn, LogOut, Heart, Plane, FileText, BarChart3 } from "lucide-react";
+import { Clock, LogIn, LogOut, Heart, Plane, FileText, BarChart3, CalendarPlus, X, CheckCircle2, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type AttendanceType = "work" | "sick" | "vacation";
 interface TodayLog {
@@ -16,6 +17,16 @@ interface TodayLog {
   workSeconds: number;
   overtimeSeconds: number;
   note: string | null;
+}
+
+interface LeaveRequest {
+  id: number;
+  type: "sick" | "vacation";
+  startDate: string;
+  endDate: string;
+  status: "pending" | "approved" | "rejected";
+  managerNote: string | null;
+  createdAt: string;
 }
 
 async function api(url: string, opts?: RequestInit) {
@@ -38,12 +49,168 @@ function fmtTime(iso: string | null): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function fmtDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+}
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function tomorrowStr(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ─── Leave Request Form ────────────────────────────────────────────────────────
+
+function LeaveRequestForm({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const tomorrow = tomorrowStr();
+  const [type, setType] = useState<"sick" | "vacation">("vacation");
+  const [startDate, setStartDate] = useState(tomorrow);
+  const [endDate, setEndDate] = useState(tomorrow);
+
+  const submit = useMutation({
+    mutationFn: () => api("/api/leave", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, startDate, endDate }),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/leave/mine"] });
+      toast({ title: type === "sick" ? "Sick leave recorded" : "Vacation request submitted for approval" });
+      onDone();
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const isValid = startDate && endDate && endDate >= startDate;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2">
+        {(["sick", "vacation"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setType(t)}
+            className={cn(
+              "flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-sm font-bold transition-all",
+              type === t
+                ? t === "sick"
+                  ? "border-rose-400 bg-rose-50 text-rose-700"
+                  : "border-sky-400 bg-sky-50 text-sky-700"
+                : "border-border text-muted-foreground hover:border-muted-foreground/50"
+            )}
+          >
+            {t === "sick" ? <Heart className="h-5 w-5" /> : <Plane className="h-5 w-5" />}
+            {t === "sick" ? "Sick" : "Vacation"}
+          </button>
+        ))}
+      </div>
+      {type === "sick" && (
+        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+          Sick leave is approved immediately and attendance is recorded for the selected days.
+        </p>
+      )}
+      {type === "vacation" && (
+        <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
+          Vacation requests need manager approval. Once approved, days are recorded as vacation.
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">From</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }}
+            className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">To</label>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1 h-10" onClick={onDone}>Cancel</Button>
+        <Button
+          className={cn("flex-1 h-10 font-bold", type === "sick" ? "bg-rose-600 hover:bg-rose-700" : "bg-sky-600 hover:bg-sky-700")}
+          disabled={!isValid || submit.isPending}
+          onClick={() => submit.mutate()}
+        >
+          {submit.isPending ? "Submitting…" : type === "sick" ? "Record Sick Leave" : "Request Vacation"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Leave Request List ────────────────────────────────────────────────────────
+
+function LeaveRequestList() {
+  const { data: requests = [], isLoading } = useQuery<LeaveRequest[]>({
+    queryKey: ["/api/leave/mine"],
+    queryFn: () => api("/api/leave/mine"),
+  });
+
+  if (isLoading) return <Skeleton className="h-20 w-full rounded-xl" />;
+  if (requests.length === 0) return (
+    <p className="text-xs text-muted-foreground text-center py-3">No leave requests yet.</p>
+  );
+
+  return (
+    <div className="space-y-2 max-h-64 overflow-y-auto">
+      {requests.map((r) => (
+        <div key={r.id} className={cn(
+          "flex items-center gap-3 p-3 rounded-lg border text-sm",
+          r.status === "approved" ? "border-green-200 bg-green-50" :
+          r.status === "rejected" ? "border-red-200 bg-red-50" :
+          "border-amber-200 bg-amber-50"
+        )}>
+          {r.type === "sick"
+            ? <Heart className="h-4 w-4 text-rose-600 flex-shrink-0" />
+            : <Plane className="h-4 w-4 text-sky-600 flex-shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold capitalize text-xs">
+              {r.type} · {fmtDate(r.startDate)}{r.startDate !== r.endDate ? ` – ${fmtDate(r.endDate)}` : ""}
+            </p>
+            {r.managerNote && <p className="text-xs text-muted-foreground truncate">"{r.managerNote}"</p>}
+          </div>
+          <span className={cn(
+            "text-[10px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0",
+            r.status === "approved" ? "text-green-700 bg-green-100" :
+            r.status === "rejected" ? "text-red-700 bg-red-100" :
+            "text-amber-700 bg-amber-100"
+          )}>
+            {r.status}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [note, setNote] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
 
   const { data: today, isLoading } = useQuery<TodayLog | null>({
     queryKey: ["/api/attendance/today"],
@@ -169,7 +336,7 @@ export default function AttendancePage() {
         <div className="rounded-2xl border-2 border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Declare absence</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Declare absence today</p>
           </div>
           <textarea
             value={note}
@@ -182,12 +349,12 @@ export default function AttendancePage() {
             <Button variant="outline" className="h-12 border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
               disabled={absence.isPending || !!today?.workSeconds}
               onClick={() => absence.mutate("sick")}>
-              <Heart className="h-4 w-4 mr-1.5" /> Sick
+              <Heart className="h-4 w-4 mr-1.5" /> Sick Today
             </Button>
             <Button variant="outline" className="h-12 border-sky-200 text-sky-700 hover:bg-sky-50 font-bold"
               disabled={absence.isPending || !!today?.workSeconds}
               onClick={() => absence.mutate("vacation")}>
-              <Plane className="h-4 w-4 mr-1.5" /> Vacation
+              <Plane className="h-4 w-4 mr-1.5" /> Vacation Today
             </Button>
           </div>
           {today?.workSeconds ? (
@@ -195,6 +362,27 @@ export default function AttendancePage() {
           ) : null}
         </div>
       )}
+
+      {/* Future leave requests */}
+      <div className="rounded-2xl border-2 border-border bg-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Leave Requests</p>
+          </div>
+          {!showLeaveForm && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowLeaveForm(true)}>
+              + Request
+            </Button>
+          )}
+        </div>
+
+        {showLeaveForm ? (
+          <LeaveRequestForm onDone={() => setShowLeaveForm(false)} />
+        ) : (
+          <LeaveRequestList />
+        )}
+      </div>
 
       {(user?.role === "admin" || user?.isSupervisor) && (
         <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 space-y-3">
@@ -213,8 +401,84 @@ export default function AttendancePage() {
               </Link>
             )}
           </div>
+
+          {/* Pending leave approvals */}
+          <LeaveApprovalPanel />
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Manager: Pending Leave Approvals ─────────────────────────────────────────
+
+interface PendingLeave {
+  id: number;
+  userId: number;
+  username: string;
+  type: "sick" | "vacation";
+  startDate: string;
+  endDate: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
+function LeaveApprovalPanel() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: pending = [], isLoading } = useQuery<PendingLeave[]>({
+    queryKey: ["/api/leave/pending"],
+    queryFn: () => api("/api/leave/pending"),
+  });
+
+  const resolve = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "approved" | "rejected" }) =>
+      api(`/api/leave/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: (_d, { status }) => {
+      qc.invalidateQueries({ queryKey: ["/api/leave/pending"] });
+      toast({ title: status === "approved" ? "Leave approved — attendance updated" : "Leave request rejected" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  if (isLoading || pending.length === 0) return null;
+
+  return (
+    <div className="space-y-2 pt-1 border-t border-blue-200">
+      <p className="text-xs font-bold uppercase tracking-wider text-blue-800 pt-1">
+        Pending approvals ({pending.length})
+      </p>
+      {pending.map((r) => (
+        <div key={r.id} className="bg-white rounded-lg border border-blue-200 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            {r.type === "sick" ? <Heart className="h-3.5 w-3.5 text-rose-500" /> : <Plane className="h-3.5 w-3.5 text-sky-500" />}
+            <span className="font-bold text-sm">{r.username}</span>
+            <span className="text-xs text-muted-foreground capitalize">— {r.type}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {fmtDate(r.startDate)}{r.startDate !== r.endDate ? ` → ${fmtDate(r.endDate)}` : ""}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline"
+              className="flex-1 h-8 border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs"
+              disabled={resolve.isPending}
+              onClick={() => resolve.mutate({ id: r.id, status: "rejected" })}>
+              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+            </Button>
+            <Button size="sm"
+              className="flex-1 h-8 bg-green-600 hover:bg-green-700 font-bold text-xs"
+              disabled={resolve.isPending}
+              onClick={() => resolve.mutate({ id: r.id, status: "approved" })}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

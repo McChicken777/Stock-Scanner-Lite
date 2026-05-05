@@ -26,6 +26,8 @@ router.put("/", requireAdmin, async (req, res) => {
       name: z.string().min(1).optional(),
       plan: z.enum(["basic", "pro"]).optional(),
       workHoursPerDay: z.number().int().min(60).max(1440).optional(),
+      weekendOvertimeEnabled: z.boolean().optional(),
+      country: z.string().max(10).nullable().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }

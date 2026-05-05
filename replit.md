@@ -40,6 +40,7 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - Role-Based Access Control (RBAC) with `owner`, `admin`, and `worker` roles.
 - `is_supervisor` flag for workers to grant access to supervisor-specific tools.
 - Backend middleware enforces permissions; frontend conditionally renders UI elements.
+- **Worker route guard:** Plain workers (non-supervisor) are redirected to `/tasks` and only see Tasks, Inbound, Orders, Attendance in nav. Admins and supervisors see all sections.
 
 **Warehouse Management:**
 - **QR Code Scanning:** Integrates browser camera API and jsQR for scanning location QR codes.
@@ -54,7 +55,8 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - **AI Integration:** AI-powered template generation and editing (`/api/work/templates/generate`, `/api/work/templates/:id/ai-edit`), with undo functionality via snapshots.
 - **Production Zones:** Admin-managed physical areas for WIP tracking.
 - **Supervisor Tools:** Dedicated supervisor page (`/supervisor`) with daily plan and bottleneck analysis for admins and designated supervisors.
-- **WIP Location Tracking:** Workers can log part locations (warehouse/production zone/with worker) after completing steps.
+- **WIP Location Tracking:** Workers log part locations (warehouse/production zone/with worker) after completing steps. Bug fix (Task #32): dialog now uses controlled `open` prop and hooks called in correct order; state set before query invalidation.
+- **Auto Clock-In:** Starting a task step automatically clocks the worker in if they haven't already.
 - **Flexible Tasks System:**
     - Company-scoped production roles with priority (primary/secondary/substitution).
     - Procedures with `requires_inbound` (blocked until pallet arrives) and `requires_components` (blocked until inputs are available) flags.
@@ -73,12 +75,29 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - `manufactured_part` are in-house sub-components.
 - `final_product` are finished goods with stock tracking.
 
+**Attendance & Scheduling (Task #32):**
+- Clock in/out with live timer; supports sick and vacation day declarations for today.
+- **Weekend Overtime Rules:** Company setting `weekendOvertimeEnabled` (default true) — all hours worked on Sat/Sun count as overtime. Configurable per company.
+- **Company Holidays:** Admins manage a custom holiday calendar (`company_holidays` table). Days on this list count all hours as non-overtime. Import 2026 public holidays from presets for 10 countries (US, GB, DE, FR, ES, PT, NL, IT, BR, AU).
+- **Overtime Calculation:** `getEffectiveThresholdSeconds()` checks weekend + holidays before applying the standard work-hours threshold.
+- **Leave Requests (`leave_requests` table):**
+  - Sick leave: submitted immediately, attendance logs written at once.
+  - Vacation: submitted as `pending`, requires manager approval.
+  - Admin/supervisor sees a "Pending approvals" panel in the Attendance page.
+  - Approving vacation writes attendance log entries for the date range.
+- **API routes:** `GET/POST /api/attendance/status`, `/api/settings/holidays`, `/api/settings/holidays/presets`, `/api/settings/holidays/bulk`, `/api/settings/company/scheduling`, `GET/POST /api/leave`, `/api/leave/mine`, `/api/leave/pending`, `PATCH /api/leave/:id`.
+
 **Database Schema Highlights:**
 - `locations`, `products`, `stock`, `stock_history`
 - `users` with `is_supervisor` flag
 - `work_templates`, `work_steps`, `work_projects`, `work_project_items`, `work_time_logs`
 - `step_presets`, `ai_snapshots`, `inbound`, `production_zones`, `wip_locations`
 - `roles`, `user_roles`, `procedures`, `item_procedures`, `tasks`, `procedure_inputs`
+- `customers`, `quotes`, `quote_items`, `quote_revisions`
+- `attendance_logs` with type enum (work/sick/vacation)
+- `company_holidays` — per-company holiday calendar (migration: `0002_scheduling_leave.sql`)
+- `leave_requests` with status enum (pending/approved/rejected) and type enum (sick/vacation)
+- `companies` extended with `weekend_overtime_enabled` (bool) and `country` (text)
 
 **TypeScript & Composite Projects:**
 - All packages extend `tsconfig.base.json` with `composite: true`.
@@ -94,4 +113,3 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - **Tailwind CSS:** Utility-first CSS framework for styling the frontend.
 - **Radix UI:** Headless UI component library for building accessible frontend components.
 - **Vite:** Next-generation frontend tooling for React development.
-- **Express 5:** Web application framework for the Node.js API server.

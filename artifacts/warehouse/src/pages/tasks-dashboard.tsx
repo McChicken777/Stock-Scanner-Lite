@@ -106,9 +106,11 @@ interface ProductionZone { id: number; name: string }
 
 function WipLocationDialog({
   stepId,
+  open,
   onClose,
 }: {
-  stepId: number;
+  stepId: number | null;
+  open: boolean;
   onClose: () => void;
 }) {
   const { toast } = useToast();
@@ -120,7 +122,10 @@ function WipLocationDialog({
   const { data: zones = [] } = useQuery<ProductionZone[]>({
     queryKey: ["/api/work/production-zones"],
     queryFn: () => apiFetch("/api/work/production-zones"),
+    enabled: open,
   });
+
+  if (!open || stepId === null) return null;
 
   const save = async () => {
     setSaving(true);
@@ -329,16 +334,29 @@ function MyStepsTab() {
 
   const startMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/work/procedures/${id}/start`, { method: "POST" }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] }); toast({ title: "Step started — timer running" }); },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+      toast({ title: "Step started — timer running" });
+      // Auto clock-in if not already clocked in
+      try {
+        const status = await fetch("/api/attendance/status", { credentials: "include" }).then(r => r.json());
+        if (!status?.clockedIn) {
+          await fetch("/api/attendance/clock-in", { method: "POST", credentials: "include" });
+          queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+        }
+      } catch {
+        // Non-fatal — clock-in is best effort
+      }
+    },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const stopMutation = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/work/procedures/${id}/stop`, { method: "POST" }),
     onSuccess: (_, id) => {
+      setWipStepId(id);
       queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
       toast({ title: "Step completed!" });
-      setWipStepId(id);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -471,9 +489,7 @@ function MyStepsTab() {
           </div>
         )}
       </div>
-      {wipStepId !== null && (
-        <WipLocationDialog stepId={wipStepId} onClose={() => setWipStepId(null)} />
-      )}
+      <WipLocationDialog stepId={wipStepId} open={wipStepId !== null} onClose={() => setWipStepId(null)} />
       {shortageStepId !== null && (
         <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />
       )}

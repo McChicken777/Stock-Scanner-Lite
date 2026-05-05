@@ -267,13 +267,53 @@ function WorkOrdersBottomNav() {
   );
 }
 
+function WorkerBottomNav() {
+  const [location] = useLocation();
+
+  const navItems = [
+    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
+    { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
+    { href: "/orders", icon: Truck, label: "Orders" },
+    { href: "/attendance", icon: Clock, label: "Attendance" },
+  ];
+
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+      <div className="flex h-16 w-full max-w-md mx-auto">
+        {navItems.map((item) => {
+          const isActive = location.startsWith(item.href);
+          return (
+            <Link key={item.href} href={item.href} className="flex-1">
+              <div className={cn(
+                "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
+                isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
+              )}>
+                <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
+                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: health } = useHealthCheck({ query: { refetchInterval: 60000 } });
   const [location] = useLocation();
   const { user } = useAuth();
   const isHealthy = health?.status === "ok";
-  const isWorkSection = location.startsWith("/work");
   const isOwner = user?.role === "owner";
+  const isWorker = user?.role === "worker" && !user?.isSupervisor;
+  const isWorkSection = location.startsWith("/work") || location.startsWith("/tasks") || location.startsWith("/attendance") || location.startsWith("/orders");
+
+  function BottomNav() {
+    if (isOwner) return null;
+    if (isWorker) return <WorkerBottomNav />;
+    if (isWorkSection) return <WorkOrdersBottomNav />;
+    return <InventoryBottomNav />;
+  }
 
   return (
     <div className={cn("min-h-[100dvh] bg-background", !isOwner && "pb-16")}>
@@ -285,6 +325,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2">
                 <Crown className="h-4 w-4 text-yellow-500" />
                 <span className="text-xs font-bold uppercase tracking-wider text-yellow-600">Owner Panel</span>
+              </div>
+            ) : isWorker ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/60 border text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <CheckSquare className="h-3.5 w-3.5" />
+                My Tasks
               </div>
             ) : (
               <SectionSwitcher isWorkSection={isWorkSection} />
@@ -305,7 +350,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      {!isOwner && (isWorkSection ? <WorkOrdersBottomNav /> : <InventoryBottomNav />)}
+      <BottomNav />
     </div>
   );
 }
