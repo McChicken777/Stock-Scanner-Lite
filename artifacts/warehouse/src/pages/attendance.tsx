@@ -128,6 +128,7 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
           <input
             type="date"
             value={startDate}
+            min={tomorrow}
             onChange={(e) => { setStartDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }}
             className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />

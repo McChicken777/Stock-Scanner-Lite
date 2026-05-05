@@ -61,6 +61,11 @@ router.post("/", requireAuth, async (req, res) => {
 
     const { type, startDate, endDate, note } = parsed.data;
 
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (startDate <= todayStr) {
+      res.status(400).json({ error: "startDate must be in the future (tomorrow or later)" });
+      return;
+    }
     if (endDate < startDate) {
       res.status(400).json({ error: "endDate must be >= startDate" });
       return;
