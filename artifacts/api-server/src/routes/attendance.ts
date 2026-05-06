@@ -803,16 +803,12 @@ router.post("/backdate", requireAuth, async (req, res) => {
       .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)));
     if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
 
-    // Build full timestamps from date + HH:MM strings
-    const [ciH, ciM] = clockInStr.split(":").map(Number);
-    const clockInTs = new Date(`${date}T00:00:00`);
-    clockInTs.setHours(ciH, ciM, 0, 0);
+    // Build full timestamps — use UTC directly to avoid server timezone offset
+    const clockInTs = new Date(`${date}T${clockInStr}:00.000Z`);
 
     let clockOutTs: Date | null = null;
     if (clockOutStr) {
-      const [coH, coM] = clockOutStr.split(":").map(Number);
-      clockOutTs = new Date(`${date}T00:00:00`);
-      clockOutTs.setHours(coH, coM, 0, 0);
+      clockOutTs = new Date(`${date}T${clockOutStr}:00.000Z`);
       if (clockOutTs <= clockInTs) {
         res.status(400).json({ error: "Clock-out must be after clock-in" }); return;
       }
