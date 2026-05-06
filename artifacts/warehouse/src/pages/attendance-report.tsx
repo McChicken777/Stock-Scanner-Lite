@@ -13,6 +13,7 @@ interface DayRow {
   type: "work" | "sick" | "vacation";
   clockIn: string | null; clockOut: string | null;
   workSeconds: number; overtimeSeconds: number; note: string | null;
+  isHoliday: boolean; holidayLabel: string | null; isWeekend: boolean;
 }
 interface Summary {
   userId: number; username: string;
@@ -251,14 +252,27 @@ export default function AttendanceReportPage() {
                 <div className="border-t divide-y">
                   {(daysByUser.get(s.userId) ?? []).map(d => {
                     const badge = TYPE_BADGE[d.type];
+                    const rowBg = d.isHoliday
+                      ? "bg-amber-50"
+                      : d.isWeekend ? "bg-blue-50/50" : "";
                     return (
-                      <div key={d.id} className="px-3 py-2 flex items-center justify-between gap-2 text-sm">
+                      <div key={d.id} className={`px-3 py-2 flex items-center justify-between gap-2 text-sm ${rowBg}`}>
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold tabular-nums text-xs">{d.date.slice(8, 10)}</span>
                             <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}`}>
                               {badge.label}
                             </span>
+                            {d.isHoliday && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-amber-100 text-amber-700 border-amber-300">
+                                {d.holidayLabel ?? "Holiday"}
+                              </span>
+                            )}
+                            {!d.isHoliday && d.isWeekend && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-blue-100 text-blue-700 border-blue-300">
+                                Weekend OT
+                              </span>
+                            )}
                           </div>
                           {d.type === "work" && (
                             <p className="text-xs text-muted-foreground mt-0.5">

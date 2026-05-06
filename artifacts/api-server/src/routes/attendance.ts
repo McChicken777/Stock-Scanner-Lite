@@ -363,22 +363,23 @@ router.get("/report", requireAuth, async (req, res) => {
     }).from(companiesTable).where(eq(companiesTable.id, companyId));
     const defaultThreshold = (company?.wh ?? 480) * 60;
 
-    const holidays = await db.select({ date: companyHolidaysTable.date })
+    const holidays = await db.select({ date: companyHolidaysTable.date, label: companyHolidaysTable.label })
       .from(companyHolidaysTable)
       .where(and(
         eq(companyHolidaysTable.companyId, companyId),
         gte(companyHolidaysTable.date, start),
         lte(companyHolidaysTable.date, end),
       ));
-    const holidaySet = new Set(holidays.map(h => h.date));
+    const holidayMap = new Map(holidays.map(h => [h.date, h.label]));
+
+    function isWeekendDate(dateStr: string): boolean {
+      const dow = new Date(dateStr + "T00:00:00Z").getUTCDay();
+      return dow === 0 || dow === 6;
+    }
 
     function thresholdForDate(dateStr: string): number {
-      if (company?.weekendOvertimeEnabled) {
-        const d = new Date(dateStr + "T00:00:00Z");
-        const dow = d.getUTCDay();
-        if (dow === 0 || dow === 6) return 0;
-      }
-      if (holidaySet.has(dateStr)) return 0;
+      if (company?.weekendOvertimeEnabled && isWeekendDate(dateStr)) return 0;
+      if (holidayMap.has(dateStr)) return 0;
       return defaultThreshold;
     }
 
@@ -435,9 +436,12 @@ router.get("/report", requireAuth, async (req, res) => {
         }
         const threshold = thresholdForDate(l.date);
         const overtime = l.type === "work" ? Math.max(0, work - threshold) : 0;
+        const isHoliday = holidayMap.has(l.date);
+        const isWeekend = company?.weekendOvertimeEnabled ? isWeekendDate(l.date) : false;
         return {
           id: l.id, userId: l.userId, username: l.username, date: l.date, type: l.type,
           clockIn: l.clockIn, clockOut: l.clockOut, workSeconds: work, overtimeSeconds: overtime, note: l.note,
+          isHoliday, holidayLabel: isHoliday ? holidayMap.get(l.date) : null, isWeekend,
         };
       }),
     });

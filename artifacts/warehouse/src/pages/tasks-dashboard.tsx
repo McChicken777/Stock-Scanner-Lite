@@ -72,6 +72,21 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return res.json();
 }
 
+/**
+ * Best-effort auto clock-in. Returns true if the user was clocked in automatically.
+ * Never throws — clock-in failure is non-fatal.
+ */
+async function autoClockInIfNeeded(): Promise<boolean> {
+  try {
+    const status = await fetch("/api/attendance/status", { credentials: "include" }).then(r => r.json());
+    if (status?.clockedIn) return false;
+    const res = await fetch("/api/attendance/clock-in", { method: "POST", credentials: "include" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 const priorityColors: Record<string, string> = {
   urgent: "bg-rose-100 text-rose-700 border-rose-300",
   high: "bg-orange-100 text-orange-700 border-orange-300",
@@ -334,18 +349,10 @@ function MyStepsTab() {
 
   const startMutation = useMutation({
     mutationFn: async (id: number) => {
-      // Auto clock-in before starting the step
-      try {
-        const status = await fetch("/api/attendance/status", { credentials: "include" }).then(r => r.json());
-        if (!status?.clockedIn) {
-          const res = await fetch("/api/attendance/clock-in", { method: "POST", credentials: "include" });
-          if (res.ok) {
-            queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
-            toast({ title: "Clocked in automatically" });
-          }
-        }
-      } catch {
-        // Non-fatal — clock-in is best effort, proceed to start the step
+      const clocked = await autoClockInIfNeeded();
+      if (clocked) {
+        queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+        toast({ title: "Clocked in automatically" });
       }
       return apiFetch(`/api/work/procedures/${id}/start`, { method: "POST" });
     },
@@ -525,10 +532,17 @@ function BatchQueueTab() {
   };
 
   const batchStart = useMutation({
-    mutationFn: (stepIds: number[]) => apiFetch("/api/work/batch-start", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stepIds }),
-    }),
+    mutationFn: async (stepIds: number[]) => {
+      const clocked = await autoClockInIfNeeded();
+      if (clocked) {
+        queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+        toast({ title: "Clocked in automatically" });
+      }
+      return apiFetch("/api/work/batch-start", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stepIds }),
+      });
+    },
     onSuccess: (data: { started: number }, stepIds) => {
       invalidate();
       setSelectedIds((prev) => { const next = new Set(prev); stepIds.forEach((id) => next.delete(id)); return next; });
