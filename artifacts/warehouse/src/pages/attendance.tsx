@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, LogIn, LogOut, Heart, Plane, FileText, BarChart3, CalendarPlus, X, CheckCircle2, XCircle } from "lucide-react";
+import { Clock, LogIn, LogOut, Heart, Plane, FileText, BarChart3, CalendarPlus, X, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AttendanceType = "work" | "sick" | "vacation";
@@ -213,6 +213,16 @@ export default function AttendancePage() {
   const [now, setNow] = useState(Date.now());
   const [showLeaveForm, setShowLeaveForm] = useState(false);
 
+  const { data: autoCloseNotice } = useQuery<{ id: number; date: string; clockIn: string | null; clockOut: string | null; workSeconds: number } | null>({
+    queryKey: ["/api/attendance/auto-close-notice"],
+    queryFn: () => api("/api/attendance/auto-close-notice"),
+  });
+
+  const ackAutoClose = useMutation({
+    mutationFn: (id: number) => api(`/api/attendance/auto-close-notice/${id}/ack`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/attendance/auto-close-notice"] }),
+  });
+
   const { data: today, isLoading } = useQuery<TodayLog | null>({
     queryKey: ["/api/attendance/today"],
     queryFn: () => api("/api/attendance/today"),
@@ -278,6 +288,29 @@ export default function AttendancePage() {
           <Button variant="outline" size="sm" className="gap-1.5"><BarChart3 className="h-4 w-4" /> My report</Button>
         </Link>
       </div>
+
+      {autoCloseNotice && (
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-amber-900">Shift auto-closed</p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                You forgot to clock out on {fmtDate(autoCloseNotice.date)}. We closed the shift at your scheduled end time
+                ({fmtTime(autoCloseNotice.clockOut)}). If that's wrong, ask a manager to fix the time.
+              </p>
+            </div>
+            <button
+              onClick={() => ackAutoClose.mutate(autoCloseNotice.id)}
+              disabled={ackAutoClose.isPending}
+              className="p-1 rounded hover:bg-amber-100 flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4 text-amber-700" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <Skeleton className="h-40 w-full rounded-2xl" />

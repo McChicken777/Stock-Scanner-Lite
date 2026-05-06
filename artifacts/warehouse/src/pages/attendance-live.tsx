@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Clock, Heart, Plane, LogIn, LogOut, UserX } from "lucide-react";
+import { ArrowLeft, Clock, Heart, Plane, LogIn, LogOut, UserX, AlertTriangle } from "lucide-react";
 
 interface LiveRow {
   userId: number;
@@ -14,6 +14,7 @@ interface LiveRow {
   clockOut: string | null;
   workSeconds: number;
   note: string | null;
+  autoClosed: boolean;
 }
 
 async function api(url: string) {
@@ -117,6 +118,11 @@ export default function AttendanceLivePage() {
                       </div>
                     )}
                   </div>
+                  {r.autoClosed && (
+                    <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-700 bg-amber-100 border border-amber-200 rounded px-2 py-1 w-fit">
+                      <AlertTriangle className="h-3 w-3" /> Auto-closed
+                    </div>
+                  )}
                 </div>
               );
             })}

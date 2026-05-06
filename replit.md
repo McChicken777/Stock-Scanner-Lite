@@ -98,6 +98,13 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - `company_holidays` — per-company holiday calendar (migration: `0002_scheduling_leave.sql`)
 - `leave_requests` with status enum (pending/approved/rejected) and type enum (sick/vacation)
 - `companies` extended with `weekend_overtime_enabled` (bool) and `country` (text)
+- `attendance_logs` extended with `auto_closed` (bool) and `auto_close_acknowledged_at` (timestamp) — Task #23
+
+**Auto Clock-Out (Task #23):**
+- `artifacts/api-server/src/lib/scheduler.ts` runs node-cron daily at 03:15 + once on boot.
+- Closes any open work shift older than `work_hours_per_day + 2h` grace; stamps `clockOut = clockIn + work_hours_per_day` and flags `auto_closed=true`.
+- Live board (`/api/attendance/live`) returns `autoClosed` and renders an "Auto-closed" badge.
+- Workers see a dismissible banner on `/attendance` via `GET /api/attendance/auto-close-notice` + `POST /api/attendance/auto-close-notice/:id/ack`.
 
 **TypeScript & Composite Projects:**
 - All packages extend `tsconfig.base.json` with `composite: true`.

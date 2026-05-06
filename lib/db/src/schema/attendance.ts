@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum, date, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, date, index, uniqueIndex, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 
@@ -17,6 +17,8 @@ export const attendanceLogsTable = pgTable("attendance_logs", {
   workSeconds: integer("work_seconds").notNull().default(0),
   overtimeSeconds: integer("overtime_seconds").notNull().default(0),
   note: text("note"),
+  autoClosed: boolean("auto_closed").notNull().default(false),
+  autoCloseAcknowledgedAt: timestamp("auto_close_acknowledged_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   userDateIdx: index("attendance_user_date_idx").on(t.userId, t.date),

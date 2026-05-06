@@ -65,6 +65,54 @@ router.get("/status", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/auto-close-notice", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    const [log] = await db.select({
+      id: attendanceLogsTable.id,
+      date: attendanceLogsTable.date,
+      clockIn: attendanceLogsTable.clockIn,
+      clockOut: attendanceLogsTable.clockOut,
+      workSeconds: attendanceLogsTable.workSeconds,
+    }).from(attendanceLogsTable)
+      .where(and(
+        eq(attendanceLogsTable.userId, userId),
+        eq(attendanceLogsTable.companyId, companyId),
+        eq(attendanceLogsTable.autoClosed, true),
+        isNull(attendanceLogsTable.autoCloseAcknowledgedAt),
+      ))
+      .orderBy(desc(attendanceLogsTable.date))
+      .limit(1);
+    res.json(log ?? null);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load auto-close notice");
+    res.status(500).json({ error: "Failed to load auto-close notice" });
+  }
+});
+
+router.post("/auto-close-notice/:id/ack", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+    await db.update(attendanceLogsTable)
+      .set({ autoCloseAcknowledgedAt: new Date() })
+      .where(and(
+        eq(attendanceLogsTable.id, id),
+        eq(attendanceLogsTable.userId, userId),
+        eq(attendanceLogsTable.companyId, companyId),
+        eq(attendanceLogsTable.autoClosed, true),
+        isNull(attendanceLogsTable.autoCloseAcknowledgedAt),
+      ));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to acknowledge auto-close notice");
+    res.status(500).json({ error: "Failed to acknowledge auto-close notice" });
+  }
+});
+
 router.get("/today", requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
@@ -269,6 +317,7 @@ router.get("/live", requireAuth, async (req, res) => {
           userId: u.id, username: u.username, role: u.role, status,
           clockIn: log?.clockIn ?? null, clockOut: log?.clockOut ?? null,
           workSeconds: log?.workSeconds ?? 0, note: log?.note ?? null,
+          autoClosed: log?.autoClosed ?? false,
         };
       });
     res.json(rows);
