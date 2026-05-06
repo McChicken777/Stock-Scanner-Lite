@@ -378,7 +378,7 @@ router.get("/report", requireAuth, async (req, res) => {
     }
 
     function thresholdForDate(dateStr: string): number {
-      if (company?.weekendOvertimeEnabled && isWeekendDate(dateStr)) return 0;
+      if ((company?.weekendOvertimeEnabled ?? true) && isWeekendDate(dateStr)) return 0;
       if (holidayMap.has(dateStr)) return 0;
       return defaultThreshold;
     }
@@ -428,6 +428,8 @@ router.get("/report", requireAuth, async (req, res) => {
     res.json({
       month: monthRaw,
       thresholdSeconds: defaultThreshold,
+      weekendOvertimeEnabled: company?.weekendOvertimeEnabled ?? true,
+      holidayCount: holidays.length,
       summaries: Array.from(usersById.values()).sort((a, b) => a.username.localeCompare(b.username)),
       days: logs.map(l => {
         let work = l.workSeconds ?? 0;
@@ -437,7 +439,7 @@ router.get("/report", requireAuth, async (req, res) => {
         const threshold = thresholdForDate(l.date);
         const overtime = l.type === "work" ? Math.max(0, work - threshold) : 0;
         const isHoliday = holidayMap.has(l.date);
-        const isWeekend = company?.weekendOvertimeEnabled ? isWeekendDate(l.date) : false;
+        const isWeekend = (company?.weekendOvertimeEnabled ?? true) ? isWeekendDate(l.date) : false;
         return {
           id: l.id, userId: l.userId, username: l.username, date: l.date, type: l.type,
           clockIn: l.clockIn, clockOut: l.clockOut, workSeconds: work, overtimeSeconds: overtime, note: l.note,

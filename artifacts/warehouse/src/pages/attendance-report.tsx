@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, BarChart3, Download, Heart, Plane, Briefcase, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Download, Heart, Plane, Briefcase, Zap, Info } from "lucide-react";
 
 interface UserOption { id: number; username: string; role: string }
 interface DayRow {
@@ -23,6 +23,8 @@ interface Summary {
 interface Report {
   month: string;
   thresholdSeconds: number;
+  weekendOvertimeEnabled: boolean;
+  holidayCount: number;
   summaries: Summary[];
   days: DayRow[];
 }
@@ -296,9 +298,34 @@ export default function AttendanceReportPage() {
               </div>
             ))}
 
-            <p className="text-[10px] text-muted-foreground text-center">
-              Standard day: {fmtHours(data.thresholdSeconds)} · overtime is computed beyond that per day
-            </p>
+            {/* Legend / overtime rules explanation */}
+            <div className="bg-card border-2 border-border rounded-xl p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                <Info className="h-3.5 w-3.5" /> Overtime Rules
+              </div>
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-sm bg-background border border-border flex-shrink-0" />
+                  <span>Regular day — overtime starts after <strong className="text-foreground">{fmtHours(data.thresholdSeconds)}</strong> worked</span>
+                </div>
+                {data.weekendOvertimeEnabled && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-300 flex-shrink-0" />
+                    <span>Weekend — <strong className="text-foreground">all hours count as overtime</strong> (threshold: 0h)</span>
+                  </div>
+                )}
+                {data.holidayCount > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-300 flex-shrink-0" />
+                    <span>Company holiday — <strong className="text-foreground">all hours count as overtime</strong> (threshold: 0h)</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pt-0.5">
+                  <Zap className="h-3 w-3 text-orange-500 flex-shrink-0" />
+                  <span>Orange <strong className="text-foreground">+OT</strong> label appears on any day with overtime hours logged</span>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>
