@@ -778,11 +778,12 @@ router.get("/report/pdf", requireAuth, async (req, res) => {
   }
 });
 
+const timeHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const backdateSchema = z.object({
   userId: z.number().int().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  clockIn: z.string().regex(/^\d{2}:\d{2}$/),
-  clockOut: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  clockIn: timeHHMM,
+  clockOut: timeHHMM.optional(),
 });
 
 router.post("/backdate", requireAuth, async (req, res) => {

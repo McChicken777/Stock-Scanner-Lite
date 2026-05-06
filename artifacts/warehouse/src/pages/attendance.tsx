@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Clock, LogIn, LogOut, Heart, Plane, FileText, BarChart3, CalendarPlus, X, CheckCircle2, XCircle, AlertTriangle, ClockArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -207,13 +208,14 @@ function LeaveRequestList() {
 
 interface AttendanceUser { id: number; username: string; role: string; }
 
-function BackdateDialog({ onDone }: { onDone: () => void }) {
+function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const { data: users = [] } = useQuery<AttendanceUser[]>({
     queryKey: ["/api/attendance/users"],
     queryFn: () => api("/api/attendance/users"),
+    enabled: open,
   });
 
   const [userId, setUserId] = useState<string>("");
@@ -236,79 +238,88 @@ function BackdateDialog({ onDone }: { onDone: () => void }) {
       qc.invalidateQueries({ queryKey: ["/api/attendance/today"] });
       qc.invalidateQueries({ queryKey: ["/api/attendance/live"] });
       qc.invalidateQueries({ queryKey: ["/api/attendance/status"] });
+      qc.invalidateQueries({ queryKey: ["/api/attendance/report"] });
       toast({ title: clockOut ? "Shift logged" : "Clock-in recorded — shift is now open" });
-      onDone();
+      onOpenChange(false);
+      setUserId(""); setDate(todayStr()); setClockIn(""); setClockOut("");
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const isValid = userId && date && /^\d{2}:\d{2}$/.test(clockIn) && (!clockOut || /^\d{2}:\d{2}$/.test(clockOut));
+  const isValid = userId && date && /^([01]\d|2[0-3]):[0-5]\d$/.test(clockIn) && (!clockOut || /^([01]\d|2[0-3]):[0-5]\d$/.test(clockOut));
 
   return (
-    <div className="space-y-4">
-      <div>
-        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Worker</label>
-        <select
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        >
-          <option value="">Select worker…</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>{u.username}</option>
-          ))}
-        </select>
-      </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Log Past Time</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Worker</label>
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">Select worker…</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.username}</option>
+              ))}
+            </select>
+          </div>
 
-      <div>
-        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
-        <input
-          type="date"
-          value={date}
-          max={todayStr()}
-          onChange={(e) => setDate(e.target.value)}
-          className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Date</label>
+            <input
+              type="date"
+              value={date}
+              max={todayStr()}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Clock-in time</label>
-          <input
-            type="time"
-            value={clockIn}
-            onChange={(e) => setClockIn(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Clock-in</label>
+              <input
+                type="time"
+                value={clockIn}
+                onChange={(e) => setClockIn(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Clock-out <span className="normal-case font-normal">(optional)</span></label>
+              <input
+                type="time"
+                value={clockOut}
+                onChange={(e) => setClockOut(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          </div>
+
+          {clockIn && !clockOut && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              No clock-out — the shift stays open and the timer runs from the clock-in time.
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 h-10" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button
+              className="flex-1 h-10 font-bold"
+              disabled={!isValid || submit.isPending}
+              onClick={() => submit.mutate()}
+            >
+              {submit.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
         </div>
-        <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Clock-out time <span className="normal-case font-normal text-muted-foreground">(optional)</span></label>
-          <input
-            type="time"
-            value={clockOut}
-            onChange={(e) => setClockOut(e.target.value)}
-            className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-      </div>
-
-      {clockIn && !clockOut && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          No clock-out — the shift will be left open and the timer runs from the clock-in time.
-        </p>
-      )}
-
-      <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 h-10" onClick={onDone}>Cancel</Button>
-        <Button
-          className="flex-1 h-10 font-bold"
-          disabled={!isValid || submit.isPending}
-          onClick={() => submit.mutate()}
-        >
-          {submit.isPending ? "Saving…" : "Save"}
-        </Button>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -527,39 +538,32 @@ export default function AttendancePage() {
       {(user?.role === "admin" || user?.isSupervisor) && (
         <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 space-y-3">
           <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Manager tools</p>
-
-          {showBackdateForm ? (
-            <BackdateDialog onDone={() => setShowBackdateForm(false)} />
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Link href="/attendance/live">
-                  <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
-                    <Clock className="h-4 w-4 mr-1.5" /> Who's In
-                  </Button>
-                </Link>
-                {user?.role === "admin" && (
-                  <Link href={`/attendance/report?month=${monthParam}&userId=all`}>
-                    <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
-                      <BarChart3 className="h-4 w-4 mr-1.5" /> Reports
-                    </Button>
-                  </Link>
-                )}
-              </div>
-              <Button
-                variant="outline"
-                className="w-full h-11 border-blue-300 text-blue-700 font-bold"
-                onClick={() => setShowBackdateForm(true)}
-              >
-                <ClockArrowUp className="h-4 w-4 mr-1.5" /> Log Past Time
+          <div className="grid grid-cols-2 gap-2">
+            <Link href="/attendance/live">
+              <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
+                <Clock className="h-4 w-4 mr-1.5" /> Who's In
               </Button>
-            </>
-          )}
-
-          {/* Pending leave approvals */}
-          {!showBackdateForm && <LeaveApprovalPanel />}
+            </Link>
+            {user?.role === "admin" && (
+              <Link href={`/attendance/report?month=${monthParam}&userId=all`}>
+                <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
+                  <BarChart3 className="h-4 w-4 mr-1.5" /> Reports
+                </Button>
+              </Link>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            className="w-full h-11 border-blue-300 text-blue-700 font-bold"
+            onClick={() => setShowBackdateForm(true)}
+          >
+            <ClockArrowUp className="h-4 w-4 mr-1.5" /> Log Past Time
+          </Button>
+          <LeaveApprovalPanel />
         </div>
       )}
+
+      <BackdateDialog open={showBackdateForm} onOpenChange={setShowBackdateForm} />
     </div>
   );
 }
