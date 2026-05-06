@@ -778,6 +778,89 @@ router.get("/report/pdf", requireAuth, async (req, res) => {
   }
 });
 
+const backdateSchema = z.object({
+  userId: z.number().int().positive(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  clockIn: z.string().regex(/^\d{2}:\d{2}$/),
+  clockOut: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+});
+
+router.post("/backdate", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role !== "admin" && !req.session.isSupervisor) {
+      res.status(403).json({ error: "Admin or supervisor only" }); return;
+    }
+    const companyId = req.session.companyId!;
+    const parsed = backdateSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { userId, date, clockIn: clockInStr, clockOut: clockOutStr } = parsed.data;
+
+    // Verify user belongs to this company
+    const [targetUser] = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)));
+    if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
+
+    // Build full timestamps from date + HH:MM strings
+    const [ciH, ciM] = clockInStr.split(":").map(Number);
+    const clockInTs = new Date(`${date}T00:00:00`);
+    clockInTs.setHours(ciH, ciM, 0, 0);
+
+    let clockOutTs: Date | null = null;
+    if (clockOutStr) {
+      const [coH, coM] = clockOutStr.split(":").map(Number);
+      clockOutTs = new Date(`${date}T00:00:00`);
+      clockOutTs.setHours(coH, coM, 0, 0);
+      if (clockOutTs <= clockInTs) {
+        res.status(400).json({ error: "Clock-out must be after clock-in" }); return;
+      }
+    }
+
+    // Compute seconds if closed
+    let workSeconds = 0;
+    let overtimeSeconds = 0;
+    if (clockOutTs) {
+      workSeconds = Math.max(0, Math.round((clockOutTs.getTime() - clockInTs.getTime()) / 1000));
+      const threshold = await getEffectiveThresholdSeconds(companyId, date);
+      overtimeSeconds = Math.max(0, workSeconds - threshold);
+    }
+
+    // Upsert: check for existing record on this date for this user
+    const [existing] = await db.select({ id: attendanceLogsTable.id, type: attendanceLogsTable.type })
+      .from(attendanceLogsTable)
+      .where(and(
+        eq(attendanceLogsTable.userId, userId),
+        eq(attendanceLogsTable.companyId, companyId),
+        eq(attendanceLogsTable.date, date),
+      ));
+
+    let result;
+    if (existing) {
+      [result] = await db.update(attendanceLogsTable)
+        .set({
+          type: "work", status: "approved",
+          clockIn: clockInTs, clockOut: clockOutTs,
+          workSeconds, overtimeSeconds,
+          autoClosed: false, autoCloseAcknowledgedAt: null,
+        })
+        .where(and(eq(attendanceLogsTable.id, existing.id), eq(attendanceLogsTable.companyId, companyId)))
+        .returning();
+    } else {
+      [result] = await db.insert(attendanceLogsTable).values({
+        userId, companyId, date, type: "work", status: "approved",
+        clockIn: clockInTs, clockOut: clockOutTs,
+        workSeconds, overtimeSeconds,
+      }).returning();
+    }
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to backdate attendance");
+    res.status(500).json({ error: "Failed to backdate attendance" });
+  }
+});
+
 router.get("/users", requireAuth, async (req, res) => {
   try {
     if (req.session.role !== "admin" && !req.session.isSupervisor) {
