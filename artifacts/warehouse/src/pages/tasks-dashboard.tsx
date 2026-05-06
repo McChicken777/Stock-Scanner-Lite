@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Play, CheckCircle2, AlertCircle, Calendar, Flag, Timer, User,
   Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X, AlertTriangle, TrendingDown,
+  Clock, LogOut,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -329,6 +330,76 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Clock-In Status Banner ──────────────────────────────────────────────────
+
+interface AttendanceToday {
+  id: number;
+  clockIn: string | null;
+  clockOut: string | null;
+  type: string;
+}
+
+function ClockInBanner() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: status } = useQuery<{ clockedIn: boolean }>({
+    queryKey: ["/api/attendance/status"],
+    queryFn: () => fetch("/api/attendance/status", { credentials: "include" }).then((r) => r.json()),
+    refetchInterval: 60000,
+  });
+
+  const { data: todayLog } = useQuery<AttendanceToday | null>({
+    queryKey: ["/api/attendance/today"],
+    queryFn: () => fetch("/api/attendance/today", { credentials: "include" }).then((r) => r.json()),
+    refetchInterval: 60000,
+    enabled: !!status?.clockedIn,
+  });
+
+  const clockOutMutation = useMutation({
+    mutationFn: () =>
+      fetch("/api/attendance/clock-out", { method: "POST", credentials: "include" }).then(async (r) => {
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+        return r.json();
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/today"] });
+      toast({ title: "Clocked out" });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  if (!status?.clockedIn) return null;
+
+  const clockInTime = todayLog?.clockIn ? new Date(todayLog.clockIn) : null;
+  const timeLabel = clockInTime
+    ? clockInTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  return (
+    <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-green-50 border border-green-200">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="inline-block w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse" />
+        <Clock className="h-3.5 w-3.5 text-green-700 flex-shrink-0" />
+        <span className="text-xs font-semibold text-green-800 truncate">
+          {timeLabel ? `Clocked in since ${timeLabel}` : "Clocked in"}
+        </span>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs border-green-300 text-green-800 hover:bg-green-100 flex-shrink-0 font-semibold"
+        disabled={clockOutMutation.isPending}
+        onClick={() => clockOutMutation.mutate()}
+      >
+        <LogOut className="h-3 w-3 mr-1" />
+        {clockOutMutation.isPending ? "…" : "Clock Out"}
+      </Button>
     </div>
   );
 }
@@ -862,6 +933,8 @@ export default function TasksDashboardPage() {
           </Button>
         </Link>
       </div>
+
+      <ClockInBanner />
 
       {/* Tab switcher */}
       <div className="flex gap-1 bg-muted/50 border rounded-xl p-1">
