@@ -803,7 +803,7 @@ router.post("/backdate", requireAuth, async (req, res) => {
       .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)));
     if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
 
-    // Build full timestamps — use UTC directly to avoid server timezone offset
+    // Build full timestamps — frontend sends times already converted to UTC
     const clockInTs = new Date(`${date}T${clockInStr}:00.000Z`);
 
     let clockOutTs: Date | null = null;

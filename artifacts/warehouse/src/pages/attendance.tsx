@@ -223,6 +223,11 @@ function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
   const [clockIn, setClockIn] = useState("");
   const [clockOut, setClockOut] = useState("");
 
+  function toUTCTime(dateStr: string, localTime: string): string {
+    const d = new Date(`${dateStr}T${localTime}:00`);
+    return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  }
+
   const submit = useMutation({
     mutationFn: () => api("/api/attendance/backdate", {
       method: "POST",
@@ -230,8 +235,8 @@ function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
       body: JSON.stringify({
         userId: Number(userId),
         date,
-        clockIn,
-        ...(clockOut ? { clockOut } : {}),
+        clockIn: toUTCTime(date, clockIn),
+        ...(clockOut ? { clockOut: toUTCTime(date, clockOut) } : {}),
       }),
     }),
     onSuccess: () => {
