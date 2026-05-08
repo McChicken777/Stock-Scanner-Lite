@@ -79,6 +79,7 @@ interface LocationEntry {
   itemName: string;
   locationType: "warehouse" | "zone" | "with_worker";
   locationValue: string;
+  sizeNote: string;
 }
 
 function BatchCompleteDialog({
@@ -95,7 +96,7 @@ function BatchCompleteDialog({
   isPending: boolean;
 }) {
   const [entries, setEntries] = useState<LocationEntry[]>(
-    items.map((item) => ({ stepId: item.id, itemName: item.itemName, locationType: "warehouse", locationValue: "" }))
+    items.map((item) => ({ stepId: item.id, itemName: item.itemName, locationType: "warehouse", locationValue: "", sizeNote: "" }))
   );
 
   const update = (idx: number, patch: Partial<LocationEntry>) =>
@@ -155,6 +156,13 @@ function BatchCompleteDialog({
                   className="w-full h-9 px-3 rounded-lg border-2 border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               )}
+              <input
+                type="text"
+                placeholder="Size/weight note (e.g. large panel, 12 kg) — optional"
+                value={entry.sizeNote}
+                onChange={(e) => update(idx, { sizeNote: e.target.value })}
+                className="w-full h-9 px-3 rounded-lg border border-input bg-muted/50 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background"
+              />
             </div>
           ))}
         </div>
@@ -505,7 +513,12 @@ export default function PaintQueuePage() {
           isPending={completeBatch.isPending}
           onConfirm={(locations) => completeBatch.mutate({
             stepIds: completeItems.map((i) => i.id),
-            locations,
+            locations: locations.map((l) => ({
+              ...l,
+              locationValue: l.sizeNote
+                ? `${l.locationValue || l.locationType} — ${l.sizeNote}`
+                : l.locationValue,
+            })),
           })}
         />
       )}

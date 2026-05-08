@@ -3414,14 +3414,13 @@ router.post("/paint-queue/batch-complete", requirePainterOrAdmin, requirePro, as
       res.status(403).json({ error: "One or more steps not found, not a paint step, or project is not active" }); return;
     }
 
-    // Only in_progress steps can be completed
-    const notInProgress = verified.filter((s) => s.status !== "in_progress" && s.status !== "not_started");
-    const alreadyCompleted = verified.filter((s) => s.status === "completed");
-    if (alreadyCompleted.length > 0) {
-      res.status(400).json({ error: `${alreadyCompleted.length} step(s) are already completed` }); return;
-    }
+    // Steps must be in_progress to be completed — not_started must go through batch-start first
+    const notInProgress = verified.filter((s) => s.status !== "in_progress");
     if (notInProgress.length > 0) {
-      res.status(400).json({ error: "All steps must be started before completing — use batch-start first" }); return;
+      const breakdown = notInProgress.map((s) => `"${s.name}" (${s.status})`).join(", ");
+      res.status(400).json({
+        error: `All steps must be in_progress before completing. Use batch-start first: ${breakdown}`,
+      }); return;
     }
 
     await db.update(workItemStepsTable)

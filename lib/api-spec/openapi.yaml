@@ -637,6 +637,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /work/paint-queue:
+    get:
+      operationId: getPaintQueue
+      tags: [work]
+      summary: Get all ready-to-paint steps grouped by color (Pro plan + painter/admin)
+      responses:
+        "200":
+          description: List of paint queue items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaintQueueItem"
+        "403":
+          description: Requires Pro plan or painter/admin role
+
+  /work/paint-queue/batch-start:
+    post:
+      operationId: paintQueueBatchStart
+      tags: [work]
+      summary: Mark selected paint steps as in_progress (Pro plan + painter/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaintBatchStartRequest"
+      responses:
+        "200":
+          description: Batch started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  started: { type: integer }
+                  alreadyStarted: { type: integer }
+        "400":
+          description: Steps not ready or not paint steps
+        "403":
+          description: Requires Pro plan or painter/admin role
+
+  /work/paint-queue/batch-complete:
+    post:
+      operationId: paintQueueBatchComplete
+      tags: [work]
+      summary: Complete paint steps and log WIP locations (Pro plan + painter/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaintBatchCompleteRequest"
+      responses:
+        "200":
+          description: Batch completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completed: { type: integer }
+        "400":
+          description: Steps must be in_progress before completing
+        "403":
+          description: Requires Pro plan or painter/admin role
+
+  /work/supervisor/unlogged-parts:
+    get:
+      operationId: getSupervisorUnloggedParts
+      tags: [work]
+      summary: Steps completed in last 7 days with no WIP location logged (supervisor/admin)
+      responses:
+        "200":
+          description: List of unlogged parts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnloggedPart"
+        "403":
+          description: Supervisor or admin required
+
 components:
   schemas:
     HealthStatus:
@@ -1275,3 +1360,66 @@ components:
         rejected: { type: integer }
         converted: { type: integer }
       required: [draft, sent, approved, rejected, converted]
+
+    PaintQueueItem:
+      type: object
+      properties:
+        id: { type: integer }
+        stepName: { type: string }
+        status:
+          type: string
+          enum: [not_started, in_progress]
+        durationEstimate: { type: integer, nullable: true }
+        itemId: { type: integer }
+        itemName: { type: string }
+        projectId: { type: integer }
+        projectName: { type: string }
+        deadline: { type: string, format: date-time }
+        priority: { type: string }
+        paintColor: { type: string, nullable: true }
+        wipLocation: { type: string, nullable: true }
+      required: [id, stepName, status, itemId, itemName, projectId, projectName, deadline, priority]
+
+    PaintBatchStartRequest:
+      type: object
+      properties:
+        stepIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+      required: [stepIds]
+
+    PaintBatchLocationEntry:
+      type: object
+      properties:
+        stepId: { type: integer }
+        locationType:
+          type: string
+          enum: [warehouse, zone, with_worker]
+        locationValue: { type: string }
+      required: [stepId, locationType]
+
+    PaintBatchCompleteRequest:
+      type: object
+      properties:
+        stepIds:
+          type: array
+          items: { type: integer }
+          minItems: 1
+        locations:
+          type: array
+          items: { $ref: "#/components/schemas/PaintBatchLocationEntry" }
+      required: [stepIds]
+
+    UnloggedPart:
+      type: object
+      properties:
+        stepId: { type: integer }
+        stepName: { type: string }
+        itemName: { type: string }
+        projectId: { type: integer }
+        projectName: { type: string }
+        deadline: { type: string, format: date-time }
+        lastWorker: { type: string, nullable: true }
+        completedAt: { type: string, format: date-time, nullable: true }
+      required: [stepId, stepName, itemName, projectId, projectName, deadline]

@@ -125,10 +125,12 @@ function WipLocationDialog({
   stepId,
   open,
   onSave,
+  onSkip,
 }: {
   stepId: number | null;
   open: boolean;
   onSave: (locationType: "warehouse" | "zone" | "with_worker", locationValue: string) => void;
+  onSkip: () => void;
 }) {
   const { toast } = useToast();
   const [locationType, setLocationType] = useState<"warehouse" | "zone" | "with_worker">("warehouse");
@@ -170,7 +172,7 @@ function WipLocationDialog({
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
         <div>
           <p className="font-black text-base">Where is this part now?</p>
-          <p className="text-xs text-muted-foreground">Required — supervisors need to know where WIP is stored</p>
+          <p className="text-xs text-muted-foreground">Supervisors need to track WIP — skip only if no location is known yet</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -225,13 +227,23 @@ function WipLocationDialog({
           <p className="text-xs text-muted-foreground text-center">No zones configured. Ask an admin to add production zones.</p>
         )}
 
-        <Button
-          className="w-full h-11 font-bold"
-          disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
-          onClick={save}
-        >
-          {saving ? "Saving…" : "Log Location & Continue"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 h-11 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
+            disabled={saving}
+            onClick={onSkip}
+          >
+            Skip (supervisor sees it as unlogged)
+          </Button>
+          <Button
+            className="flex-1 h-11 font-bold"
+            disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
+            onClick={save}
+          >
+            {saving ? "Saving…" : "Log Location"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -570,7 +582,12 @@ function MyStepsTab() {
           </div>
         )}
       </div>
-      <WipLocationDialog stepId={wipStepId} open={wipStepId !== null} onSave={() => setWipStepId(null)} />
+      <WipLocationDialog
+        stepId={wipStepId}
+        open={wipStepId !== null}
+        onSave={() => setWipStepId(null)}
+        onSkip={() => setWipStepId(null)}
+      />
       {shortageStepId !== null && (
         <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />
       )}

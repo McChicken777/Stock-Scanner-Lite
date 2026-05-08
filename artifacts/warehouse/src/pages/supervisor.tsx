@@ -447,12 +447,23 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
 
 function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  const copyReminder = (part: UnloggedPart, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const msg = `Reminder: Please log the location for "${part.stepName}" on "${part.itemName}" (project: ${part.projectName}). Open the task in the app and tap "Log Location".`;
+    navigator.clipboard.writeText(msg).then(() => {
+      toast({ title: "Reminder copied", description: `Message for ${part.lastWorker ?? "worker"} copied to clipboard` });
+    }).catch(() => {
+      toast({ title: msg.slice(0, 80), description: "Copy manually if clipboard is unavailable" });
+    });
+  };
 
   if (parts.length === 0) {
     return (
       <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
         <p className="font-semibold text-green-700">All parts have locations logged</p>
-        <p className="text-xs text-green-600 mt-1">No completed steps are missing a WIP location.</p>
+        <p className="text-xs text-green-600 mt-1">No completed steps are missing a WIP location in the last 7 days.</p>
       </div>
     );
   }
@@ -460,7 +471,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Completed steps in active projects without a stored location — ask the worker to log where they left the part.
+        Steps completed in the last 7 days without a stored location. Tap a card to go to the project, or tap "Remind" to copy a message for the worker.
       </p>
       {parts.map((part) => {
         const completedAgo = part.completedAt
@@ -473,25 +484,37 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
           : null;
 
         return (
-          <button
+          <div
             key={part.stepId}
-            onClick={() => navigate(`/work/projects/${part.projectId}`)}
-            className="w-full text-left rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1 active:scale-[0.99] transition-transform"
+            className="rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1"
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{part.itemName}</p>
-                <p className="text-xs text-muted-foreground truncate">{part.stepName} · {part.projectName}</p>
+            <button
+              className="w-full text-left active:scale-[0.99] transition-transform"
+              onClick={() => navigate(`/work/projects/${part.projectId}`)}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{part.itemName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{part.stepName} · {part.projectName}</p>
+                </div>
+                <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                  <MapPin className="h-3 w-3" /> No location
+                </span>
               </div>
-              <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                <MapPin className="h-3 w-3" /> No location
-              </span>
+              <div className="flex flex-wrap gap-1.5 text-[10px] text-muted-foreground mt-1">
+                {part.lastWorker && <span className="flex items-center gap-0.5"><User className="h-3 w-3" />{part.lastWorker}</span>}
+                {completedAgo && <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{completedAgo}</span>}
+              </div>
+            </button>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={(e) => copyReminder(part, e)}
+                className="text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors"
+              >
+                Remind worker
+              </button>
             </div>
-            <div className="flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
-              {part.lastWorker && <span className="flex items-center gap-0.5"><User className="h-3 w-3" />{part.lastWorker}</span>}
-              {completedAgo && <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{completedAgo}</span>}
-            </div>
-          </button>
+          </div>
         );
       })}
     </div>
