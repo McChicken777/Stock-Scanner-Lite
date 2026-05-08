@@ -16,7 +16,12 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface WipLocation { locationType: string; locationValue: string }
+interface WipLocation {
+  locationType: string;
+  locationValue: string;
+  setByUsername?: string | null;
+  setAt?: string | null;
+}
 
 interface PartNeeded { partName: string; quantity: number; itemType: string; location: string | null }
 
@@ -146,22 +151,42 @@ function WipLocationDialog({
 
   if (!open || stepId === null) return null;
 
+  const resolveLocationValue = () =>
+    locationType === "zone"
+      ? (zones.find((z) => z.id === Number(zoneId))?.name ?? zoneId)
+      : locationType === "with_worker"
+      ? "With worker"
+      : warehouseNote.trim() || "General warehouse area";
+
+  // Calls /stop atomically with the location so the step is closed and
+  // the location is recorded in a single server transaction.
   const save = async () => {
     setSaving(true);
     try {
-      const locationValue = locationType === "zone"
-        ? (zones.find((z) => z.id === Number(zoneId))?.name ?? zoneId)
-        : locationType === "with_worker" ? "With worker"
-        : warehouseNote.trim() ? warehouseNote.trim() : "General warehouse area";
-      await apiFetch(`/api/work/steps/${stepId}/wip-location`, {
+      const locationValue = resolveLocationValue();
+      await apiFetch(`/api/work/procedures/${stepId}/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ locationType, locationValue }),
+        body: JSON.stringify({ wipLocation: { locationType, locationValue } }),
       });
-      toast({ title: "Location recorded" });
+      toast({ title: "Step completed — location logged" });
       onSave(locationType, locationValue);
-    } catch {
-      toast({ title: "Failed to save location", variant: "destructive" });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to complete step", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Skip location logging but still complete the step.
+  const skip = async () => {
+    setSaving(true);
+    try {
+      await apiFetch(`/api/work/procedures/${stepId}/stop`, { method: "POST" });
+      toast({ title: "Step completed (no location logged)" });
+      onSkip();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed to complete step", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -171,8 +196,8 @@ function WipLocationDialog({
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
         <div>
-          <p className="font-black text-base">Where is this part now?</p>
-          <p className="text-xs text-muted-foreground">Supervisors need to track WIP — skip only if no location is known yet</p>
+          <p className="font-black text-base">Step complete — where is this part now?</p>
+          <p className="text-xs text-muted-foreground">Log the location so the next worker can find it. Skip only if the location is truly unknown.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -232,16 +257,16 @@ function WipLocationDialog({
             variant="outline"
             className="flex-1 h-11 text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
             disabled={saving}
-            onClick={onSkip}
+            onClick={skip}
           >
-            Skip (supervisor sees it as unlogged)
+            Skip (supervisor sees as unlogged)
           </Button>
           <Button
             className="flex-1 h-11 font-bold"
             disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
             onClick={save}
           >
-            {saving ? "Saving…" : "Log Location"}
+            {saving ? "Saving…" : "Log & Complete"}
           </Button>
         </div>
       </div>
@@ -439,16 +464,6 @@ function MyStepsTab() {
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
-  const stopMutation = useMutation({
-    mutationFn: (id: number) => apiFetch(`/api/work/procedures/${id}/stop`, { method: "POST" }),
-    onSuccess: (_, id) => {
-      setWipStepId(id);
-      queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
-      toast({ title: "Step completed!" });
-    },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
-  });
-
   const inProgress = steps.filter((s) => s.status === "in_progress");
   const ready = steps.filter((s) => s.status === "not_started" && s.stepStatus === "ready");
 
@@ -516,10 +531,20 @@ function MyStepsTab() {
           </div>
         )}
         {variant === "ready" && step.sortOrder > 0 && step.previousWip && (
-          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
-            <MapPin className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">Part is at: <strong>{step.previousWip.locationValue}</strong></span>
-          </p>
+          <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 space-y-0.5">
+            <p className="flex items-center gap-1">
+              <MapPin className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">Part at: <strong>{step.previousWip.locationValue}</strong></span>
+            </p>
+            {(step.previousWip.setByUsername || step.previousWip.setAt) && (
+              <p className="text-[10px] text-blue-500 pl-4 truncate">
+                {step.previousWip.setByUsername ? `by ${step.previousWip.setByUsername}` : ""}
+                {step.previousWip.setAt
+                  ? `${step.previousWip.setByUsername ? " · " : ""}${new Date(step.previousWip.setAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                  : ""}
+              </p>
+            )}
+          </div>
         )}
         {variant === "ready" && step.sortOrder > 0 && !step.previousWip && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
@@ -528,14 +553,24 @@ function MyStepsTab() {
           </p>
         )}
         {variant === "inProgress" && step.wipLocation && (
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            <MapPin className="h-3 w-3 flex-shrink-0" />
-            <span className="truncate">Logged: {step.wipLocation.locationValue}</span>
-          </p>
+          <div className="text-xs text-muted-foreground space-y-0.5">
+            <p className="flex items-center gap-1">
+              <MapPin className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">At: {step.wipLocation.locationValue}</span>
+            </p>
+            {(step.wipLocation.setByUsername || step.wipLocation.setAt) && (
+              <p className="text-[10px] pl-4 truncate">
+                {step.wipLocation.setByUsername ? `logged by ${step.wipLocation.setByUsername}` : ""}
+                {step.wipLocation.setAt
+                  ? `${step.wipLocation.setByUsername ? " · " : ""}${new Date(step.wipLocation.setAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                  : ""}
+              </p>
+            )}
+          </div>
         )}
         {variant === "inProgress" && (
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => stopMutation.mutate(step.id)} disabled={stopMutation.isPending}
+            <Button size="sm" onClick={() => setWipStepId(step.id)}
               className="flex-1 bg-green-600 hover:bg-green-700 font-bold">
               <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Complete
             </Button>
@@ -591,8 +626,14 @@ function MyStepsTab() {
       <WipLocationDialog
         stepId={wipStepId}
         open={wipStepId !== null}
-        onSave={() => setWipStepId(null)}
-        onSkip={() => setWipStepId(null)}
+        onSave={() => {
+          setWipStepId(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+        }}
+        onSkip={() => {
+          setWipStepId(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+        }}
       />
       {shortageStepId !== null && (
         <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />

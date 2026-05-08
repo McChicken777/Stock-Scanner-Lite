@@ -1588,16 +1588,33 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       }
     }
 
-    // Fetch latest WIP location for all visible step IDs
+    // Fetch latest WIP location for all visible step IDs (with user attribution)
     const stepIds = allProcsForRoles.map((r) => r.proc.id);
-    const latestWipMap = new Map<number, { locationType: string; locationValue: string }>();
+    const latestWipMap = new Map<number, {
+      locationType: string; locationValue: string;
+      setByUsername: string | null; setAt: Date;
+    }>();
     if (stepIds.length > 0) {
-      const wipRows = await db.select().from(wipLocationsTable)
+      const wipRows = await db
+        .select({
+          stepId: wipLocationsTable.stepId,
+          locationType: wipLocationsTable.locationType,
+          locationValue: wipLocationsTable.locationValue,
+          setAt: wipLocationsTable.setAt,
+          setByUsername: usersTable.username,
+        })
+        .from(wipLocationsTable)
+        .leftJoin(usersTable, eq(wipLocationsTable.setByUserId, usersTable.id))
         .where(inArray(wipLocationsTable.stepId, stepIds))
         .orderBy(desc(wipLocationsTable.setAt));
       for (const row of wipRows) {
         if (!latestWipMap.has(row.stepId)) {
-          latestWipMap.set(row.stepId, { locationType: row.locationType, locationValue: row.locationValue ?? "" });
+          latestWipMap.set(row.stepId, {
+            locationType: row.locationType,
+            locationValue: row.locationValue ?? "",
+            setByUsername: row.setByUsername ?? null,
+            setAt: row.setAt,
+          });
         }
       }
     }
@@ -1658,7 +1675,7 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       const dagBlocked = dagBlockers.some((blockerId) => blockerStatusMap.get(blockerId) !== "completed");
 
       // Previous step's WIP location (to show on the card for the next worker)
-      let previousWip: { locationType: string; locationValue: string } | null = null;
+      let previousWip: { locationType: string; locationValue: string; setByUsername: string | null; setAt: Date } | null = null;
       if (myIndex > 0) {
         const completedPrev = itemProcs
           .slice(0, myIndex)
