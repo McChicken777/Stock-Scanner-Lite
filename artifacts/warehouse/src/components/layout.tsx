@@ -154,7 +154,7 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
 function AdminBottomNav() {
   const [location] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
 
   const isProjectsActive =
     location.startsWith("/work/projects") ||

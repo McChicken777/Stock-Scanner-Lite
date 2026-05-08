@@ -36,15 +36,19 @@ router.post("/login", async (req, res) => {
       return;
     }
 
-    // Load company features
+    // Load company features + plan
     let features: CompanyFeatures = {
       inventory: true, alerts: true, work_orders: true,
       progress_tracking: true, deadline_alerts: true, time_tracking: true,
     };
+    let plan: string | null = null;
 
     if (user.companyId) {
       const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, user.companyId));
-      if (company) features = company.features as CompanyFeatures;
+      if (company) {
+        features = company.features as CompanyFeatures;
+        plan = company.plan ?? null;
+      }
     }
 
     req.session.userId = user.id;
@@ -61,6 +65,7 @@ router.post("/login", async (req, res) => {
       isSupervisor: user.isSupervisor,
       companyId: user.companyId,
       features,
+      plan,
     });
 
     // Auto-seed starter pack on first admin login if company has zero templates
