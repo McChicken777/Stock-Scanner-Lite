@@ -71,12 +71,14 @@ function UserMenu() {
           </Link>
         )}
 
-        {/* Paint Queue — accessible to all authenticated users */}
-        <Link href="/work/paint-queue">
-          <DropdownMenuItem className="cursor-pointer font-semibold text-orange-600 focus:text-orange-600">
-            <Palette className="mr-2 h-4 w-4" /> Paint Shop
-          </DropdownMenuItem>
-        </Link>
+        {/* Paint Shop — only for admin, owner, or supervisor (painters access via settings sheet or direct URL) */}
+        {(isAdmin || user.role === "owner" || user.isSupervisor) && (
+          <Link href="/work/paint-queue">
+            <DropdownMenuItem className="cursor-pointer font-semibold text-orange-600 focus:text-orange-600">
+              <Palette className="mr-2 h-4 w-4" /> Paint Shop
+            </DropdownMenuItem>
+          </Link>
+        )}
 
         {/* Attendance — workers & supervisors (admins have it in bottom nav) */}
         {!isAdmin && user.role !== "owner" && (

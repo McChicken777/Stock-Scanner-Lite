@@ -515,10 +515,16 @@ function MyStepsTab() {
             ))}
           </div>
         )}
-        {step.previousWip && variant === "ready" && (
+        {variant === "ready" && step.sortOrder > 0 && step.previousWip && (
           <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
             <MapPin className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">Part is at: <strong>{step.previousWip.locationValue}</strong></span>
+          </p>
+        )}
+        {variant === "ready" && step.sortOrder > 0 && !step.previousWip && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">Part location unknown — check with supervisor</span>
           </p>
         )}
         {variant === "inProgress" && step.wipLocation && (
