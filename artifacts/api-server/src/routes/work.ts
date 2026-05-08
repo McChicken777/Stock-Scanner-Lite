@@ -4,7 +4,7 @@ import {
   workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
   productsTable, productComponentsTable,
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
-  productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
+  productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
   suppliersTable, stepDependenciesTable, companiesTable,
 } from "@workspace/db";
@@ -1588,26 +1588,27 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       }
     }
 
-    // Fetch latest WIP location for all visible step IDs (with user attribution)
+    // Fetch latest part location for all visible step IDs (with user attribution).
+    // Reads from part_locations (dedicated model); falls back gracefully if none recorded.
     const stepIds = allProcsForRoles.map((r) => r.proc.id);
     const latestWipMap = new Map<number, {
       locationType: string; locationValue: string;
       setByUsername: string | null; setAt: Date;
     }>();
     if (stepIds.length > 0) {
-      const wipRows = await db
+      const partLocRows = await db
         .select({
-          stepId: wipLocationsTable.stepId,
-          locationType: wipLocationsTable.locationType,
-          locationValue: wipLocationsTable.locationValue,
-          setAt: wipLocationsTable.setAt,
+          stepId: partLocationsTable.stepId,
+          locationType: partLocationsTable.locationType,
+          locationValue: partLocationsTable.locationValue,
+          setAt: partLocationsTable.setAt,
           setByUsername: usersTable.username,
         })
-        .from(wipLocationsTable)
-        .leftJoin(usersTable, eq(wipLocationsTable.setByUserId, usersTable.id))
-        .where(inArray(wipLocationsTable.stepId, stepIds))
-        .orderBy(desc(wipLocationsTable.setAt));
-      for (const row of wipRows) {
+        .from(partLocationsTable)
+        .leftJoin(usersTable, eq(partLocationsTable.setByUserId, usersTable.id))
+        .where(inArray(partLocationsTable.stepId, stepIds))
+        .orderBy(desc(partLocationsTable.setAt));
+      for (const row of partLocRows) {
         if (!latestWipMap.has(row.stepId)) {
           latestWipMap.set(row.stepId, {
             locationType: row.locationType,
@@ -1646,6 +1647,37 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       for (const s of blockerSteps) blockerStatusMap.set(s.id, s.status);
     }
 
+    // Fetch part locations for DAG blocker steps not already in latestWipMap.
+    // This lets previousWip show location of upstream manufactured dependencies,
+    // not just sequential same-item steps.
+    if (allBlockerIds.length > 0) {
+      const missingIds = allBlockerIds.filter((id) => !latestWipMap.has(id));
+      if (missingIds.length > 0) {
+        const blockerLocRows = await db
+          .select({
+            stepId: partLocationsTable.stepId,
+            locationType: partLocationsTable.locationType,
+            locationValue: partLocationsTable.locationValue,
+            setAt: partLocationsTable.setAt,
+            setByUsername: usersTable.username,
+          })
+          .from(partLocationsTable)
+          .leftJoin(usersTable, eq(partLocationsTable.setByUserId, usersTable.id))
+          .where(inArray(partLocationsTable.stepId, missingIds))
+          .orderBy(desc(partLocationsTable.setAt));
+        for (const row of blockerLocRows) {
+          if (!latestWipMap.has(row.stepId)) {
+            latestWipMap.set(row.stepId, {
+              locationType: row.locationType,
+              locationValue: row.locationValue ?? "",
+              setByUsername: row.setByUsername ?? null,
+              setAt: row.setAt,
+            });
+          }
+        }
+      }
+    }
+
     // ── parentChain: build item ancestry map for all relevant projects ────────
     const projectIds = [...new Set(allProcsForRoles.map((r) => r.project.id))];
     const allProjectItems = await db.select().from(workProjectItemsTable)
@@ -1674,7 +1706,8 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       const dagBlockers = dagBlockMap.get(proc.id) ?? [];
       const dagBlocked = dagBlockers.some((blockerId) => blockerStatusMap.get(blockerId) !== "completed");
 
-      // Previous step's WIP location (to show on the card for the next worker)
+      // Previous step's part location — shown to the next worker so they can find the part.
+      // Checks (1) sequential prior steps on the same item, then (2) DAG blocker steps.
       let previousWip: { locationType: string; locationValue: string; setByUsername: string | null; setAt: Date } | null = null;
       if (myIndex > 0) {
         const completedPrev = itemProcs
@@ -1683,6 +1716,14 @@ router.get("/my-steps", requireAuth, async (req, res) => {
           .reverse();
         for (const prev of completedPrev) {
           const wip = latestWipMap.get(prev.id);
+          if (wip) { previousWip = wip; break; }
+        }
+      }
+      // If still no location, check upstream manufactured dependencies via DAG blockers
+      if (!previousWip) {
+        const dagBlockerIds = dagBlockMap.get(proc.id) ?? [];
+        for (const blockerId of dagBlockerIds) {
+          const wip = latestWipMap.get(blockerId);
           if (wip) { previousWip = wip; break; }
         }
       }
@@ -2411,15 +2452,17 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
       .set({ status: "completed", totalTimeSeconds: sql`${workItemStepsTable.totalTimeSeconds} + ${durationSeconds}` })
       .where(eq(workItemStepsTable.id, procedureId)).returning();
 
-    // Atomically log WIP location if provided with the stop call
-    if (wipLocation) {
-      await db.insert(wipLocationsTable).values({
+    // Atomically log part location if provided with the stop call.
+    // Writes to part_locations (dedicated model with itemId + notes semantics).
+    if (wipLocation && proc?.itemId) {
+      await db.insert(partLocationsTable).values({
         stepId: procedureId,
+        itemId: proc.itemId,
         locationType: wipLocation.locationType,
         locationValue: wipLocation.locationValue ?? null,
         setByUserId: userId,
       }).catch((err: unknown) => {
-        req.log.warn({ err, stepId: procedureId }, "Failed to save inline WIP location on stop");
+        req.log.warn({ err, stepId: procedureId }, "Failed to save part location on stop");
       });
     }
 
@@ -3241,6 +3284,34 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
 
 // ─── PAINT QUEUE (Pro) ────────────────────────────────────────────────────────
 
+// GET /work/painter-access — returns whether the current user can access the Paint Shop
+// Used by the frontend nav to decide whether to show the Paint Shop link for plain workers.
+router.get("/painter-access", requireAuth, async (req, res) => {
+  try {
+    const role = req.session.role;
+    if (role === "admin" || role === "owner") { res.json({ isPainter: true }); return; }
+    const [userRow] = await db.select({ isSupervisor: usersTable.isSupervisor })
+      .from(usersTable).where(eq(usersTable.id, req.session.userId!));
+    if (userRow?.isSupervisor) { res.json({ isPainter: true }); return; }
+    const userRoleRows = await db.select({ roleId: userRolesTable.roleId })
+      .from(userRolesTable).where(eq(userRolesTable.userId, req.session.userId!));
+    if (userRoleRows.length > 0) {
+      const roleIds = userRoleRows.map((r) => r.roleId);
+      const paintRoles = await db.select({ id: rolesTable.id })
+        .from(rolesTable)
+        .where(and(
+          inArray(rolesTable.id, roleIds),
+          eq(rolesTable.companyId, req.session.companyId!),
+          sql`lower(${rolesTable.name}) like '%paint%'`,
+        ));
+      if (paintRoles.length > 0) { res.json({ isPainter: true }); return; }
+    }
+    res.json({ isPainter: false });
+  } catch {
+    res.status(500).json({ error: "Failed to check painter access" });
+  }
+});
+
 // GET /work/paint-queue — all ready-to-paint steps across active projects
 // "Paint" steps = workItemStepsTable where name ilike '%paint%'
 // "Ready" = all prior steps (lower sortOrder, same itemId) are completed
@@ -3279,13 +3350,13 @@ router.get("/paint-queue", requirePainterOrAdmin, requirePro, async (req, res) =
       itemStepMap.get(s.itemId)!.push(s);
     }
 
-    // Fetch latest WIP location per step to show in the UI
+    // Fetch latest part location per step to show in the UI
     const stepIds = candidates.map((r) => r.step.id);
-    const wipRows = await db.select().from(wipLocationsTable)
-      .where(inArray(wipLocationsTable.stepId, stepIds))
-      .orderBy(desc(wipLocationsTable.setAt));
+    const partLocRows = await db.select().from(partLocationsTable)
+      .where(inArray(partLocationsTable.stepId, stepIds))
+      .orderBy(desc(partLocationsTable.setAt));
     const wipMap = new Map<number, { locationValue: string }>();
-    for (const row of wipRows) {
+    for (const row of partLocRows) {
       if (!wipMap.has(row.stepId)) wipMap.set(row.stepId, { locationValue: row.locationValue ?? "" });
     }
 
@@ -3300,6 +3371,7 @@ router.get("/paint-queue", requirePainterOrAdmin, requirePro, async (req, res) =
           stepName: step.name,
           status: step.status,
           durationEstimate: step.durationEstimate,
+          sizeWeight: step.sizeWeight ?? null,
           itemId: item.id,
           itemName: item.name,
           projectId: project.id,
@@ -3307,7 +3379,7 @@ router.get("/paint-queue", requirePainterOrAdmin, requirePro, async (req, res) =
           deadline: project.deadline.toISOString(),
           priority: project.priority,
           paintColor: project.paintColor ?? null,
-          wipLocation: wipMap.get(step.id)?.locationValue ?? null,
+          partLocation: wipMap.get(step.id)?.locationValue ?? null,
         };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
@@ -3444,13 +3516,21 @@ router.post("/paint-queue/batch-complete", requirePainterOrAdmin, requirePro, as
       .set({ status: "completed" })
       .where(inArray(workItemStepsTable.id, stepIds));
 
-    // Log WIP locations atomically
+    // Log part locations atomically for all completed paint steps
     const locationMap = new Map(locations.map((l) => [l.stepId, l]));
+    // Fetch itemIds for all steps so we can populate part_locations.itemId
+    const stepsWithItems = await db
+      .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId })
+      .from(workItemStepsTable)
+      .where(inArray(workItemStepsTable.id, stepIds));
+    const stepItemMap = new Map(stepsWithItems.map((s) => [s.id, s.itemId]));
     for (const id of stepIds) {
       const loc = locationMap.get(id);
-      if (loc) {
-        await db.insert(wipLocationsTable).values({
+      const itemId = stepItemMap.get(id);
+      if (loc && itemId) {
+        await db.insert(partLocationsTable).values({
           stepId: id,
+          itemId,
           locationType: loc.locationType,
           locationValue: loc.locationValue ?? null,
           setByUserId: userId,
@@ -3496,12 +3576,12 @@ router.get("/supervisor/unlogged-parts", requireSupervisorOrAdmin, async (req, r
 
     if (completedSteps.length === 0) { res.json([]); return; }
 
-    // Find which step IDs have WIP locations
+    // Find which step IDs have part locations recorded
     const completedStepIds = completedSteps.map((s) => s.stepId);
     const loggedStepIds = new Set(
-      (await db.select({ stepId: wipLocationsTable.stepId })
-        .from(wipLocationsTable)
-        .where(inArray(wipLocationsTable.stepId, completedStepIds)))
+      (await db.select({ stepId: partLocationsTable.stepId })
+        .from(partLocationsTable)
+        .where(inArray(partLocationsTable.stepId, completedStepIds)))
         .map((r) => r.stepId)
     );
 

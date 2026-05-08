@@ -20,6 +20,7 @@ interface PaintItem {
   stepName: string;
   status: "not_started" | "in_progress";
   durationEstimate: number | null;
+  sizeWeight: string | null;
   itemId: number;
   itemName: string;
   projectId: number;
@@ -27,7 +28,7 @@ interface PaintItem {
   deadline: string;
   priority: string;
   paintColor: string | null;
-  wipLocation: string | null;
+  partLocation: string | null;
 }
 
 interface ProductionZone { id: number; name: string }
@@ -414,6 +415,11 @@ export default function PaintQueuePage() {
                         <span className={`text-[10px] flex items-center gap-0.5 ${dl.overdue ? "text-red-600 font-bold" : "text-muted-foreground"}`}>
                           <Calendar className="h-3 w-3" /> {dl.label}
                         </span>
+                        {item.sizeWeight && (
+                          <span className="text-[10px] text-violet-700 font-semibold flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200">
+                            {item.sizeWeight}
+                          </span>
+                        )}
                         {item.durationEstimate && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                             <Clock className="h-3 w-3" /> ~{item.durationEstimate}m
@@ -488,9 +494,14 @@ export default function PaintQueuePage() {
                             <span className={`text-[10px] flex items-center gap-0.5 ${dl.overdue ? "text-red-600 font-bold" : "text-muted-foreground"}`}>
                               <Calendar className="h-3 w-3" /> {dl.label}
                             </span>
-                            {item.wipLocation && (
+                            {item.sizeWeight && (
+                              <span className="text-[10px] text-violet-700 font-semibold flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-violet-50 border border-violet-200">
+                                {item.sizeWeight}
+                              </span>
+                            )}
+                            {item.partLocation && (
                               <span className="text-[10px] text-blue-700 flex items-center gap-0.5">
-                                <MapPin className="h-3 w-3" /> {item.wipLocation}
+                                <MapPin className="h-3 w-3" /> {item.partLocation}
                               </span>
                             )}
                           </div>

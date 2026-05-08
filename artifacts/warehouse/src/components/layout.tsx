@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
@@ -31,6 +32,15 @@ function UserMenu() {
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
+  const isAdminOrOwnerOrSupervisor = isAdmin || user.role === "owner" || user.isSupervisor;
+
+  const { data: painterData } = useQuery<{ isPainter: boolean }>({
+    queryKey: ["/api/work/painter-access"],
+    queryFn: () => fetch("/api/work/painter-access", { credentials: "include" }).then((r) => r.json()),
+    enabled: !isAdminOrOwnerOrSupervisor,
+    staleTime: 5 * 60 * 1000,
+  });
+  const showPaintShop = isAdminOrOwnerOrSupervisor || painterData?.isPainter === true;
 
   return (
     <DropdownMenu>
@@ -71,8 +81,8 @@ function UserMenu() {
           </Link>
         )}
 
-        {/* Paint Shop — only for admin, owner, or supervisor (painters access via settings sheet or direct URL) */}
-        {(isAdmin || user.role === "owner" || user.isSupervisor) && (
+        {/* Paint Shop — admin, owner, supervisor, or any user with a painter role */}
+        {showPaintShop && (
           <Link href="/work/paint-queue">
             <DropdownMenuItem className="cursor-pointer font-semibold text-orange-600 focus:text-orange-600">
               <Palette className="mr-2 h-4 w-4" /> Paint Shop

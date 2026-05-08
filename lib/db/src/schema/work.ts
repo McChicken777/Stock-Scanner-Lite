@@ -68,6 +68,7 @@ export const workItemStepsTable = pgTable("work_item_steps", {
   roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
   batchMode: text("batch_mode").notNull().default("individual"),
   durationEstimate: integer("duration_estimate"),
+  sizeWeight: text("size_weight"),
   templateStepId: integer("template_step_id").references(() => workStepsTable.id, { onDelete: "set null" }),
 });
 
@@ -172,7 +173,7 @@ export const productionZonesTable = pgTable("production_zones", {
 // WIP location type: where in the factory a work-item-step currently lives
 export const wipLocationTypeEnum = pgEnum("wip_location_type", ["warehouse", "zone", "with_worker"]);
 
-// WIP locations: tracks where a step's output is currently located
+// WIP locations: tracks where a step's output is currently located (legacy — kept for backward compat)
 export const wipLocationsTable = pgTable("wip_locations", {
   id: serial("id").primaryKey(),
   stepId: integer("step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
@@ -181,6 +182,20 @@ export const wipLocationsTable = pgTable("wip_locations", {
   setByUserId: integer("set_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
   setAt: timestamp("set_at").defaultNow().notNull(),
 });
+
+// Part locations: dedicated model for tracking where a part/component is after step completion.
+// Captures richer metadata (itemId, notes) compared to the legacy wip_locations table.
+export const partLocationsTable = pgTable("part_locations", {
+  id: serial("id").primaryKey(),
+  stepId: integer("step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
+  itemId: integer("item_id").notNull().references(() => workProjectItemsTable.id, { onDelete: "cascade" }),
+  locationType: wipLocationTypeEnum("location_type").notNull(),
+  locationValue: text("location_value"),
+  notes: text("notes"),
+  setByUserId: integer("set_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  setAt: timestamp("set_at").defaultNow().notNull(),
+});
+export type PartLocation = typeof partLocationsTable.$inferSelect;
 
 // AI snapshots: stores previous template/item state for undo after AI edits
 export const aiSnapshotsTable = pgTable("ai_snapshots", {
