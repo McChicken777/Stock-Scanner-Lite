@@ -159,17 +159,14 @@ function BatchCompleteDialog({
           ))}
         </div>
 
-        <div className="flex gap-2 flex-shrink-0">
-          <Button variant="outline" className="flex-1 h-11" onClick={onCancel} disabled={isPending}>
-            Skip Locations
-          </Button>
+        <div className="flex-shrink-0">
           <Button
-            className="flex-1 h-11 font-bold bg-green-600 hover:bg-green-700"
+            className="w-full h-11 font-bold bg-green-600 hover:bg-green-700"
             disabled={isPending}
             onClick={() => onConfirm(entries)}
           >
             <CheckCircle2 className="h-4 w-4 mr-1.5" />
-            {isPending ? "Saving…" : "Mark Complete"}
+            {isPending ? "Saving…" : "Log Locations & Mark Complete"}
           </Button>
         </div>
       </div>
@@ -296,19 +293,26 @@ export default function PaintQueuePage() {
   }
 
   if (error) {
-    const is403 = (error as Error).message?.includes("Pro") || (error as Error).message?.toLowerCase().includes("pro");
+    const msg = (error as Error).message ?? "";
+    const isPro = msg.toLowerCase().includes("pro");
+    const isRole = msg.toLowerCase().includes("painter") || msg.toLowerCase().includes("role");
     return (
       <div className="p-6 text-center space-y-3">
         <Palette className="h-12 w-12 mx-auto text-muted-foreground" />
-        {is403 ? (
+        {isPro ? (
           <>
             <h2 className="font-bold text-lg">Paint Queue is a Pro feature</h2>
             <p className="text-sm text-muted-foreground">Upgrade your plan to access the Paint Shop view with batch tracking and color grouping.</p>
           </>
+        ) : isRole ? (
+          <>
+            <h2 className="font-bold text-lg">Access Restricted</h2>
+            <p className="text-sm text-muted-foreground">Paint Shop is available to admins, supervisors, and workers with a Painter role. Contact your admin to request access.</p>
+          </>
         ) : (
           <>
             <h2 className="font-bold text-lg">Failed to load paint queue</h2>
-            <p className="text-sm text-muted-foreground">{(error as Error).message}</p>
+            <p className="text-sm text-muted-foreground">{msg}</p>
           </>
         )}
       </div>

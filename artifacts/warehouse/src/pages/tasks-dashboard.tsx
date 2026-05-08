@@ -124,11 +124,11 @@ interface ProductionZone { id: number; name: string }
 function WipLocationDialog({
   stepId,
   open,
-  onClose,
+  onSave,
 }: {
   stepId: number | null;
   open: boolean;
-  onClose: () => void;
+  onSave: (locationType: "warehouse" | "zone" | "with_worker", locationValue: string) => void;
 }) {
   const { toast } = useToast();
   const [locationType, setLocationType] = useState<"warehouse" | "zone" | "with_worker">("warehouse");
@@ -157,7 +157,7 @@ function WipLocationDialog({
         body: JSON.stringify({ locationType, locationValue }),
       });
       toast({ title: "Location recorded" });
-      onClose();
+      onSave(locationType, locationValue);
     } catch {
       toast({ title: "Failed to save location", variant: "destructive" });
     } finally {
@@ -168,14 +168,9 @@ function WipLocationDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-black text-base">Where is this part now?</p>
-            <p className="text-xs text-muted-foreground">Optional — helps supervisors track WIP</p>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-            <X className="h-5 w-5" />
-          </button>
+        <div>
+          <p className="font-black text-base">Where is this part now?</p>
+          <p className="text-xs text-muted-foreground">Required — supervisors need to know where WIP is stored</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
@@ -219,7 +214,7 @@ function WipLocationDialog({
         {locationType === "warehouse" && (
           <input
             type="text"
-            placeholder="Shelf / rack / area (optional, e.g. A-12)"
+            placeholder="Shelf / rack / area (e.g. A-12)"
             value={warehouseNote}
             onChange={(e) => setWarehouseNote(e.target.value)}
             className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -230,16 +225,13 @@ function WipLocationDialog({
           <p className="text-xs text-muted-foreground text-center">No zones configured. Ask an admin to add production zones.</p>
         )}
 
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Skip</Button>
-          <Button
-            className="flex-1 h-11 font-bold"
-            disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
-            onClick={save}
-          >
-            {saving ? "Saving…" : "Save Location"}
-          </Button>
-        </div>
+        <Button
+          className="w-full h-11 font-bold"
+          disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
+          onClick={save}
+        >
+          {saving ? "Saving…" : "Log Location & Continue"}
+        </Button>
       </div>
     </div>
   );
@@ -578,7 +570,7 @@ function MyStepsTab() {
           </div>
         )}
       </div>
-      <WipLocationDialog stepId={wipStepId} open={wipStepId !== null} onClose={() => setWipStepId(null)} />
+      <WipLocationDialog stepId={wipStepId} open={wipStepId !== null} onSave={() => setWipStepId(null)} />
       {shortageStepId !== null && (
         <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />
       )}
