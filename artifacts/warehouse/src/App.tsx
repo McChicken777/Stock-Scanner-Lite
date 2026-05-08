@@ -48,6 +48,7 @@ import CustomerDetailPage from "@/pages/customer-detail";
 import QuotesPage from "@/pages/quotes";
 import QuoteFormPage from "@/pages/quote-form";
 import QuoteDetailPage from "@/pages/quote-detail";
+import AnalyticsPage from "@/pages/analytics";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -148,6 +149,9 @@ function ProtectedRoutes() {
         <Route path="/work/purchase-orders/:id" component={PurchaseOrdersPage} />
         <Route path="/work/purchase-orders" component={PurchaseOrdersPage} />
         <Route path="/work/paint-queue" component={PaintQueuePage} />
+
+        {/* Analytics (Pro, admin-only) */}
+        <Route path="/analytics" component={AnalyticsPage} />
 
         {/* Customers & Quotes */}
         <Route path="/customers" component={CustomersPage} />

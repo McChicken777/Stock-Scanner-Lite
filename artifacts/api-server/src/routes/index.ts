@@ -19,6 +19,7 @@ import customersRouter from "./customers";
 import quotesRouter from "./quotes";
 import settingsRouter from "./settings";
 import leaveRouter from "./leave";
+import analyticsRouter from "./analytics";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -43,5 +44,6 @@ router.use("/customers", requireAuth, customersRouter);
 router.use("/quotes", requireAuth, quotesRouter);
 router.use("/settings", requireAuth, settingsRouter);
 router.use("/leave", requireAuth, leaveRouter);
+router.use("/analytics", analyticsRouter);
 
 export default router;

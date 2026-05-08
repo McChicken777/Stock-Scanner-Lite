@@ -6,6 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -224,6 +225,15 @@ function AdminBottomNav() {
 
           <div className="space-y-1 mt-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work Setup</p>
+            <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">AI Analytics</p>
+                  <p className="text-xs text-muted-foreground">Production insights & trends (Pro)</p>
+                </div>
+              </div>
+            </Link>
             <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />

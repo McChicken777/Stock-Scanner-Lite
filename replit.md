@@ -75,6 +75,16 @@ The frontend (`@workspace/warehouse`) is a React + Vite application designed wit
 - `manufactured_part` are in-house sub-components.
 - `final_product` are finished goods with stock tracking.
 
+**AI Production Analytics (Task #61, Pro-only):**
+- Admin-only page at `/analytics` (accessible from Settings sheet in nav).
+- Weekly cron (Sunday 02:00) via `startAnalyticsScheduler()` runs aggregation + AI for all Pro companies.
+- On-demand refresh via `POST /api/analytics/refresh` (admin, Pro gate).
+- `analytics_snapshots` table stores JSONB `insights` (AI cards) and `charts` (aggregated data).
+- **Insight cards**: AI-generated via Claude (Anthropic), each with headline, explanation, metric, and dismiss (localStorage). Dismissed IDs cleared on refresh.
+- **Charts**: Efficiency over time (LineChart per procedure), Bottleneck analysis (horizontal BarChart), Deadline accuracy (AreaChart % on-time).
+- **Pro gate**: `requireProPlan` middleware queries companies.plan; returns 403 with `planRequired:"pro"`. Frontend shows paywall if gated.
+- Key files: `lib/db/src/schema/analytics.ts`, `artifacts/api-server/src/lib/analyticsAggregation.ts`, `artifacts/api-server/src/lib/analyticsJob.ts`, `artifacts/api-server/src/routes/analytics.ts`, `artifacts/warehouse/src/pages/analytics.tsx`.
+
 **Attendance & Scheduling (Task #32):**
 - Clock in/out with live timer; supports sick and vacation day declarations for today.
 - **Weekend Overtime Rules:** Company setting `weekendOvertimeEnabled` (default true) — all hours worked on Sat/Sun count as overtime. Configurable per company.

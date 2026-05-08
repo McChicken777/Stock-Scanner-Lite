@@ -14,3 +14,4 @@ export * from "./customers";
 export * from "./quotes";
 export * from "./holidays";
 export * from "./leave-requests";
+export * from "./analytics";

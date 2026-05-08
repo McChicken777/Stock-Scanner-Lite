@@ -7,6 +7,7 @@ import {
   companyHolidaysTable,
 } from "@workspace/db";
 import { logger } from "./logger";
+import { runAnalyticsJob, getProCompanyIds } from "./analyticsJob";
 
 const GRACE_HOURS = 2;
 
@@ -184,4 +185,38 @@ export function startAttendanceAutoCloseScheduler(): void {
   });
 
   logger.info("Attendance auto-close scheduler started");
+}
+
+let analyticsStarted = false;
+
+/**
+ * Run weekly analytics snapshot for all Pro companies.
+ * Runs every Sunday at 02:00 server time and once on boot if no snapshot
+ * was generated in the last 7 days.
+ */
+export function startAnalyticsScheduler(): void {
+  if (analyticsStarted) return;
+  analyticsStarted = true;
+
+  async function runForAllProCompanies(): Promise<void> {
+    const companyIds = await getProCompanyIds();
+    if (companyIds.length === 0) return;
+    for (const companyId of companyIds) {
+      try {
+        const { insightCount } = await runAnalyticsJob(companyId, "cron");
+        logger.info({ companyId, insightCount }, "Weekly analytics snapshot done");
+      } catch (err) {
+        logger.error({ err, companyId }, "Weekly analytics snapshot failed for company");
+      }
+    }
+  }
+
+  // Weekly at Sunday 02:00.
+  cron.schedule("0 2 * * 0", () => {
+    runForAllProCompanies().catch((err) => {
+      logger.error({ err }, "Analytics weekly cron failed");
+    });
+  });
+
+  logger.info("Analytics scheduler started");
 }

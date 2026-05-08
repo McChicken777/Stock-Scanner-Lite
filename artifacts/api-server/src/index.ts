@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedAdminUser } from "./lib/seed-admin";
-import { startAttendanceAutoCloseScheduler } from "./lib/scheduler";
+import { startAttendanceAutoCloseScheduler, startAnalyticsScheduler } from "./lib/scheduler";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -40,5 +40,6 @@ ensureSessionTable().then(() => seedAdminUser()).then(() => {
 
     logger.info({ port }, "Server listening");
     startAttendanceAutoCloseScheduler();
+    startAnalyticsScheduler();
   });
 });
