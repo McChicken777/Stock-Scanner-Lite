@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
@@ -53,7 +53,7 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   name: text("name").notNull(),
   paintColor: text("paint_color"),
   sortOrder: integer("sort_order").notNull().default(0),
-  parentItemId: integer("parent_item_id"), // self-referential FK added via migration 0005
+  parentItemId: integer("parent_item_id").references((): AnyPgColumn => workProjectItemsTable.id, { onDelete: "set null" }),
 });
 
 // Steps for each project item, instantiated from work_steps at project creation time
