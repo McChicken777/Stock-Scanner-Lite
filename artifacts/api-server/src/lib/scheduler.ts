@@ -191,8 +191,8 @@ let analyticsStarted = false;
 
 /**
  * Run weekly analytics snapshot for all Pro companies.
- * Runs every Sunday at 02:00 server time and once on boot if no snapshot
- * was generated in the last 7 days.
+ * Schedules a cron that runs every Sunday at 02:00 server time.
+ * On-demand snapshots are triggered via POST /api/analytics/refresh.
  */
 export function startAnalyticsScheduler(): void {
   if (analyticsStarted) return;

@@ -235,13 +235,13 @@ export default function AnalyticsPage() {
   const isAdmin = user?.role === "admin";
 
   const [dismissed, setDismissed] = useState<Set<string>>(
-    () => new Set(JSON.parse(localStorage.getItem("analytics_dismissed") ?? "[]")),
+    () => new Set(JSON.parse(sessionStorage.getItem("analytics_dismissed") ?? "[]")),
   );
 
   const dismiss = (id: string) => {
     const next = new Set([...dismissed, id]);
     setDismissed(next);
-    localStorage.setItem("analytics_dismissed", JSON.stringify([...next]));
+    sessionStorage.setItem("analytics_dismissed", JSON.stringify([...next]));
   };
 
   const {
@@ -274,7 +274,7 @@ export default function AnalyticsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/charts"] });
       toast({ title: `Analytics updated — ${data.insightCount} insight${data.insightCount !== 1 ? "s" : ""} generated` });
       setDismissed(new Set());
-      localStorage.removeItem("analytics_dismissed");
+      sessionStorage.removeItem("analytics_dismissed");
     },
     onError: (err: Error) => {
       toast({ title: err.message || "Failed to refresh analytics", variant: "destructive" });
@@ -358,7 +358,7 @@ export default function AnalyticsPage() {
               </div>
               {dismissed.size > 0 && dismissed.size < insights.length && (
                 <button
-                  onClick={() => { setDismissed(new Set()); localStorage.removeItem("analytics_dismissed"); }}
+                  onClick={() => { setDismissed(new Set()); sessionStorage.removeItem("analytics_dismissed"); }}
                   className="text-xs text-muted-foreground hover:text-foreground underline mt-2"
                 >
                   Show {dismissed.size} dismissed insight{dismissed.size !== 1 ? "s" : ""}
