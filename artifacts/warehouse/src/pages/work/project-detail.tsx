@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight,
+  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ interface Procedure {
   batchMode: string;
   durationEstimate: number | null;
   activeStartTime: string | null;
+  dagBlockerNames?: string[];
+  dagBlocked?: boolean;
 }
 
 interface NextUp {
@@ -43,6 +45,7 @@ interface ProjectItem {
   progress: number;
   paintColor: string | null;
   parentItemId: number | null;
+  children: number[];
   procedures: Procedure[];
   nextUp: NextUp | null;
 }
@@ -198,6 +201,7 @@ function ProcedureRow({
   }[proc.status];
 
   const inboundBlocked = proc.requiresInbound && inboundStatus === "expected";
+  const dagBlocked = !!(proc.dagBlocked && proc.status === "not_started");
   const isRunning = proc.status === "in_progress" && proc.activeStartTime;
   const now = useNow(isRunning ? 1000 : null);
   const elapsedSeconds = isRunning
@@ -207,12 +211,13 @@ function ProcedureRow({
   return (
     <div className={cn(
       "flex items-center gap-3 p-3 rounded-lg border",
+      dagBlocked ? "bg-slate-50 border-slate-200 opacity-80" :
       inboundBlocked ? "bg-orange-50/60 border-orange-200 opacity-80" :
       isActive ? "bg-orange-50 border-orange-300" :
       proc.status === "in_progress" ? "bg-orange-50/40 border-orange-200" :
       proc.status === "completed" ? "bg-green-50/50 border-green-200/50" : "bg-background border-border"
     )}>
-      {statusIcon}
+      {dagBlocked ? <Lock className="h-4 w-4 text-slate-400 flex-shrink-0" /> : statusIcon}
       <div className="flex-1 min-w-0 space-y-1">
         <p className={cn("font-medium text-sm", proc.status === "completed" && "line-through text-muted-foreground")}>{proc.name}</p>
         <div className="flex flex-wrap gap-1">
@@ -224,6 +229,12 @@ function ProcedureRow({
             </span>
           )}
         </div>
+        {dagBlocked && proc.dagBlockerNames && proc.dagBlockerNames.length > 0 && (
+          <p className="text-[10px] font-bold text-slate-500 flex items-center gap-0.5">
+            <Lock className="h-3 w-3" />
+            Blocked by: {proc.dagBlockerNames.join(", ")}
+          </p>
+        )}
         {proc.requiresInbound && (
           <p className={cn("text-[10px] font-bold flex items-center gap-0.5",
             inboundBlocked ? "text-orange-600" : "text-green-600"
@@ -248,10 +259,14 @@ function ProcedureRow({
             <Square className="h-3.5 w-3.5" /> Stop
           </Button>
         ) : proc.status !== "completed" ? (
-          <Button size="sm" onClick={() => startMutation.mutate()} disabled={hasAnyActiveTimer || startMutation.isPending || inboundBlocked}
-            className={cn("h-9 px-3 font-bold gap-1", inboundBlocked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-green-600 hover:bg-green-700")}>
-            {inboundBlocked ? <PackageCheck className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {inboundBlocked ? "Waiting" : "Start"}
+          <Button size="sm" onClick={() => startMutation.mutate()}
+            disabled={hasAnyActiveTimer || startMutation.isPending || inboundBlocked || dagBlocked}
+            className={cn("h-9 px-3 font-bold gap-1",
+              dagBlocked ? "bg-slate-200 text-slate-500 cursor-not-allowed" :
+              inboundBlocked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+            )}>
+            {dagBlocked ? <Lock className="h-3.5 w-3.5" /> : inboundBlocked ? <PackageCheck className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            {dagBlocked ? "Blocked" : inboundBlocked ? "Waiting" : "Start"}
           </Button>
         ) : isAdmin ? (
           <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => resetMutation.mutate()} title="Reset procedure">

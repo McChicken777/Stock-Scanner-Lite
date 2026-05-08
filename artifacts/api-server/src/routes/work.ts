@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import {
   db, workTemplatesTable, workStepsTable, workProjectsTable,
   workProjectItemsTable, workItemStepsTable, workTimeLogsTable, inboundTable,
@@ -6,7 +6,7 @@ import {
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
-  suppliersTable, stepDependenciesTable,
+  suppliersTable, stepDependenciesTable, companiesTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -15,6 +15,23 @@ import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { seedStarterPack, STARTER_PACK_COUNT } from "../lib/seedStarterPack";
 
 const router: IRouter = Router();
+
+// ─── PRO PLAN GATE ─────────────────────────────────────────────────────────────
+/** Blocks the request with 403 if the company is not on the Pro plan. */
+const requirePro = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const companyId = req.session.companyId!;
+    const [company] = await db.select({ plan: companiesTable.plan })
+      .from(companiesTable).where(eq(companiesTable.id, companyId));
+    if (!company || company.plan !== "pro") {
+      res.status(403).json({ error: "DAG step dependencies require a Pro plan" });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ error: "Failed to verify plan" });
+  }
+};
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1685,13 +1702,50 @@ async function getProjectWithItems(projectId: number) {
     }));
   }
 
+  // ── DAG: fetch step dependencies for all steps in this project ────────────
+  const stepNameMap = new Map<number, string>(); // stepId -> name
+  for (const p of procedures) stepNameMap.set(p.id, p.name);
+  const dagBlockedByMap = new Map<number, string[]>(); // blockedStepId -> blocker names
+  if (itemIds.length > 0) {
+    const allStepIds = procedures.map((p) => p.id);
+    if (allStepIds.length > 0) {
+      const dagDeps = await db.select().from(stepDependenciesTable)
+        .where(and(
+          inArray(stepDependenciesTable.blockedStepId, allStepIds),
+          eq(stepDependenciesTable.companyId, project.companyId!),
+        ));
+      // For blockers that might be steps from other items (not in current procedures list),
+      // look them up separately.
+      const foreignBlockerIds = [...new Set(dagDeps.map((d) => d.blockerStepId).filter((id) => !stepNameMap.has(id)))];
+      if (foreignBlockerIds.length > 0) {
+        const foreignSteps = await db.select({ id: workItemStepsTable.id, name: workItemStepsTable.name })
+          .from(workItemStepsTable).where(inArray(workItemStepsTable.id, foreignBlockerIds));
+        for (const s of foreignSteps) stepNameMap.set(s.id, s.name);
+      }
+      for (const dep of dagDeps) {
+        if (!dagBlockedByMap.has(dep.blockedStepId)) dagBlockedByMap.set(dep.blockedStepId, []);
+        dagBlockedByMap.get(dep.blockedStepId)!.push(stepNameMap.get(dep.blockerStepId) ?? `Step #${dep.blockerStepId}`);
+      }
+    }
+  }
+
+  // Build step status map to determine if DAG blockers are complete
+  const stepStatusMap = new Map<number, string>();
+  for (const p of procedures) stepStatusMap.set(p.id, p.status);
+
   const itemsWithProcs = items.map((item) => {
-    const procs = procedures.filter((p) => p.itemId === item.id);
+    const procs = procedures.filter((p) => p.itemId === item.id).map((p) => {
+      const blockerNames = dagBlockedByMap.get(p.id) ?? [];
+      const dagBlocked = blockerNames.length > 0; // could refine to only show if not all complete
+      return { ...p, dagBlockerNames: blockerNames, dagBlocked };
+    });
     const completed = procs.filter((p) => p.status === "completed").length;
     const nextUp = procs.find((p) => p.status === "in_progress")
       ?? procs.find((p) => p.status === "not_started");
+    const children = items.filter((c) => c.parentItemId === item.id).map((c) => c.id);
     return {
       ...item,
+      children,
       procedures: procs,
       progress: procs.length > 0 ? Math.round((completed / procs.length) * 100) : 0,
       nextUp: nextUp ? { id: nextUp.id, name: nextUp.name, roleName: nextUp.roleName, status: nextUp.status } : null,
@@ -2120,6 +2174,24 @@ router.post("/procedures/:procedureId/start", requireAuth, async (req, res) => {
       }
     }
 
+    // DAG: check if any explicit blocker step is not yet completed
+    const dagDeps = await db.select().from(stepDependenciesTable)
+      .where(and(
+        eq(stepDependenciesTable.blockedStepId, procedureId),
+        eq(stepDependenciesTable.companyId, companyId),
+      ));
+    if (dagDeps.length > 0) {
+      const blockerIds = dagDeps.map((d) => d.blockerStepId);
+      const blockerSteps = await db.select({ id: workItemStepsTable.id, status: workItemStepsTable.status, name: workItemStepsTable.name })
+        .from(workItemStepsTable).where(inArray(workItemStepsTable.id, blockerIds));
+      const incomplete = blockerSteps.filter((s) => s.status !== "completed");
+      if (incomplete.length > 0) {
+        const names = incomplete.map((s) => `"${s.name}"`).join(", ");
+        res.status(403).json({ error: `Cannot start: waiting for ${names} to complete first.` });
+        return;
+      }
+    }
+
     await db.update(workItemStepsTable).set({ status: "in_progress" }).where(eq(workItemStepsTable.id, procedureId));
     const [log] = await db.insert(workTimeLogsTable).values({ stepId: procedureId, userId, startTime: new Date() }).returning();
 
@@ -2299,7 +2371,7 @@ router.patch("/steps/:id/role", requireSupervisorOrAdmin, async (req, res) => {
 // ─── STEP DEPENDENCIES (DAG) ──────────────────────────────────────────────────
 
 // GET /work/steps/:stepId/dependencies — list all blockers for a step
-router.get("/steps/:stepId/dependencies", requireAuth, async (req, res) => {
+router.get("/steps/:stepId/dependencies", requireAuth, requirePro, async (req, res) => {
   try {
     const stepId = Number(req.params.stepId);
     const companyId = req.session.companyId!;
@@ -2324,7 +2396,7 @@ router.get("/steps/:stepId/dependencies", requireAuth, async (req, res) => {
 });
 
 // POST /work/steps/:stepId/dependencies — add a blocker
-router.post("/steps/:stepId/dependencies", requireAdmin, async (req, res) => {
+router.post("/steps/:stepId/dependencies", requireAdmin, requirePro, async (req, res) => {
   try {
     const blockedStepId = Number(req.params.stepId);
     const companyId = req.session.companyId!;
@@ -2366,7 +2438,7 @@ router.post("/steps/:stepId/dependencies", requireAdmin, async (req, res) => {
 });
 
 // DELETE /work/steps/:stepId/dependencies/:blockerId — remove a blocker
-router.delete("/steps/:stepId/dependencies/:blockerId", requireAdmin, async (req, res) => {
+router.delete("/steps/:stepId/dependencies/:blockerId", requireAdmin, requirePro, async (req, res) => {
   try {
     const blockedStepId = Number(req.params.stepId);
     const blockerStepId = Number(req.params.blockerId);
@@ -2384,7 +2456,7 @@ router.delete("/steps/:stepId/dependencies/:blockerId", requireAdmin, async (req
 });
 
 // GET /work/projects/:projectId/step-dependencies — list all DAG deps for a project's steps
-router.get("/projects/:projectId/step-dependencies", requireAuth, async (req, res) => {
+router.get("/projects/:projectId/step-dependencies", requireAuth, requirePro, async (req, res) => {
   try {
     const projectId = Number(req.params.projectId);
     const companyId = req.session.companyId!;
