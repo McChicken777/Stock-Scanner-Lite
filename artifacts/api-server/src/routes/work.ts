@@ -3572,31 +3572,35 @@ router.post("/paint-queue/batch-complete", requirePainterOrAdmin, requirePro, as
       }); return;
     }
 
-    await db.update(workItemStepsTable)
-      .set({ status: "completed" })
-      .where(inArray(workItemStepsTable.id, stepIds));
-
-    // Log part locations atomically for all completed paint steps
+    // Complete steps and record part locations in a single transaction so a
+    // failed location insert never leaves a completed step without any location row.
     const locationMap = new Map(locations.map((l) => [l.stepId, l]));
-    // Fetch itemIds for all steps so we can populate part_locations.itemId
-    const stepsWithItems = await db
-      .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId })
-      .from(workItemStepsTable)
-      .where(inArray(workItemStepsTable.id, stepIds));
-    const stepItemMap = new Map(stepsWithItems.map((s) => [s.id, s.itemId]));
-    for (const id of stepIds) {
-      const loc = locationMap.get(id);
-      const itemId = stepItemMap.get(id);
-      if (loc && itemId) {
-        await db.insert(partLocationsTable).values({
-          stepId: id,
-          itemId,
-          locationType: loc.locationType,
-          locationValue: loc.locationValue ?? null,
-          setByUserId: userId,
-        });
+    await db.transaction(async (tx) => {
+      await tx.update(workItemStepsTable)
+        .set({ status: "completed" })
+        .where(inArray(workItemStepsTable.id, stepIds));
+
+      // Fetch itemIds inside the transaction so we read consistent state
+      const stepsWithItems = await tx
+        .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId })
+        .from(workItemStepsTable)
+        .where(inArray(workItemStepsTable.id, stepIds));
+      const stepItemMap = new Map(stepsWithItems.map((s) => [s.id, s.itemId]));
+
+      for (const id of stepIds) {
+        const loc = locationMap.get(id);
+        const itemId = stepItemMap.get(id);
+        if (loc && itemId) {
+          await tx.insert(partLocationsTable).values({
+            stepId: id,
+            itemId,
+            locationType: loc.locationType,
+            locationValue: loc.locationValue ?? null,
+            setByUserId: userId,
+          });
+        }
       }
-    }
+    });
 
     res.json({ completed: stepIds.length });
   } catch (err) {
