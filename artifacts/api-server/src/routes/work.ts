@@ -111,6 +111,23 @@ router.get("/templates", requireAuth, async (req, res) => {
     const templates = await db.select().from(workTemplatesTable)
       .where(eq(workTemplatesTable.companyId, companyId))
       .orderBy(workTemplatesTable.name);
+
+    // Self-heal: legacy templates may have been created before the code that
+    // auto-links a final_product. Create the missing product and update the row
+    // so the BOM section becomes available for those templates.
+    for (const tmpl of templates) {
+      if (!tmpl.productId) {
+        const [product] = await db.insert(productsTable).values({
+          name: tmpl.name, category: "Template", itemType: "final_product",
+          bufferStock: 0, targetStock: 0, companyId,
+        }).returning();
+        await db.update(workTemplatesTable)
+          .set({ productId: product.id })
+          .where(eq(workTemplatesTable.id, tmpl.id));
+        tmpl.productId = product.id;
+      }
+    }
+
     res.json(templates);
   } catch (err) {
     req.log.error({ err }, "Failed to list templates");
