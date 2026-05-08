@@ -2581,41 +2581,6 @@ router.delete("/steps/:stepId/dependencies/:blockerId", requireAdmin, requirePro
   }
 });
 
-// GET /work/projects/:projectId/step-dependencies — list all DAG deps for a project's steps
-router.get("/projects/:projectId/step-dependencies", requireAuth, requirePro, async (req, res) => {
-  try {
-    const projectId = Number(req.params.projectId);
-    const companyId = req.session.companyId!;
-
-    // Verify project ownership
-    const [project] = await db.select({ id: workProjectsTable.id })
-      .from(workProjectsTable)
-      .where(and(eq(workProjectsTable.id, projectId), eq(workProjectsTable.companyId, companyId)));
-    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-
-    // Get all step IDs for this project
-    const items = await db.select({ id: workProjectItemsTable.id })
-      .from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));
-    const itemIds = items.map((i) => i.id);
-    if (itemIds.length === 0) { res.json([]); return; }
-
-    const allSteps = await db.select({ id: workItemStepsTable.id })
-      .from(workItemStepsTable)
-      .where(sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`);
-    const allStepIds = allSteps.map((s) => s.id);
-    if (allStepIds.length === 0) { res.json([]); return; }
-
-    const deps = await db.select().from(stepDependenciesTable)
-      .where(and(
-        inArray(stepDependenciesTable.blockedStepId, allStepIds),
-        eq(stepDependenciesTable.companyId, companyId),
-      ));
-    res.json(deps);
-  } catch (err) {
-    req.log.error({ err }, "Failed to list project step dependencies");
-    res.status(500).json({ error: "Failed to list project step dependencies" });
-  }
-});
 
 router.patch("/steps/:id/skip", requireSupervisorOrAdmin, async (req, res) => {
   try {
