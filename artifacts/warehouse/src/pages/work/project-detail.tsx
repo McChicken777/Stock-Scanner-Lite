@@ -45,7 +45,7 @@ interface ProjectItem {
   progress: number;
   paintColor: string | null;
   parentItemId: number | null;
-  children: number[];
+  children: ProjectItem[];
   procedures: Procedure[];
   nextUp: NextUp | null;
 }
@@ -768,16 +768,9 @@ export default function WorkProjectDetailPage() {
               {editMode ? "No items — tap + Add Items above" : "No items in this project."}
             </div>
           ) : (() => {
-            // Build BOM tree: group children under their parents, preserve sortOrder
-            const topLevel = project.items.filter((i) => !i.parentItemId);
-            const childrenByParent = new Map<number, typeof project.items>();
-            for (const item of project.items) {
-              if (item.parentItemId) {
-                if (!childrenByParent.has(item.parentItemId)) childrenByParent.set(item.parentItemId, []);
-                childrenByParent.get(item.parentItemId)!.push(item);
-              }
-            }
-            const renderItem = (item: typeof project.items[0], isChild = false) => (
+            // project.items is already the nested BOM tree from the backend:
+            // top-level items only, with children: ProjectItem[] recursively populated.
+            const renderItem = (item: ProjectItem, isChild = false): React.ReactNode => (
               <div key={item.id} className={cn(isChild && "ml-4 border-l-2 border-primary/20 pl-2")}>
                 {isChild && (
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 pt-1 pb-0.5 flex items-center gap-1">
@@ -802,15 +795,15 @@ export default function WorkProjectDetailPage() {
                     inboundStatus={project.inbound?.status ?? null}
                   />
                 </div>
-                {/* Render children beneath this item */}
-                {childrenByParent.has(item.id) && (
+                {/* Render nested children from backend BOM tree */}
+                {item.children.length > 0 && (
                   <div className="mt-1 space-y-1">
-                    {childrenByParent.get(item.id)!.map((child) => renderItem(child, true))}
+                    {item.children.map((child) => renderItem(child, true))}
                   </div>
                 )}
               </div>
             );
-            return <>{topLevel.map((item) => renderItem(item))}</>;
+            return <>{project.items.map((item) => renderItem(item))}</>;
           })()}
         </div>
 

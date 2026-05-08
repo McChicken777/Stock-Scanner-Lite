@@ -1770,15 +1770,25 @@ async function getProjectWithItems(projectId: number) {
     const completed = procs.filter((p) => p.status === "completed").length;
     const nextUp = procs.find((p) => p.status === "in_progress")
       ?? procs.find((p) => p.status === "not_started");
-    const children = items.filter((c) => c.parentItemId === item.id).map((c) => c.id);
     return {
       ...item,
-      children,
+      children: [] as unknown[],
       procedures: procs,
       progress: procs.length > 0 ? Math.round((completed / procs.length) * 100) : 0,
       nextUp: nextUp ? { id: nextUp.id, name: nextUp.name, roleName: nextUp.roleName, status: nextUp.status } : null,
     };
   });
+
+  // Build nested BOM tree in-place: populate children[] with child item objects
+  const itemMap = new Map(itemsWithProcs.map((i) => [i.id, i]));
+  for (const item of itemsWithProcs) {
+    if (item.parentItemId) {
+      const parent = itemMap.get(item.parentItemId);
+      if (parent) (parent.children as typeof itemsWithProcs).push(item);
+    }
+  }
+  // Only top-level items are returned; children are nested recursively
+  const nestedItems = itemsWithProcs.filter((i) => !i.parentItemId);
 
   const totalProcs = procedures.length;
   const completedProcs = procedures.filter((p) => p.status === "completed").length;
@@ -1787,7 +1797,7 @@ async function getProjectWithItems(projectId: number) {
 
   return {
     ...project,
-    items: itemsWithProcs,
+    items: nestedItems,
     totalProcedures: totalProcs,
     completedProcedures: completedProcs,
     progress: totalProcs > 0 ? Math.round((completedProcs / totalProcs) * 100) : 0,
@@ -2086,12 +2096,21 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
       templateId: z.number().int(),
       quantity: z.number().int().min(1).max(100),
       paintColor: z.string().nullable().optional(),
+      parentItemId: z.number().int().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const { templateId, quantity, paintColor } = parsed.data;
+    const { templateId, quantity, paintColor, parentItemId } = parsed.data;
     const [template] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
     if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+
+    // Validate parentItemId belongs to the same project
+    if (parentItemId != null) {
+      const [parent] = await db.select({ id: workProjectItemsTable.id })
+        .from(workProjectItemsTable)
+        .where(and(eq(workProjectItemsTable.id, parentItemId), eq(workProjectItemsTable.projectId, projectId)));
+      if (!parent) { res.status(400).json({ error: "Parent item not found in this project" }); return; }
+    }
 
     const templateProcs = await db.select().from(workStepsTable)
       .where(and(eq(workStepsTable.templateId, templateId), isNull(workStepsTable.templateComponentId)))
@@ -2105,6 +2124,7 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
       const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
       const [item] = await db.insert(workProjectItemsTable).values({
         projectId, name: itemName, paintColor: paintColor ?? null, sortOrder,
+        parentItemId: parentItemId ?? null,
       }).returning();
       sortOrder++;
 
@@ -2131,13 +2151,59 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
 router.put("/project-items/:itemId", requireAdmin, async (req, res) => {
   try {
     const itemId = Number(req.params.itemId);
+    const companyId = req.session.companyId!;
     const parsed = z.object({
       name: z.string().min(1).optional(),
       paintColor: z.string().nullable().optional(),
+      parentItemId: z.number().int().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-    const [item] = await db.update(workProjectItemsTable).set(parsed.data)
-      .where(eq(workProjectItemsTable.id, itemId)).returning();
+
+    // Validate parentItemId: must belong to same project, must not create a cycle
+    if (parsed.data.parentItemId != null) {
+      const [currentItem] = await db.select().from(workProjectItemsTable)
+        .where(eq(workProjectItemsTable.id, itemId));
+      if (!currentItem) { res.status(404).json({ error: "Item not found" }); return; }
+
+      const newParentId = parsed.data.parentItemId;
+      if (newParentId === itemId) {
+        res.status(400).json({ error: "An item cannot be its own parent" }); return;
+      }
+
+      // Parent must exist in the same project
+      const [parentItem] = await db.select().from(workProjectItemsTable)
+        .where(and(
+          eq(workProjectItemsTable.id, newParentId),
+          eq(workProjectItemsTable.projectId, currentItem.projectId),
+        ));
+      if (!parentItem) { res.status(400).json({ error: "Parent item not found in this project" }); return; }
+
+      // Cycle detection: traverse ancestors of newParentId — if we reach itemId, it's a cycle
+      const allProjectItems = await db.select().from(workProjectItemsTable)
+        .where(eq(workProjectItemsTable.projectId, currentItem.projectId));
+      const parentMap = new Map(allProjectItems.map((i) => [i.id, i.parentItemId]));
+      let cursor: number | null = newParentId;
+      let hasCycle = false;
+      const visited = new Set<number>();
+      while (cursor != null) {
+        if (cursor === itemId) { hasCycle = true; break; }
+        if (visited.has(cursor)) break;
+        visited.add(cursor);
+        cursor = parentMap.get(cursor) ?? null;
+      }
+      if (hasCycle) {
+        res.status(400).json({ error: "Setting this parent would create a circular BOM hierarchy" }); return;
+      }
+    }
+
+    const { name, paintColor, parentItemId } = parsed.data;
+    const updateData: Record<string, unknown> = {};
+    if (name !== undefined) updateData.name = name;
+    if (paintColor !== undefined) updateData.paintColor = paintColor;
+    if (parentItemId !== undefined) updateData.parentItemId = parentItemId;
+
+    const [item] = await db.update(workProjectItemsTable).set(updateData)
+      .where(and(eq(workProjectItemsTable.id, itemId))).returning();
     if (!item) { res.status(404).json({ error: "Item not found" }); return; }
     res.json(item);
   } catch (err) {
