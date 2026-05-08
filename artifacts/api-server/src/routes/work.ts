@@ -6,7 +6,7 @@ import {
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
-  suppliersTable,
+  suppliersTable, stepDependenciesTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -1548,12 +1548,56 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       }
     }
 
+    // ── DAG: fetch explicit step-to-step dependencies ─────────────────────────
+    const dagBlockMap = new Map<number, number[]>(); // blockedStepId -> [blockerStepIds]
+    if (stepIds.length > 0) {
+      const dagDeps = await db.select().from(stepDependenciesTable)
+        .where(and(
+          inArray(stepDependenciesTable.blockedStepId, stepIds),
+          eq(stepDependenciesTable.companyId, companyId),
+        ));
+      for (const dep of dagDeps) {
+        if (!dagBlockMap.has(dep.blockedStepId)) dagBlockMap.set(dep.blockedStepId, []);
+        dagBlockMap.get(dep.blockedStepId)!.push(dep.blockerStepId);
+      }
+    }
+    // Fetch completion status of all blocker steps referenced in the DAG
+    const allBlockerIds = [...new Set([...dagBlockMap.values()].flat())];
+    const blockerStatusMap = new Map<number, string>(); // stepId -> status
+    if (allBlockerIds.length > 0) {
+      const blockerSteps = await db.select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+        .from(workItemStepsTable)
+        .where(inArray(workItemStepsTable.id, allBlockerIds));
+      for (const s of blockerSteps) blockerStatusMap.set(s.id, s.status);
+    }
+
+    // ── parentChain: build item ancestry map for all relevant projects ────────
+    const projectIds = [...new Set(allProcsForRoles.map((r) => r.project.id))];
+    const allProjectItems = await db.select().from(workProjectItemsTable)
+      .where(inArray(workProjectItemsTable.projectId, projectIds));
+    const itemAncestorMap = new Map(allProjectItems.map((i) => [i.id, i]));
+    function buildParentChain(itemId: number): string[] {
+      const chain: string[] = [];
+      let current = itemAncestorMap.get(itemId);
+      while (current?.parentItemId) {
+        const parent = itemAncestorMap.get(current.parentItemId);
+        if (!parent) break;
+        chain.unshift(parent.name);
+        current = parent;
+      }
+      return chain;
+    }
+
     const result = allProcsForRoles.map(({ proc, item, project }) => {
       const itemProcs = itemProcMap.get(item.id) ?? [];
       const myIndex = itemProcs.findIndex((p) => p.id === proc.id);
       const blockedByStep = myIndex > 0
         ? itemProcs.slice(0, myIndex).find((p) => p.status !== "completed")
         : undefined;
+
+      // DAG: check if any explicit blocker step is not yet completed
+      const dagBlockers = dagBlockMap.get(proc.id) ?? [];
+      const dagBlocked = dagBlockers.some((blockerId) => blockerStatusMap.get(blockerId) !== "completed");
 
       // Previous step's WIP location (to show on the card for the next worker)
       let previousWip: { locationType: string; locationValue: string } | null = null;
@@ -1580,11 +1624,12 @@ router.get("/my-steps", requireAuth, async (req, res) => {
       return {
         ...proc,
         roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
-        stepStatus: blockedByStep ? "blocked" : "ready",
+        stepStatus: (blockedByStep || dagBlocked) ? "blocked" : "ready",
         blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
         wipLocation: latestWipMap.get(proc.id) ?? null,
         previousWip,
         partsNeeded: enrichedParts,
+        parentChain: buildParentChain(item.id),
         item: { id: item.id, name: item.name },
         project: {
           id: project.id,
@@ -1835,7 +1880,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
                 ? `${itemName} › ${comp.name} #${q}`
                 : `${itemName} › ${comp.name}`;
               const [subItem] = await db.insert(workProjectItemsTable).values({
-                projectId: project.id, name: subName, sortOrder,
+                projectId: project.id, name: subName, sortOrder, parentItemId: item.id,
               }).returning();
               sortOrder++;
               for (const proc of comp.procedures) {
@@ -2248,6 +2293,129 @@ router.patch("/steps/:id/role", requireSupervisorOrAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to reassign step role");
     res.status(500).json({ error: "Failed to reassign step role" });
+  }
+});
+
+// ─── STEP DEPENDENCIES (DAG) ──────────────────────────────────────────────────
+
+// GET /work/steps/:stepId/dependencies — list all blockers for a step
+router.get("/steps/:stepId/dependencies", requireAuth, async (req, res) => {
+  try {
+    const stepId = Number(req.params.stepId);
+    const companyId = req.session.companyId!;
+    const deps = await db.select({
+      id: stepDependenciesTable.id,
+      blockerStepId: stepDependenciesTable.blockerStepId,
+      blockedStepId: stepDependenciesTable.blockedStepId,
+      blockerName: workItemStepsTable.name,
+      blockerStatus: workItemStepsTable.status,
+    })
+      .from(stepDependenciesTable)
+      .innerJoin(workItemStepsTable, eq(workItemStepsTable.id, stepDependenciesTable.blockerStepId))
+      .where(and(
+        eq(stepDependenciesTable.blockedStepId, stepId),
+        eq(stepDependenciesTable.companyId, companyId),
+      ));
+    res.json(deps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list step dependencies");
+    res.status(500).json({ error: "Failed to list step dependencies" });
+  }
+});
+
+// POST /work/steps/:stepId/dependencies — add a blocker
+router.post("/steps/:stepId/dependencies", requireAdmin, async (req, res) => {
+  try {
+    const blockedStepId = Number(req.params.stepId);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ blockerStepId: z.number().int() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "blockerStepId required" }); return; }
+    const { blockerStepId } = parsed.data;
+
+    if (blockerStepId === blockedStepId) {
+      res.status(400).json({ error: "A step cannot depend on itself" });
+      return;
+    }
+
+    // Verify both steps belong to the same company
+    const [blockedStep] = await db
+      .select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workItemStepsTable.id, blockedStepId), eq(workProjectsTable.companyId, companyId)));
+    if (!blockedStep) { res.status(404).json({ error: "Blocked step not found" }); return; }
+
+    const [blockerStep] = await db
+      .select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workItemStepsTable.id, blockerStepId), eq(workProjectsTable.companyId, companyId)));
+    if (!blockerStep) { res.status(404).json({ error: "Blocker step not found" }); return; }
+
+    const [dep] = await db.insert(stepDependenciesTable)
+      .values({ blockerStepId, blockedStepId, companyId })
+      .onConflictDoNothing()
+      .returning();
+    res.status(201).json(dep ?? { blockerStepId, blockedStepId, companyId });
+  } catch (err) {
+    req.log.error({ err }, "Failed to add step dependency");
+    res.status(500).json({ error: "Failed to add step dependency" });
+  }
+});
+
+// DELETE /work/steps/:stepId/dependencies/:blockerId — remove a blocker
+router.delete("/steps/:stepId/dependencies/:blockerId", requireAdmin, async (req, res) => {
+  try {
+    const blockedStepId = Number(req.params.stepId);
+    const blockerStepId = Number(req.params.blockerId);
+    const companyId = req.session.companyId!;
+    await db.delete(stepDependenciesTable).where(and(
+      eq(stepDependenciesTable.blockedStepId, blockedStepId),
+      eq(stepDependenciesTable.blockerStepId, blockerStepId),
+      eq(stepDependenciesTable.companyId, companyId),
+    ));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove step dependency");
+    res.status(500).json({ error: "Failed to remove step dependency" });
+  }
+});
+
+// GET /work/projects/:projectId/step-dependencies — list all DAG deps for a project's steps
+router.get("/projects/:projectId/step-dependencies", requireAuth, async (req, res) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    const companyId = req.session.companyId!;
+
+    // Verify project ownership
+    const [project] = await db.select({ id: workProjectsTable.id })
+      .from(workProjectsTable)
+      .where(and(eq(workProjectsTable.id, projectId), eq(workProjectsTable.companyId, companyId)));
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+    // Get all step IDs for this project
+    const items = await db.select({ id: workProjectItemsTable.id })
+      .from(workProjectItemsTable).where(eq(workProjectItemsTable.projectId, projectId));
+    const itemIds = items.map((i) => i.id);
+    if (itemIds.length === 0) { res.json([]); return; }
+
+    const allSteps = await db.select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .where(sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`);
+    const allStepIds = allSteps.map((s) => s.id);
+    if (allStepIds.length === 0) { res.json([]); return; }
+
+    const deps = await db.select().from(stepDependenciesTable)
+      .where(and(
+        inArray(stepDependenciesTable.blockedStepId, allStepIds),
+        eq(stepDependenciesTable.companyId, companyId),
+      ));
+    res.json(deps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list project step dependencies");
+    res.status(500).json({ error: "Failed to list project step dependencies" });
   }
 });
 

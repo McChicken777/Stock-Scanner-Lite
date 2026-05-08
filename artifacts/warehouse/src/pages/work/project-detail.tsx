@@ -42,6 +42,7 @@ interface ProjectItem {
   sortOrder: number;
   progress: number;
   paintColor: string | null;
+  parentItemId: number | null;
   procedures: Procedure[];
   nextUp: NextUp | null;
 }
@@ -723,36 +724,58 @@ export default function WorkProjectDetailPage() {
           </div>
         )}
 
-        {/* Items */}
+        {/* Items — rendered as BOM tree (top-level items, children indented beneath) */}
         <div className="space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Items</p>
           {project.items.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
               {editMode ? "No items — tap + Add Items above" : "No items in this project."}
             </div>
-          ) : (
-            project.items.map((item) => (
-              <div
-                key={item.id}
-                ref={(el) => { if (el) itemRefs.current.set(item.id, el); else itemRefs.current.delete(item.id); }}
-                className={cn(
-                  "rounded-xl transition-all",
-                  deepLinkItemId && Number(deepLinkItemId) === item.id ? "ring-2 ring-primary ring-offset-1" : "",
+          ) : (() => {
+            // Build BOM tree: group children under their parents, preserve sortOrder
+            const topLevel = project.items.filter((i) => !i.parentItemId);
+            const childrenByParent = new Map<number, typeof project.items>();
+            for (const item of project.items) {
+              if (item.parentItemId) {
+                if (!childrenByParent.has(item.parentItemId)) childrenByParent.set(item.parentItemId, []);
+                childrenByParent.get(item.parentItemId)!.push(item);
+              }
+            }
+            const renderItem = (item: typeof project.items[0], isChild = false) => (
+              <div key={item.id} className={cn(isChild && "ml-4 border-l-2 border-primary/20 pl-2")}>
+                {isChild && (
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-1 pt-1 pb-0.5 flex items-center gap-1">
+                    <span className="text-primary/40">└</span> Sub-component
+                  </p>
                 )}
-              >
-                <ItemCard
-                  item={item}
-                  isAdmin={isAdmin}
-                  activeTimerProcedureId={activeTimerProcedureId}
-                  projectId={projectId}
-                  editMode={editMode}
-                  onDelete={() => deleteItemMutation.mutate(item.id)}
-                  onColorChange={(color) => updateItemColorMutation.mutate({ itemId: item.id, paintColor: color })}
-                  inboundStatus={project.inbound?.status ?? null}
-                />
+                <div
+                  ref={(el) => { if (el) itemRefs.current.set(item.id, el); else itemRefs.current.delete(item.id); }}
+                  className={cn(
+                    "rounded-xl transition-all",
+                    deepLinkItemId && Number(deepLinkItemId) === item.id ? "ring-2 ring-primary ring-offset-1" : "",
+                  )}
+                >
+                  <ItemCard
+                    item={item}
+                    isAdmin={isAdmin}
+                    activeTimerProcedureId={activeTimerProcedureId}
+                    projectId={projectId}
+                    editMode={editMode}
+                    onDelete={() => deleteItemMutation.mutate(item.id)}
+                    onColorChange={(color) => updateItemColorMutation.mutate({ itemId: item.id, paintColor: color })}
+                    inboundStatus={project.inbound?.status ?? null}
+                  />
+                </div>
+                {/* Render children beneath this item */}
+                {childrenByParent.has(item.id) && (
+                  <div className="mt-1 space-y-1">
+                    {childrenByParent.get(item.id)!.map((child) => renderItem(child, true))}
+                  </div>
+                )}
               </div>
-            ))
-          )}
+            );
+            return <>{topLevel.map((item) => renderItem(item))}</>;
+          })()}
         </div>
 
         {isAdmin && project.status === "in_progress" && project.progress === 100 && !editMode && (

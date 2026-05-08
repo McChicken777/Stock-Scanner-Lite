@@ -46,12 +46,14 @@ export const workProjectsTable = pgTable("work_projects", {
 });
 
 // Items within a project (copied from templates at creation time)
+// parentItemId links sub-components to their parent item (BOM hierarchy); null = top-level item
 export const workProjectItemsTable = pgTable("work_project_items", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => workProjectsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   paintColor: text("paint_color"),
   sortOrder: integer("sort_order").notNull().default(0),
+  parentItemId: integer("parent_item_id"), // self-referential FK added via migration 0005
 });
 
 // Steps for each project item, instantiated from work_steps at project creation time
@@ -190,6 +192,15 @@ export const aiSnapshotsTable = pgTable("ai_snapshots", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// DAG step-to-step dependencies (Task #58)
+// blockerStepId must complete before blockedStepId becomes READY
+export const stepDependenciesTable = pgTable("step_dependencies", {
+  id: serial("id").primaryKey(),
+  blockerStepId: integer("blocker_step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
+  blockedStepId: integer("blocked_step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+});
+
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
 export type WorkStep = typeof workStepsTable.$inferSelect;
 /** @deprecated use WorkStep */
@@ -211,3 +222,4 @@ export type StepPresetEntry = typeof stepPresetEntriesTable.$inferSelect;
 export type AiSnapshot = typeof aiSnapshotsTable.$inferSelect;
 export type ProductionZone = typeof productionZonesTable.$inferSelect;
 export type WipLocation = typeof wipLocationsTable.$inferSelect;
+export type StepDependency = typeof stepDependenciesTable.$inferSelect;

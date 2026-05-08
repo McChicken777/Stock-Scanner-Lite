@@ -33,6 +33,7 @@ interface MyStep {
   partsNeeded: PartNeeded[];
   item: { id: number; name: string };
   project: { id: number; name: string; deadline: string; priority: string };
+  parentChain: string[];
 }
 
 interface BatchItem {
@@ -456,8 +457,13 @@ function MyStepsTab() {
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <p className="font-bold text-sm leading-tight">{step.name}</p>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">{step.item.name}</p>
-            <p className="text-xs text-muted-foreground/80 truncate">{step.project.name}</p>
+            <p className="text-xs font-semibold text-foreground/80 truncate mt-0.5">{step.item.name}</p>
+            {step.parentChain.length > 0 && (
+              <p className="text-[10px] text-muted-foreground/70 truncate">
+                {step.parentChain.join(" › ")}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground/70 truncate">{step.project.name}</p>
           </div>
           {step.project.priority === "urgent" && <Flag className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />}
         </div>
