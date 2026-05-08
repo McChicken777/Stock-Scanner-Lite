@@ -2159,19 +2159,27 @@ router.put("/project-items/:itemId", requireAdmin, async (req, res) => {
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    // Validate parentItemId: must belong to same project, must not create a cycle
-    if (parsed.data.parentItemId != null) {
-      const [currentItem] = await db.select().from(workProjectItemsTable)
-        .where(eq(workProjectItemsTable.id, itemId));
-      if (!currentItem) { res.status(404).json({ error: "Item not found" }); return; }
+    // Verify the item belongs to this company (tenant ownership check)
+    const [currentItem] = await db
+      .select({ id: workProjectItemsTable.id, projectId: workProjectItemsTable.projectId, parentItemId: workProjectItemsTable.parentItemId })
+      .from(workProjectItemsTable)
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectItemsTable.id, itemId),
+        eq(workProjectsTable.companyId, companyId),
+      ));
+    if (!currentItem) { res.status(404).json({ error: "Item not found" }); return; }
 
+    // Validate parentItemId: must belong to same project/company, must not create a cycle
+    if (parsed.data.parentItemId != null) {
       const newParentId = parsed.data.parentItemId;
       if (newParentId === itemId) {
         res.status(400).json({ error: "An item cannot be its own parent" }); return;
       }
 
-      // Parent must exist in the same project
-      const [parentItem] = await db.select().from(workProjectItemsTable)
+      // Parent must exist in the same project (and therefore same company)
+      const [parentItem] = await db.select({ id: workProjectItemsTable.id })
+        .from(workProjectItemsTable)
         .where(and(
           eq(workProjectItemsTable.id, newParentId),
           eq(workProjectItemsTable.projectId, currentItem.projectId),
@@ -2179,7 +2187,8 @@ router.put("/project-items/:itemId", requireAdmin, async (req, res) => {
       if (!parentItem) { res.status(400).json({ error: "Parent item not found in this project" }); return; }
 
       // Cycle detection: traverse ancestors of newParentId — if we reach itemId, it's a cycle
-      const allProjectItems = await db.select().from(workProjectItemsTable)
+      const allProjectItems = await db.select({ id: workProjectItemsTable.id, parentItemId: workProjectItemsTable.parentItemId })
+        .from(workProjectItemsTable)
         .where(eq(workProjectItemsTable.projectId, currentItem.projectId));
       const parentMap = new Map(allProjectItems.map((i) => [i.id, i.parentItemId]));
       let cursor: number | null = newParentId;
@@ -2203,7 +2212,7 @@ router.put("/project-items/:itemId", requireAdmin, async (req, res) => {
     if (parentItemId !== undefined) updateData.parentItemId = parentItemId;
 
     const [item] = await db.update(workProjectItemsTable).set(updateData)
-      .where(and(eq(workProjectItemsTable.id, itemId))).returning();
+      .where(eq(workProjectItemsTable.id, itemId)).returning();
     if (!item) { res.status(404).json({ error: "Item not found" }); return; }
     res.json(item);
   } catch (err) {
@@ -2214,7 +2223,16 @@ router.put("/project-items/:itemId", requireAdmin, async (req, res) => {
 
 router.delete("/project-items/:itemId", requireAdmin, async (req, res) => {
   try {
-    await db.delete(workProjectItemsTable).where(eq(workProjectItemsTable.id, Number(req.params.itemId)));
+    const itemId = Number(req.params.itemId);
+    const companyId = req.session.companyId!;
+    // Verify ownership before deleting (company scoping via project join)
+    const [owned] = await db
+      .select({ id: workProjectItemsTable.id })
+      .from(workProjectItemsTable)
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workProjectItemsTable.id, itemId), eq(workProjectsTable.companyId, companyId)));
+    if (!owned) { res.status(404).json({ error: "Item not found" }); return; }
+    await db.delete(workProjectItemsTable).where(eq(workProjectItemsTable.id, itemId));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete item");
