@@ -1702,10 +1702,17 @@ async function getProjectWithItems(projectId: number) {
     }));
   }
 
-  // ── DAG: fetch step dependencies for all steps in this project ────────────
-  const stepNameMap = new Map<number, string>(); // stepId -> name
-  for (const p of procedures) stepNameMap.set(p.id, p.name);
-  const dagBlockedByMap = new Map<number, string[]>(); // blockedStepId -> blocker names
+  // ── DAG: fetch step dependencies and compute blocked state per step ───────
+  // stepNameMap: stepId → name (for display)
+  // stepStatusMap: stepId → status (for checking completion)
+  const stepNameMap = new Map<number, string>();
+  const stepStatusMap = new Map<number, string>();
+  for (const p of procedures) {
+    stepNameMap.set(p.id, p.name);
+    stepStatusMap.set(p.id, p.status);
+  }
+  // dagBlockerIdsMap: blockedStepId → [blockerStepId, ...] (all declared blockers)
+  const dagBlockerIdsMap = new Map<number, number[]>();
   if (itemIds.length > 0) {
     const allStepIds = procedures.map((p) => p.id);
     if (allStepIds.length > 0) {
@@ -1714,30 +1721,38 @@ async function getProjectWithItems(projectId: number) {
           inArray(stepDependenciesTable.blockedStepId, allStepIds),
           eq(stepDependenciesTable.companyId, project.companyId!),
         ));
-      // For blockers that might be steps from other items (not in current procedures list),
-      // look them up separately.
-      const foreignBlockerIds = [...new Set(dagDeps.map((d) => d.blockerStepId).filter((id) => !stepNameMap.has(id)))];
+      // Fetch names + statuses for blocker steps that live in other items
+      const foreignBlockerIds = [...new Set(
+        dagDeps.map((d) => d.blockerStepId).filter((id) => !stepNameMap.has(id)),
+      )];
       if (foreignBlockerIds.length > 0) {
-        const foreignSteps = await db.select({ id: workItemStepsTable.id, name: workItemStepsTable.name })
+        const foreignSteps = await db
+          .select({ id: workItemStepsTable.id, name: workItemStepsTable.name, status: workItemStepsTable.status })
           .from(workItemStepsTable).where(inArray(workItemStepsTable.id, foreignBlockerIds));
-        for (const s of foreignSteps) stepNameMap.set(s.id, s.name);
+        for (const s of foreignSteps) {
+          stepNameMap.set(s.id, s.name);
+          stepStatusMap.set(s.id, s.status);
+        }
       }
       for (const dep of dagDeps) {
-        if (!dagBlockedByMap.has(dep.blockedStepId)) dagBlockedByMap.set(dep.blockedStepId, []);
-        dagBlockedByMap.get(dep.blockedStepId)!.push(stepNameMap.get(dep.blockerStepId) ?? `Step #${dep.blockerStepId}`);
+        if (!dagBlockerIdsMap.has(dep.blockedStepId)) dagBlockerIdsMap.set(dep.blockedStepId, []);
+        dagBlockerIdsMap.get(dep.blockedStepId)!.push(dep.blockerStepId);
       }
     }
   }
 
-  // Build step status map to determine if DAG blockers are complete
-  const stepStatusMap = new Map<number, string>();
-  for (const p of procedures) stepStatusMap.set(p.id, p.status);
-
   const itemsWithProcs = items.map((item) => {
     const procs = procedures.filter((p) => p.itemId === item.id).map((p) => {
-      const blockerNames = dagBlockedByMap.get(p.id) ?? [];
-      const dagBlocked = blockerNames.length > 0; // could refine to only show if not all complete
-      return { ...p, dagBlockerNames: blockerNames, dagBlocked };
+      const allBlockerIds = dagBlockerIdsMap.get(p.id) ?? [];
+      // Only blockers that are NOT yet completed contribute to the blocked state
+      const incompleteBlockerIds = allBlockerIds.filter(
+        (id) => stepStatusMap.get(id) !== "completed",
+      );
+      const dagBlocked = incompleteBlockerIds.length > 0;
+      const dagBlockerNames = incompleteBlockerIds.map(
+        (id) => stepNameMap.get(id) ?? `Step #${id}`,
+      );
+      return { ...p, dagBlockerNames, dagBlocked };
     });
     const completed = procs.filter((p) => p.status === "completed").length;
     const nextUp = procs.find((p) => p.status === "in_progress")
@@ -2425,6 +2440,38 @@ router.post("/steps/:stepId/dependencies", requireAdmin, requirePro, async (req,
       .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
       .where(and(eq(workItemStepsTable.id, blockerStepId), eq(workProjectsTable.companyId, companyId)));
     if (!blockerStep) { res.status(404).json({ error: "Blocker step not found" }); return; }
+
+    // ── Cycle detection (DFS reachability check) ──────────────────────────────
+    // The proposed edge is: blockerStepId → blockedStepId.
+    // A cycle exists if blockedStepId already has a path back to blockerStepId
+    // via existing "blocker → blocked" edges (i.e. blockerStepId is reachable
+    // from blockedStepId in the forward dependency graph).
+    const allDepsForCompany = await db.select({
+      blocker: stepDependenciesTable.blockerStepId,
+      blocked: stepDependenciesTable.blockedStepId,
+    }).from(stepDependenciesTable).where(eq(stepDependenciesTable.companyId, companyId));
+
+    // Build adjacency list: blockerStepId → Set<blockedStepIds>
+    const fwdGraph = new Map<number, Set<number>>();
+    for (const { blocker, blocked } of allDepsForCompany) {
+      if (!fwdGraph.has(blocker)) fwdGraph.set(blocker, new Set());
+      fwdGraph.get(blocker)!.add(blocked);
+    }
+    // DFS from blockedStepId — if we reach blockerStepId, adding the edge creates a cycle
+    const visited = new Set<number>();
+    const stack = [blockedStepId];
+    let hasCycle = false;
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (node === blockerStepId) { hasCycle = true; break; }
+      if (visited.has(node)) continue;
+      visited.add(node);
+      for (const next of (fwdGraph.get(node) ?? [])) stack.push(next);
+    }
+    if (hasCycle) {
+      res.status(400).json({ error: "Adding this dependency would create a cycle in the DAG" });
+      return;
+    }
 
     const [dep] = await db.insert(stepDependenciesTable)
       .values({ blockerStepId, blockedStepId, companyId })
