@@ -3164,6 +3164,267 @@ router.get("/bom-check", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── PAINT QUEUE (Pro) ────────────────────────────────────────────────────────
+
+// GET /work/paint-queue — all ready-to-paint steps across active projects
+// "Paint" steps = workItemStepsTable where name ilike '%paint%'
+// "Ready" = all prior steps (lower sortOrder, same itemId) are completed
+router.get("/paint-queue", requireAuth, requirePro, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // Fetch all non-completed steps named "paint*" in in_progress projects
+    const candidates = await db
+      .select({
+        step: workItemStepsTable,
+        item: workProjectItemsTable,
+        project: workProjectsTable,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        sql`lower(${workItemStepsTable.name}) like '%paint%'`,
+        ne(workItemStepsTable.status, "completed"),
+      ))
+      .orderBy(workProjectsTable.deadline, workProjectItemsTable.sortOrder, workItemStepsTable.sortOrder);
+
+    if (candidates.length === 0) { res.json([]); return; }
+
+    // Load all steps for affected items to determine READY status
+    const itemIds = [...new Set(candidates.map((r) => r.item.id))];
+    const allItemSteps = await db.select().from(workItemStepsTable)
+      .where(inArray(workItemStepsTable.itemId, itemIds))
+      .orderBy(workItemStepsTable.sortOrder);
+    const itemStepMap = new Map<number, typeof workItemStepsTable.$inferSelect[]>();
+    for (const s of allItemSteps) {
+      if (!itemStepMap.has(s.itemId)) itemStepMap.set(s.itemId, []);
+      itemStepMap.get(s.itemId)!.push(s);
+    }
+
+    // Fetch latest WIP location per step to show in the UI
+    const stepIds = candidates.map((r) => r.step.id);
+    const wipRows = await db.select().from(wipLocationsTable)
+      .where(inArray(wipLocationsTable.stepId, stepIds))
+      .orderBy(desc(wipLocationsTable.setAt));
+    const wipMap = new Map<number, { locationValue: string }>();
+    for (const row of wipRows) {
+      if (!wipMap.has(row.stepId)) wipMap.set(row.stepId, { locationValue: row.locationValue ?? "" });
+    }
+
+    const readyItems = candidates
+      .map(({ step, item, project }) => {
+        const siblings = itemStepMap.get(item.id) ?? [];
+        const myIndex = siblings.findIndex((s) => s.id === step.id);
+        const isReady = myIndex <= 0 || siblings.slice(0, myIndex).every((s) => s.status === "completed");
+        if (!isReady) return null;
+        return {
+          id: step.id,
+          stepName: step.name,
+          status: step.status,
+          durationEstimate: step.durationEstimate,
+          itemId: item.id,
+          itemName: item.name,
+          projectId: project.id,
+          projectName: project.name,
+          deadline: project.deadline.toISOString(),
+          priority: project.priority,
+          paintColor: project.paintColor ?? null,
+          wipLocation: wipMap.get(step.id)?.locationValue ?? null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    // Sort: overdue first, then by deadline, then by paint color
+    const now = new Date();
+    readyItems.sort((a, b) => {
+      const aOverdue = new Date(a.deadline) < now ? 0 : 1;
+      const bOverdue = new Date(b.deadline) < now ? 0 : 1;
+      if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+      const dDiff = new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      if (dDiff !== 0) return dDiff;
+      return (a.paintColor ?? "").localeCompare(b.paintColor ?? "");
+    });
+
+    res.json(readyItems);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get paint queue");
+    res.status(500).json({ error: "Failed to get paint queue" });
+  }
+});
+
+// POST /work/paint-queue/batch-start — mark selected paint steps as in_progress
+router.post("/paint-queue/batch-start", requireAuth, requirePro, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ stepIds: z.array(z.number().int()).min(1) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "stepIds required" }); return; }
+    const { stepIds } = parsed.data;
+
+    // Verify ownership
+    const verified = await db
+      .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(inArray(workItemStepsTable.id, stepIds), eq(workProjectsTable.companyId, companyId)));
+
+    if (verified.length !== stepIds.length) {
+      res.status(403).json({ error: "One or more steps not found or unauthorized" }); return;
+    }
+
+    const toStart = verified.filter((s) => s.status === "not_started").map((s) => s.id);
+    if (toStart.length > 0) {
+      await db.update(workItemStepsTable)
+        .set({ status: "in_progress" })
+        .where(inArray(workItemStepsTable.id, toStart));
+    }
+
+    res.json({ started: toStart.length, alreadyStarted: verified.length - toStart.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to start paint batch");
+    res.status(500).json({ error: "Failed to start paint batch" });
+  }
+});
+
+// POST /work/paint-queue/batch-complete — complete paint steps + log WIP locations
+router.post("/paint-queue/batch-complete", requireAuth, requirePro, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
+    const parsed = z.object({
+      stepIds: z.array(z.number().int()).min(1),
+      locations: z.array(z.object({
+        stepId: z.number().int(),
+        locationType: z.enum(["warehouse", "zone", "with_worker"]),
+        locationValue: z.string().optional(),
+      })).optional().default([]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "stepIds required" }); return; }
+    const { stepIds, locations } = parsed.data;
+
+    // Verify ownership
+    const verified = await db
+      .select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(inArray(workItemStepsTable.id, stepIds), eq(workProjectsTable.companyId, companyId)));
+
+    if (verified.length !== stepIds.length) {
+      res.status(403).json({ error: "One or more steps not found or unauthorized" }); return;
+    }
+
+    await db.update(workItemStepsTable)
+      .set({ status: "completed" })
+      .where(inArray(workItemStepsTable.id, stepIds));
+
+    // Log WIP locations
+    const locationMap = new Map(locations.map((l) => [l.stepId, l]));
+    for (const id of stepIds) {
+      const loc = locationMap.get(id);
+      if (loc) {
+        await db.insert(wipLocationsTable).values({
+          stepId: id,
+          locationType: loc.locationType,
+          locationValue: loc.locationValue ?? null,
+          setByUserId: userId,
+        });
+      }
+    }
+
+    res.json({ completed: stepIds.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to complete paint batch");
+    res.status(500).json({ error: "Failed to complete paint batch" });
+  }
+});
+
+// ─── SUPERVISOR: UNLOGGED PARTS ───────────────────────────────────────────────
+
+// GET /work/supervisor/unlogged-parts
+// Returns completed steps from active projects (last 7 days) without a WIP location entry
+router.get("/supervisor/unlogged-parts", requireSupervisorOrAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // All completed steps in this company's active projects
+    const completedSteps = await db
+      .select({
+        stepId: workItemStepsTable.id,
+        stepName: workItemStepsTable.name,
+        itemId: workProjectItemsTable.id,
+        itemName: workProjectItemsTable.name,
+        projectId: workProjectsTable.id,
+        projectName: workProjectsTable.name,
+        deadline: workProjectsTable.deadline,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        eq(workItemStepsTable.status, "completed"),
+      ))
+      .orderBy(workProjectsTable.deadline);
+
+    if (completedSteps.length === 0) { res.json([]); return; }
+
+    // Find which step IDs have WIP locations
+    const completedStepIds = completedSteps.map((s) => s.stepId);
+    const loggedStepIds = new Set(
+      (await db.select({ stepId: wipLocationsTable.stepId })
+        .from(wipLocationsTable)
+        .where(inArray(wipLocationsTable.stepId, completedStepIds)))
+        .map((r) => r.stepId)
+    );
+
+    // Find last worker per step from time logs
+    const timeLogRows = await db
+      .select({
+        stepId: workTimeLogsTable.stepId,
+        userId: workTimeLogsTable.userId,
+        endTime: workTimeLogsTable.endTime,
+        username: usersTable.username,
+      })
+      .from(workTimeLogsTable)
+      .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+      .where(and(
+        inArray(workTimeLogsTable.stepId, completedStepIds),
+        sql`${workTimeLogsTable.endTime} is not null`,
+      ))
+      .orderBy(desc(workTimeLogsTable.endTime));
+
+    const lastWorkerMap = new Map<number, { username: string; endTime: Date }>();
+    for (const row of timeLogRows) {
+      if (!lastWorkerMap.has(row.stepId) && row.endTime) {
+        lastWorkerMap.set(row.stepId, { username: row.username, endTime: row.endTime });
+      }
+    }
+
+    const unlogged = completedSteps
+      .filter((s) => !loggedStepIds.has(s.stepId))
+      .map((s) => ({
+        stepId: s.stepId,
+        stepName: s.stepName,
+        itemName: s.itemName,
+        projectId: s.projectId,
+        projectName: s.projectName,
+        deadline: s.deadline.toISOString(),
+        lastWorker: lastWorkerMap.get(s.stepId)?.username ?? null,
+        completedAt: lastWorkerMap.get(s.stepId)?.endTime?.toISOString() ?? null,
+      }));
+
+    res.json(unlogged);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get unlogged parts");
+    res.status(500).json({ error: "Failed to get unlogged parts" });
+  }
+});
+
 // ─── SHORTAGE FLAGS ───────────────────────────────────────────────────────────
 
 router.get("/shortage-flags", requireAdmin, async (req, res) => {

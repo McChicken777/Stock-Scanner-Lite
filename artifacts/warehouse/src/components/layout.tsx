@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
-  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox,
+  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -70,6 +70,13 @@ function UserMenu() {
             </DropdownMenuItem>
           </Link>
         )}
+
+        {/* Paint Queue — accessible to all authenticated users */}
+        <Link href="/work/paint-queue">
+          <DropdownMenuItem className="cursor-pointer font-semibold text-orange-600 focus:text-orange-600">
+            <Palette className="mr-2 h-4 w-4" /> Paint Shop
+          </DropdownMenuItem>
+        </Link>
 
         {/* Attendance — workers & supervisors (admins have it in bottom nav) */}
         {!isAdmin && user.role !== "owner" && (
@@ -211,6 +218,15 @@ function AdminBottomNav() {
                 <div>
                   <p className="text-sm font-semibold">Item Templates</p>
                   <p className="text-xs text-muted-foreground">Reusable products with steps & BOM</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/work/paint-queue" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Palette className="h-5 w-5 text-orange-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Paint Shop</p>
+                  <p className="text-xs text-muted-foreground">Batch painting queue by color (Pro)</p>
                 </div>
               </div>
             </Link>

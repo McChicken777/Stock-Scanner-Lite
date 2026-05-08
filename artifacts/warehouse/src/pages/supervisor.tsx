@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   AlertTriangle, Calendar, CheckSquare, Clock, Flag, MoreVertical, PackageCheck,
-  SkipForward, Truck, User, UserCog, Zap,
+  SkipForward, Truck, User, UserCog, Zap, MapPin,
 } from "lucide-react";
 
 interface DailyPlanStep {
@@ -65,6 +65,17 @@ interface BottleneckReport {
   overdueProjects: { id: number; name: string; deadline: string; priority: string }[];
   allBlockedItems: { id: number; name: string; projectName: string; blockedStep: string }[];
   inboundDelays: InboundDelay[];
+}
+
+interface UnloggedPart {
+  stepId: number;
+  stepName: string;
+  itemName: string;
+  projectId: number;
+  projectName: string;
+  deadline: string;
+  lastWorker: string | null;
+  completedAt: string | null;
 }
 
 async function apiFetch(url: string) {
@@ -434,9 +445,62 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
   );
 }
 
+function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
+  const [, navigate] = useLocation();
+
+  if (parts.length === 0) {
+    return (
+      <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
+        <p className="font-semibold text-green-700">All parts have locations logged</p>
+        <p className="text-xs text-green-600 mt-1">No completed steps are missing a WIP location.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Completed steps in active projects without a stored location — ask the worker to log where they left the part.
+      </p>
+      {parts.map((part) => {
+        const completedAgo = part.completedAt
+          ? (() => {
+              const mins = Math.round((Date.now() - new Date(part.completedAt).getTime()) / 60000);
+              if (mins < 60) return `${mins}m ago`;
+              if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+              return `${Math.round(mins / 1440)}d ago`;
+            })()
+          : null;
+
+        return (
+          <button
+            key={part.stepId}
+            onClick={() => navigate(`/work/projects/${part.projectId}`)}
+            className="w-full text-left rounded-xl border-2 border-amber-200 bg-amber-50 px-3 py-2.5 space-y-1 active:scale-[0.99] transition-transform"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{part.itemName}</p>
+                <p className="text-xs text-muted-foreground truncate">{part.stepName} · {part.projectName}</p>
+              </div>
+              <span className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                <MapPin className="h-3 w-3" /> No location
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
+              {part.lastWorker && <span className="flex items-center gap-0.5"><User className="h-3 w-3" />{part.lastWorker}</span>}
+              {completedAgo && <span className="flex items-center gap-0.5"><Clock className="h-3 w-3" />{completedAgo}</span>}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SupervisorPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState<"plan" | "bottlenecks">("plan");
+  const [tab, setTab] = useState<"plan" | "bottlenecks" | "unlogged">("plan");
 
   const { data: plan, isLoading: planLoading } = useQuery<DailyPlan>({
     queryKey: ["/api/work/supervisor/daily-plan"],
@@ -448,6 +512,12 @@ export default function SupervisorPage() {
     queryKey: ["/api/work/supervisor/bottlenecks"],
     queryFn: () => apiFetch("/api/work/supervisor/bottlenecks"),
     refetchInterval: 30000,
+  });
+
+  const { data: unloggedParts = [], isLoading: unloggedLoading } = useQuery<UnloggedPart[]>({
+    queryKey: ["/api/work/supervisor/unlogged-parts"],
+    queryFn: () => apiFetch("/api/work/supervisor/unlogged-parts"),
+    refetchInterval: 60000,
   });
 
   const { data: roles = [] } = useQuery<RoleOption[]>({
@@ -500,16 +570,33 @@ export default function SupervisorPage() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setTab("unlogged")}
+          className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            tab === "unlogged" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Unlogged
+          {unloggedParts.length > 0 && (
+            <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+              {unloggedParts.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {tab === "plan" ? (
         planLoading
           ? <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}</div>
           : plan ? <DailyPlanSection plan={plan} roles={roles} /> : null
-      ) : (
+      ) : tab === "bottlenecks" ? (
         bottlenecksLoading
           ? <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
           : bottlenecks ? <BottlenecksSection report={bottlenecks} /> : null
+      ) : (
+        unloggedLoading
+          ? <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
+          : <UnloggedPartsSection parts={unloggedParts} />
       )}
     </div>
   );
