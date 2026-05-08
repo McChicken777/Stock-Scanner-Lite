@@ -126,6 +126,11 @@ const batchLabels: Record<string, string> = {
 
 interface ProductionZone { id: number; name: string }
 
+interface PartLocationEntry {
+  locationType: "warehouse" | "zone" | "with_worker";
+  locationValue: string;
+}
+
 function WipLocationDialog({
   stepId,
   open,
@@ -142,6 +147,8 @@ function WipLocationDialog({
   const [zoneId, setZoneId] = useState<string>("");
   const [warehouseNote, setWarehouseNote] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  // Accumulated additional placements — parts can be split across multiple spots
+  const [savedLocations, setSavedLocations] = useState<PartLocationEntry[]>([]);
 
   const { data: zones = [] } = useQuery<ProductionZone[]>({
     queryKey: ["/api/work/production-zones"],
@@ -158,18 +165,30 @@ function WipLocationDialog({
       ? "With worker"
       : warehouseNote.trim() || "General warehouse area";
 
-  // Calls /stop atomically with the location so the step is closed and
-  // the location is recorded in a single server transaction.
+  const currentEntryValid = locationType !== "zone" || !!zoneId || zones.length === 0;
+
+  // Add current entry to the list and reset the form for the next entry
+  const addAnother = () => {
+    const locationValue = resolveLocationValue();
+    setSavedLocations((prev) => [...prev, { locationType, locationValue }]);
+    setLocationType("warehouse");
+    setZoneId("");
+    setWarehouseNote("");
+  };
+
+  // Calls /stop atomically with all accumulated locations
   const save = async () => {
     setSaving(true);
     try {
       const locationValue = resolveLocationValue();
+      const allLocations: PartLocationEntry[] = [...savedLocations, { locationType, locationValue }];
       await apiFetch(`/api/work/procedures/${stepId}/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wipLocation: { locationType, locationValue } }),
+        body: JSON.stringify({ partLocations: allLocations }),
       });
-      toast({ title: "Step completed — location logged" });
+      toast({ title: `Step completed — ${allLocations.length} location${allLocations.length > 1 ? "s" : ""} logged` });
+      setSavedLocations([]);
       onSave(locationType, locationValue);
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Failed to complete step", variant: "destructive" });
@@ -184,6 +203,7 @@ function WipLocationDialog({
     try {
       await apiFetch(`/api/work/procedures/${stepId}/stop`, { method: "POST" });
       toast({ title: "Step completed (no location logged)" });
+      setSavedLocations([]);
       onSkip();
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Failed to complete step", variant: "destructive" });
@@ -197,8 +217,28 @@ function WipLocationDialog({
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
         <div>
           <p className="font-black text-base">Step complete — where is this part now?</p>
-          <p className="text-xs text-muted-foreground">Log the location so the next worker can find it. Skip only if the location is truly unknown.</p>
+          <p className="text-xs text-muted-foreground">Log the location(s) so the next worker can find it. Add another if the batch is split across spots.</p>
         </div>
+
+        {/* Accumulated placements */}
+        {savedLocations.length > 0 && (
+          <div className="space-y-1">
+            {savedLocations.map((loc, i) => (
+              <div key={i} className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-2 py-1">
+                <span className="text-xs text-green-800 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {loc.locationValue}
+                </span>
+                <button
+                  className="text-green-600 hover:text-rose-600 text-xs font-bold ml-2"
+                  onClick={() => setSavedLocations((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           {(["warehouse", "zone", "with_worker"] as const).map((type) => {
@@ -252,6 +292,15 @@ function WipLocationDialog({
           <p className="text-xs text-muted-foreground text-center">No zones configured. Ask an admin to add production zones.</p>
         )}
 
+        {/* Add another placement before completing */}
+        <button
+          disabled={saving || !currentEntryValid}
+          onClick={addAnother}
+          className="w-full text-xs text-primary border border-primary/30 rounded-lg py-2 hover:bg-primary/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          + Add another location (split batch)
+        </button>
+
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -263,10 +312,10 @@ function WipLocationDialog({
           </Button>
           <Button
             className="flex-1 h-11 font-bold"
-            disabled={saving || (locationType === "zone" && !zoneId && zones.length > 0)}
+            disabled={saving || !currentEntryValid}
             onClick={save}
           >
-            {saving ? "Saving…" : "Log & Complete"}
+            {saving ? "Saving…" : savedLocations.length > 0 ? `Log ${savedLocations.length + 1} & Complete` : "Log & Complete"}
           </Button>
         </div>
       </div>
@@ -530,7 +579,7 @@ function MyStepsTab() {
             ))}
           </div>
         )}
-        {variant === "ready" && step.sortOrder > 0 && step.previousWip && (
+        {variant === "ready" && step.previousWip && (
           <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 space-y-0.5">
             <p className="flex items-center gap-1">
               <MapPin className="h-3 w-3 flex-shrink-0" />
@@ -546,7 +595,7 @@ function MyStepsTab() {
             )}
           </div>
         )}
-        {variant === "ready" && step.sortOrder > 0 && !step.previousWip && (
+        {variant === "ready" && !step.previousWip && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 flex items-center gap-1">
             <MapPin className="h-3 w-3 flex-shrink-0" />
             <span className="truncate">Part location unknown — check with supervisor</span>

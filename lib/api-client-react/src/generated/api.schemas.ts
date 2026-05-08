@@ -358,6 +358,67 @@ export interface QuoteStatusCounts {
   converted: number;
 }
 
+export type PaintQueueItemStatus =
+  (typeof PaintQueueItemStatus)[keyof typeof PaintQueueItemStatus];
+
+export const PaintQueueItemStatus = {
+  not_started: "not_started",
+  in_progress: "in_progress",
+} as const;
+
+export interface PaintQueueItem {
+  id: number;
+  stepName: string;
+  status: PaintQueueItemStatus;
+  durationEstimate?: number | null;
+  itemId: number;
+  itemName: string;
+  projectId: number;
+  projectName: string;
+  deadline: string;
+  priority: string;
+  paintColor?: string | null;
+  sizeWeight?: string | null;
+  partLocation?: string | null;
+}
+
+export interface PaintBatchStartRequest {
+  /** @minItems 1 */
+  stepIds: number[];
+}
+
+export type PaintBatchLocationEntryLocationType =
+  (typeof PaintBatchLocationEntryLocationType)[keyof typeof PaintBatchLocationEntryLocationType];
+
+export const PaintBatchLocationEntryLocationType = {
+  warehouse: "warehouse",
+  zone: "zone",
+  with_worker: "with_worker",
+} as const;
+
+export interface PaintBatchLocationEntry {
+  stepId: number;
+  locationType: PaintBatchLocationEntryLocationType;
+  locationValue?: string;
+}
+
+export interface PaintBatchCompleteRequest {
+  /** @minItems 1 */
+  stepIds: number[];
+  locations?: PaintBatchLocationEntry[];
+}
+
+export interface UnloggedPart {
+  stepId: number;
+  stepName: string;
+  itemName: string;
+  projectId: number;
+  projectName: string;
+  deadline: string;
+  lastWorker?: string | null;
+  completedAt?: string | null;
+}
+
 export type ListHistoryParams = {
   productId?: number;
   locationId?: string;
@@ -399,4 +460,13 @@ export type ConvertQuoteToWorkProject201Project = {
 export type ConvertQuoteToWorkProject201 = {
   quote: Quote;
   project: ConvertQuoteToWorkProject201Project;
+};
+
+export type PaintQueueBatchStart200 = {
+  started?: number;
+  alreadyStarted?: number;
+};
+
+export type PaintQueueBatchComplete200 = {
+  completed?: number;
 };

@@ -1377,7 +1377,8 @@ components:
         deadline: { type: string, format: date-time }
         priority: { type: string }
         paintColor: { type: string, nullable: true }
-        wipLocation: { type: string, nullable: true }
+        sizeWeight: { type: string, nullable: true }
+        partLocation: { type: string, nullable: true }
       required: [id, stepName, status, itemId, itemName, projectId, projectName, deadline, priority]
 
     PaintBatchStartRequest:

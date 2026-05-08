@@ -36,6 +36,11 @@ import type {
   ListQuotesParams,
   Location,
   LocationWithStock,
+  PaintBatchCompleteRequest,
+  PaintBatchStartRequest,
+  PaintQueueBatchComplete200,
+  PaintQueueBatchStart200,
+  PaintQueueItem,
   Product,
   ProductWithStock,
   Quote,
@@ -46,6 +51,7 @@ import type {
   StockEntry,
   StockUpdateResult,
   StockValuation,
+  UnloggedPart,
   UpdateProductRequest,
   UpdateStockRequest,
 } from "./api.schemas";
@@ -2758,6 +2764,333 @@ export function useGetDashboardSummary<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDashboardSummaryQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get all ready-to-paint steps grouped by color (Pro plan + painter/admin)
+ */
+export const getGetPaintQueueUrl = () => {
+  return `/api/work/paint-queue`;
+};
+
+export const getPaintQueue = async (
+  options?: RequestInit,
+): Promise<PaintQueueItem[]> => {
+  return customFetch<PaintQueueItem[]>(getGetPaintQueueUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPaintQueueQueryKey = () => {
+  return [`/api/work/paint-queue`] as const;
+};
+
+export const getGetPaintQueueQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPaintQueue>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPaintQueue>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPaintQueueQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaintQueue>>> = ({
+    signal,
+  }) => getPaintQueue({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPaintQueue>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPaintQueueQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPaintQueue>>
+>;
+export type GetPaintQueueQueryError = ErrorType<void>;
+
+/**
+ * @summary Get all ready-to-paint steps grouped by color (Pro plan + painter/admin)
+ */
+
+export function useGetPaintQueue<
+  TData = Awaited<ReturnType<typeof getPaintQueue>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPaintQueue>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPaintQueueQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark selected paint steps as in_progress (Pro plan + painter/admin)
+ */
+export const getPaintQueueBatchStartUrl = () => {
+  return `/api/work/paint-queue/batch-start`;
+};
+
+export const paintQueueBatchStart = async (
+  paintBatchStartRequest: PaintBatchStartRequest,
+  options?: RequestInit,
+): Promise<PaintQueueBatchStart200> => {
+  return customFetch<PaintQueueBatchStart200>(getPaintQueueBatchStartUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(paintBatchStartRequest),
+  });
+};
+
+export const getPaintQueueBatchStartMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paintQueueBatchStart>>,
+    TError,
+    { data: BodyType<PaintBatchStartRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof paintQueueBatchStart>>,
+  TError,
+  { data: BodyType<PaintBatchStartRequest> },
+  TContext
+> => {
+  const mutationKey = ["paintQueueBatchStart"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof paintQueueBatchStart>>,
+    { data: BodyType<PaintBatchStartRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return paintQueueBatchStart(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PaintQueueBatchStartMutationResult = NonNullable<
+  Awaited<ReturnType<typeof paintQueueBatchStart>>
+>;
+export type PaintQueueBatchStartMutationBody = BodyType<PaintBatchStartRequest>;
+export type PaintQueueBatchStartMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark selected paint steps as in_progress (Pro plan + painter/admin)
+ */
+export const usePaintQueueBatchStart = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paintQueueBatchStart>>,
+    TError,
+    { data: BodyType<PaintBatchStartRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof paintQueueBatchStart>>,
+  TError,
+  { data: BodyType<PaintBatchStartRequest> },
+  TContext
+> => {
+  return useMutation(getPaintQueueBatchStartMutationOptions(options));
+};
+
+/**
+ * @summary Complete paint steps and log WIP locations (Pro plan + painter/admin)
+ */
+export const getPaintQueueBatchCompleteUrl = () => {
+  return `/api/work/paint-queue/batch-complete`;
+};
+
+export const paintQueueBatchComplete = async (
+  paintBatchCompleteRequest: PaintBatchCompleteRequest,
+  options?: RequestInit,
+): Promise<PaintQueueBatchComplete200> => {
+  return customFetch<PaintQueueBatchComplete200>(
+    getPaintQueueBatchCompleteUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(paintBatchCompleteRequest),
+    },
+  );
+};
+
+export const getPaintQueueBatchCompleteMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paintQueueBatchComplete>>,
+    TError,
+    { data: BodyType<PaintBatchCompleteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof paintQueueBatchComplete>>,
+  TError,
+  { data: BodyType<PaintBatchCompleteRequest> },
+  TContext
+> => {
+  const mutationKey = ["paintQueueBatchComplete"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof paintQueueBatchComplete>>,
+    { data: BodyType<PaintBatchCompleteRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return paintQueueBatchComplete(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PaintQueueBatchCompleteMutationResult = NonNullable<
+  Awaited<ReturnType<typeof paintQueueBatchComplete>>
+>;
+export type PaintQueueBatchCompleteMutationBody =
+  BodyType<PaintBatchCompleteRequest>;
+export type PaintQueueBatchCompleteMutationError = ErrorType<void>;
+
+/**
+ * @summary Complete paint steps and log WIP locations (Pro plan + painter/admin)
+ */
+export const usePaintQueueBatchComplete = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paintQueueBatchComplete>>,
+    TError,
+    { data: BodyType<PaintBatchCompleteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof paintQueueBatchComplete>>,
+  TError,
+  { data: BodyType<PaintBatchCompleteRequest> },
+  TContext
+> => {
+  return useMutation(getPaintQueueBatchCompleteMutationOptions(options));
+};
+
+/**
+ * @summary Steps completed in last 7 days with no WIP location logged (supervisor/admin)
+ */
+export const getGetSupervisorUnloggedPartsUrl = () => {
+  return `/api/work/supervisor/unlogged-parts`;
+};
+
+export const getSupervisorUnloggedParts = async (
+  options?: RequestInit,
+): Promise<UnloggedPart[]> => {
+  return customFetch<UnloggedPart[]>(getGetSupervisorUnloggedPartsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSupervisorUnloggedPartsQueryKey = () => {
+  return [`/api/work/supervisor/unlogged-parts`] as const;
+};
+
+export const getGetSupervisorUnloggedPartsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSupervisorUnloggedParts>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSupervisorUnloggedParts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetSupervisorUnloggedPartsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSupervisorUnloggedParts>>
+  > = ({ signal }) => getSupervisorUnloggedParts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSupervisorUnloggedParts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSupervisorUnloggedPartsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSupervisorUnloggedParts>>
+>;
+export type GetSupervisorUnloggedPartsQueryError = ErrorType<void>;
+
+/**
+ * @summary Steps completed in last 7 days with no WIP location logged (supervisor/admin)
+ */
+
+export function useGetSupervisorUnloggedParts<
+  TData = Awaited<ReturnType<typeof getSupervisorUnloggedParts>>,
+  TError = ErrorType<void>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSupervisorUnloggedParts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSupervisorUnloggedPartsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

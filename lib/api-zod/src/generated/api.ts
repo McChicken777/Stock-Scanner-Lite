@@ -749,3 +749,74 @@ export const GetDashboardSummaryResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Get all ready-to-paint steps grouped by color (Pro plan + painter/admin)
+ */
+export const GetPaintQueueResponseItem = zod.object({
+  id: zod.number(),
+  stepName: zod.string(),
+  status: zod.enum(["not_started", "in_progress"]),
+  durationEstimate: zod.number().nullish(),
+  itemId: zod.number(),
+  itemName: zod.string(),
+  projectId: zod.number(),
+  projectName: zod.string(),
+  deadline: zod.coerce.date(),
+  priority: zod.string(),
+  paintColor: zod.string().nullish(),
+  sizeWeight: zod.string().nullish(),
+  partLocation: zod.string().nullish(),
+});
+export const GetPaintQueueResponse = zod.array(GetPaintQueueResponseItem);
+
+/**
+ * @summary Mark selected paint steps as in_progress (Pro plan + painter/admin)
+ */
+
+export const PaintQueueBatchStartBody = zod.object({
+  stepIds: zod.array(zod.number()).min(1),
+});
+
+export const PaintQueueBatchStartResponse = zod.object({
+  started: zod.number().optional(),
+  alreadyStarted: zod.number().optional(),
+});
+
+/**
+ * @summary Complete paint steps and log WIP locations (Pro plan + painter/admin)
+ */
+
+export const PaintQueueBatchCompleteBody = zod.object({
+  stepIds: zod.array(zod.number()).min(1),
+  locations: zod
+    .array(
+      zod.object({
+        stepId: zod.number(),
+        locationType: zod.enum(["warehouse", "zone", "with_worker"]),
+        locationValue: zod.string().optional(),
+      }),
+    )
+    .optional(),
+});
+
+export const PaintQueueBatchCompleteResponse = zod.object({
+  completed: zod.number().optional(),
+});
+
+/**
+ * @summary Steps completed in last 7 days with no WIP location logged (supervisor/admin)
+ */
+export const GetSupervisorUnloggedPartsResponseItem = zod.object({
+  stepId: zod.number(),
+  stepName: zod.string(),
+  itemName: zod.string(),
+  projectId: zod.number(),
+  projectName: zod.string(),
+  deadline: zod.coerce.date(),
+  lastWorker: zod.string().nullish(),
+  completedAt: zod.coerce.date().nullish(),
+});
+export const GetSupervisorUnloggedPartsResponse = zod.array(
+  GetSupervisorUnloggedPartsResponseItem,
+);

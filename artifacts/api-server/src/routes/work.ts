@@ -2429,14 +2429,23 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
     const procedureId = Number(req.params.procedureId);
     const userId = req.session.userId!;
 
-    // Optional WIP location submitted alongside the stop
-    const wipParsed = z.object({
+    // Accept multiple part locations (partLocations array) or legacy single wipLocation.
+    // Multiple placements allow one step's output to be split across several storage spots.
+    const locParsed = z.object({
+      partLocations: z.array(z.object({
+        locationType: z.enum(["warehouse", "zone", "with_worker"]),
+        locationValue: z.string().optional(),
+      })).optional(),
       wipLocation: z.object({
         locationType: z.enum(["warehouse", "zone", "with_worker"]),
         locationValue: z.string().optional(),
       }).optional(),
     }).safeParse(req.body);
-    const wipLocation = wipParsed.success ? wipParsed.data.wipLocation : undefined;
+    const locEntries = locParsed.success
+      ? (locParsed.data.partLocations?.length
+          ? locParsed.data.partLocations
+          : locParsed.data.wipLocation ? [locParsed.data.wipLocation] : [])
+      : [];
 
     const [activeLog] = await db.select().from(workTimeLogsTable).where(
       and(eq(workTimeLogsTable.userId, userId), eq(workTimeLogsTable.stepId, procedureId), isNull(workTimeLogsTable.endTime))
@@ -2452,18 +2461,19 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
       .set({ status: "completed", totalTimeSeconds: sql`${workItemStepsTable.totalTimeSeconds} + ${durationSeconds}` })
       .where(eq(workItemStepsTable.id, procedureId)).returning();
 
-    // Atomically log part location if provided with the stop call.
-    // Writes to part_locations (dedicated model with itemId + notes semantics).
-    if (wipLocation && proc?.itemId) {
-      await db.insert(partLocationsTable).values({
-        stepId: procedureId,
-        itemId: proc.itemId,
-        locationType: wipLocation.locationType,
-        locationValue: wipLocation.locationValue ?? null,
-        setByUserId: userId,
-      }).catch((err: unknown) => {
-        req.log.warn({ err, stepId: procedureId }, "Failed to save part location on stop");
-      });
+    // Insert one part_locations row per placement entry.
+    if (locEntries.length > 0 && proc?.itemId) {
+      for (const loc of locEntries) {
+        await db.insert(partLocationsTable).values({
+          stepId: procedureId,
+          itemId: proc.itemId,
+          locationType: loc.locationType,
+          locationValue: loc.locationValue ?? null,
+          setByUserId: userId,
+        }).catch((err: unknown) => {
+          req.log.warn({ err, stepId: procedureId }, "Failed to save part location on stop");
+        });
+      }
     }
 
     res.json({ log, procedure: proc });
@@ -3360,11 +3370,36 @@ router.get("/paint-queue", requirePainterOrAdmin, requirePro, async (req, res) =
       if (!wipMap.has(row.stepId)) wipMap.set(row.stepId, { locationValue: row.locationValue ?? "" });
     }
 
+    // Fetch DAG dependencies to check blockers beyond simple sort-order
+    const allStepIds = allItemSteps.map((s) => s.id);
+    const dagDepsForQueue = allStepIds.length > 0
+      ? await db.select({
+          blockedStepId: stepDependenciesTable.blockedStepId,
+          blockerStepId: stepDependenciesTable.blockerStepId,
+        })
+          .from(stepDependenciesTable)
+          .where(and(
+            inArray(stepDependenciesTable.blockedStepId, allStepIds),
+            eq(stepDependenciesTable.companyId, companyId),
+          ))
+      : [];
+    const dagBlockerMap = new Map<number, number[]>(); // blockedStepId → blockerStepIds
+    for (const dep of dagDepsForQueue) {
+      if (!dagBlockerMap.has(dep.blockedStepId)) dagBlockerMap.set(dep.blockedStepId, []);
+      dagBlockerMap.get(dep.blockedStepId)!.push(dep.blockerStepId);
+    }
+    const stepStatusMap = new Map(allItemSteps.map((s) => [s.id, s.status]));
+
     const readyItems = candidates
       .map(({ step, item, project }) => {
         const siblings = itemStepMap.get(item.id) ?? [];
         const myIndex = siblings.findIndex((s) => s.id === step.id);
-        const isReady = myIndex <= 0 || siblings.slice(0, myIndex).every((s) => s.status === "completed");
+        // Check 1: all prior steps by sortOrder must be completed
+        const priorDone = myIndex <= 0 || siblings.slice(0, myIndex).every((s) => s.status === "completed");
+        // Check 2: all DAG blockers must be completed
+        const dagBlockers = dagBlockerMap.get(step.id) ?? [];
+        const dagDone = dagBlockers.every((bid) => stepStatusMap.get(bid) === "completed");
+        const isReady = priorDone && dagDone;
         if (!isReady) return null;
         return {
           id: step.id,
@@ -3439,7 +3474,7 @@ router.post("/paint-queue/batch-start", requirePainterOrAdmin, requirePro, async
       res.status(400).json({ error: `${alreadyDone.length} step(s) are already completed` }); return;
     }
 
-    // Verify all prior steps for each item are completed
+    // Verify all prior steps (by sortOrder) and DAG blockers for each item are completed
     const itemIds = [...new Set(verified.map((s) => s.itemId))];
     const allItemSteps = await db.select({
       id: workItemStepsTable.id,
@@ -3448,11 +3483,36 @@ router.post("/paint-queue/batch-start", requirePainterOrAdmin, requirePro, async
       status: workItemStepsTable.status,
     }).from(workItemStepsTable).where(inArray(workItemStepsTable.itemId, itemIds));
 
+    // Load DAG blockers for all steps in affected items
+    const allIds = allItemSteps.map((s) => s.id);
+    const dagDepsStart = allIds.length > 0
+      ? await db.select({
+          blockedStepId: stepDependenciesTable.blockedStepId,
+          blockerStepId: stepDependenciesTable.blockerStepId,
+        })
+          .from(stepDependenciesTable)
+          .where(and(
+            inArray(stepDependenciesTable.blockedStepId, allIds),
+            eq(stepDependenciesTable.companyId, companyId),
+          ))
+      : [];
+    const dagStartMap = new Map<number, number[]>();
+    for (const dep of dagDepsStart) {
+      if (!dagStartMap.has(dep.blockedStepId)) dagStartMap.set(dep.blockedStepId, []);
+      dagStartMap.get(dep.blockedStepId)!.push(dep.blockerStepId);
+    }
+    const startStatusMap = new Map(allItemSteps.map((s) => [s.id, s.status]));
+
     for (const step of verified) {
       const siblings = allItemSteps.filter((s) => s.itemId === step.itemId && s.sortOrder < step.sortOrder);
       const incomplete = siblings.filter((s) => s.status !== "completed");
       if (incomplete.length > 0) {
         res.status(400).json({ error: `Cannot start: prior steps not yet completed for "${step.name}"` }); return;
+      }
+      const dagBlockers = dagStartMap.get(step.id) ?? [];
+      const dagIncomplete = dagBlockers.filter((bid) => startStatusMap.get(bid) !== "completed");
+      if (dagIncomplete.length > 0) {
+        res.status(400).json({ error: `Cannot start: upstream dependencies not yet completed for "${step.name}"` }); return;
       }
     }
 
