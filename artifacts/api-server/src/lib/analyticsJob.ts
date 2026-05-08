@@ -22,7 +22,11 @@ export async function runAnalyticsJob(
   const dataSummary = {
     efficiencyByMonth: charts.efficiencyByMonth.slice(-3),
     topProcedures: charts.topProcedures,
-    bottlenecks: charts.bottlenecks.slice(0, 5),
+    bottleneckHeatmap: {
+      stepNames: charts.bottleneckHeatmap.stepNames,
+      topCells: charts.bottleneckHeatmap.cells.slice(0, 10),
+      maxWaitMinutes: charts.bottleneckHeatmap.maxWait,
+    },
     deadlineAccuracy: charts.deadlineAccuracy.slice(-3),
   };
 
@@ -42,9 +46,9 @@ Data:
 ${JSON.stringify(dataSummary, null, 2)}
 
 Notes:
-- efficiencyByMonth: average minutes per step type per month (0 means no data)
-- bottlenecks: steps sorted by avg actual time spent in minutes (highest = slowest)
-- deadlineAccuracy: per month, total projects vs completed, rate = % on time
+- efficiencyByMonth: average active-work minutes per step type per month (0 = no data)
+- bottleneckHeatmap: wait-time before pickup per step/month; topCells sorted by worst wait; maxWaitMinutes = scale max
+- deadlineAccuracy: per month — total projects, completed with completed_at stamp, onTime = completed_at ≤ deadline, rate = onTime/total %
 
 Respond ONLY with a valid JSON array (no markdown, no explanation):
 [

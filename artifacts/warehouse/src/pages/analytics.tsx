@@ -10,9 +10,11 @@ import {
   AlertTriangle, Lightbulb, Zap, Calendar,
 } from "lucide-react";
 import {
-  ResponsiveContainer, LineChart, Line, BarChart, Bar,
+  ResponsiveContainer, LineChart, Line,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 } from "recharts";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface AnalyticsInsight {
   id: string;
@@ -22,16 +24,19 @@ interface AnalyticsInsight {
   metric: string;
 }
 
-interface BottleneckRow { name: string; avgMinutes: number; count: number }
+interface BottleneckHeatmapCell { stepName: string; month: string; avgWaitMinutes: number; count: number }
+interface BottleneckHeatmapData { stepNames: string[]; months: string[]; cells: BottleneckHeatmapCell[]; maxWait: number }
 interface EfficiencyMonthRow { month: string; [key: string]: number | string }
-interface DeadlineRow { month: string; total: number; completed: number; rate: number }
+interface DeadlineRow { month: string; total: number; completed: number; onTime: number; rate: number }
 
 interface ChartsData {
   efficiencyByMonth: EfficiencyMonthRow[];
   topProcedures: string[];
-  bottlenecks: BottleneckRow[];
+  bottleneckHeatmap: BottleneckHeatmapData;
   deadlineAccuracy: DeadlineRow[];
 }
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const LINE_COLORS = ["#f97316", "#3b82f6", "#10b981", "#8b5cf6", "#ec4899"];
 
@@ -41,6 +46,8 @@ const CATEGORY_META: Record<string, { icon: React.ReactNode; color: string; bg: 
   deadline: { icon: <Target className="h-4 w-4" />, color: "text-rose-700", bg: "bg-rose-50 border-rose-200" },
   worker: { icon: <Zap className="h-4 w-4" />, color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
 };
+
+// ─── API ─────────────────────────────────────────────────────────────────────
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -53,6 +60,88 @@ async function apiFetch(url: string, opts?: RequestInit) {
   }
   return res.json();
 }
+
+// ─── Heatmap ─────────────────────────────────────────────────────────────────
+
+function heatColor(val: number, max: number): string {
+  if (!val || max === 0) return "transparent";
+  const ratio = Math.min(val / max, 1);
+  if (ratio < 0.25) return "#dcfce7"; // green-100
+  if (ratio < 0.5) return "#fef9c3"; // yellow-100
+  if (ratio < 0.75) return "#fed7aa"; // orange-200
+  return "#fecaca"; // red-200
+}
+
+function heatTextColor(val: number, max: number): string {
+  const ratio = max > 0 ? val / max : 0;
+  if (ratio < 0.25) return "#166534";
+  if (ratio < 0.5) return "#854d0e";
+  if (ratio < 0.75) return "#9a3412";
+  return "#991b1b";
+}
+
+function BottleneckHeatmap({ data }: { data: BottleneckHeatmapData }) {
+  const getCell = (stepName: string, month: string) =>
+    data.cells.find((c) => c.stepName === stepName && c.month === month);
+
+  if (data.stepNames.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-muted-foreground gap-2">
+        <Clock className="h-8 w-8 text-muted-foreground/50" />
+        <p>No wait-time data yet. Chart fills as steps are picked up between work sessions.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-xs border-separate border-spacing-0.5">
+        <thead>
+          <tr>
+            <th className="text-left pl-1 pr-2 py-1 text-muted-foreground font-medium w-28 min-w-28">Step</th>
+            {data.months.map((m) => (
+              <th key={m} className="text-center px-1 py-1 text-muted-foreground font-medium min-w-14 whitespace-nowrap">{m}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.stepNames.map((step) => (
+            <tr key={step}>
+              <td className="pl-1 pr-2 py-1 font-medium text-muted-foreground truncate max-w-28" title={step}>{step}</td>
+              {data.months.map((month) => {
+                const cell = getCell(step, month);
+                const bg = cell ? heatColor(cell.avgWaitMinutes, data.maxWait) : "transparent";
+                const color = cell ? heatTextColor(cell.avgWaitMinutes, data.maxWait) : "#94a3b8";
+                return (
+                  <td key={month} className="text-center px-1 py-0.5">
+                    <div
+                      className="rounded px-1 py-1 text-[10px] font-semibold whitespace-nowrap"
+                      style={{ background: bg, color }}
+                      title={cell ? `${cell.avgWaitMinutes}m avg wait · ${cell.count} steps` : "No data"}
+                    >
+                      {cell ? `${cell.avgWaitMinutes}m` : "—"}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-3 mt-3 px-1 text-[10px] text-muted-foreground">
+        <span>Wait time:</span>
+        {[["Low", "#dcfce7", "#166534"], ["Med", "#fef9c3", "#854d0e"], ["High", "#fed7aa", "#9a3412"], ["Critical", "#fecaca", "#991b1b"]].map(([label, bg, color]) => (
+          <span key={label} className="flex items-center gap-1">
+            <span className="inline-block w-5 h-3 rounded text-[9px] font-bold flex items-center justify-center" style={{ background: bg, color }}></span>
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function InsightCard({ insight, onDismiss }: { insight: AnalyticsInsight; onDismiss: (id: string) => void }) {
   const meta = CATEGORY_META[insight.category] ?? CATEGORY_META.efficiency;
@@ -95,15 +184,15 @@ function PaywallState() {
         <div className="space-y-2">
           <p className="font-black text-lg">Pro feature</p>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            AI Analytics surfaces patterns in your production data — bottlenecks, quote accuracy, deadline trends — as plain-language insight cards.
+            AI Analytics surfaces patterns in your production data — bottlenecks, wait times, deadline trends — as plain-language insight cards.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 text-xs text-left max-w-xs mx-auto">
           {[
             "AI-generated insight cards updated weekly",
             "Efficiency over time per procedure type",
-            "Bottleneck analysis to find your slowest steps",
-            "Deadline hit-rate trend over 6 months",
+            "Bottleneck wait-time heatmap (step × month)",
+            "Deadline accuracy trend over 6 months",
           ].map((f) => (
             <div key={f} className="flex items-start gap-2">
               <Lightbulb className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
@@ -127,7 +216,7 @@ function EmptySnapshotState({ onGenerate, loading }: { onGenerate: () => void; l
       </div>
       <div className="space-y-1">
         <p className="font-bold">No analytics yet</p>
-        <p className="text-sm text-muted-foreground">Generate your first AI analytics report. This analyses your production history and generates insight cards.</p>
+        <p className="text-sm text-muted-foreground">Generate your first AI analytics report from your production history.</p>
       </div>
       <Button onClick={onGenerate} disabled={loading} className="gap-2">
         {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
@@ -136,6 +225,8 @@ function EmptySnapshotState({ onGenerate, loading }: { onGenerate: () => void; l
     </div>
   );
 }
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
@@ -157,14 +248,20 @@ export default function AnalyticsPage() {
     data: insightsData,
     isLoading: insightsLoading,
     error: insightsError,
-  } = useQuery<{ insights: AnalyticsInsight[]; snapshotAt: string | null; triggeredBy: string | null }, Error & { status?: number; planRequired?: string }>({
+  } = useQuery<
+    { insights: AnalyticsInsight[]; snapshotAt: string | null; triggeredBy: string | null },
+    Error & { status?: number; planRequired?: string }
+  >({
     queryKey: ["/api/analytics/insights"],
     queryFn: () => apiFetch("/api/analytics/insights"),
     enabled: isAdmin,
     retry: false,
   });
 
-  const { data: chartsData, isLoading: chartsLoading } = useQuery<{ charts: ChartsData | null; snapshotAt: string | null }>({
+  const { data: chartsData, isLoading: chartsLoading } = useQuery<{
+    charts: ChartsData | null;
+    snapshotAt: string | null;
+  }>({
     queryKey: ["/api/analytics/charts"],
     queryFn: () => apiFetch("/api/analytics/charts"),
     enabled: isAdmin && !!insightsData?.snapshotAt,
@@ -192,8 +289,7 @@ export default function AnalyticsPage() {
     );
   }
 
-  // Plan gate — 403 with planRequired
-  if ((insightsError as (Error & { status?: number; planRequired?: string }) | null)?.planRequired === "pro") {
+  if ((insightsError as (Error & { planRequired?: string }) | null)?.planRequired === "pro") {
     return <PaywallState />;
   }
 
@@ -216,6 +312,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="p-4 space-y-6 pb-24">
+      {/* Header */}
       <div className="px-1 pt-2 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -248,7 +345,7 @@ export default function AnalyticsPage() {
         />
       ) : (
         <>
-          {/* Insight cards */}
+          {/* AI Insight Cards */}
           {visibleInsights.length > 0 && (
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
@@ -276,7 +373,6 @@ export default function AnalyticsPage() {
             </div>
           )}
 
-          {/* Charts */}
           {chartsLoading && (
             <div className="space-y-4">
               <Skeleton className="h-56 rounded-xl" />
@@ -286,14 +382,14 @@ export default function AnalyticsPage() {
 
           {charts && (
             <div className="space-y-6">
-              {/* Efficiency over time */}
+              {/* Efficiency Over Time */}
               {charts.efficiencyByMonth.length > 0 && charts.topProcedures.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary" />
                       Efficiency Over Time
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">avg minutes per step type</span>
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">avg active minutes per step</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -324,53 +420,28 @@ export default function AnalyticsPage() {
                 </Card>
               )}
 
-              {/* Bottleneck analysis */}
-              {charts.bottlenecks.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-orange-500" />
-                      Bottleneck Analysis
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">avg time per step (completed)</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart
-                        data={charts.bottlenecks.slice(0, 8)}
-                        layout="vertical"
-                        margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" tick={{ fontSize: 10 }} unit="m" />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          tick={{ fontSize: 9 }}
-                          width={80}
-                        />
-                        <Tooltip
-                          formatter={(v: number, _name, entry) => [
-                            `${v}m avg · ${(entry.payload as BottleneckRow).count} completed`,
-                            "Avg time",
-                          ]}
-                          contentStyle={{ fontSize: 11, borderRadius: 8 }}
-                        />
-                        <Bar dataKey="avgMinutes" fill="#f97316" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Bottleneck Wait-Time Heatmap */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-500" />
+                    Bottleneck Heatmap
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">avg wait before pickup, per step &times; month</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <BottleneckHeatmap data={charts.bottleneckHeatmap} />
+                </CardContent>
+              </Card>
 
-              {/* Deadline accuracy */}
+              {/* Deadline Accuracy */}
               {charts.deadlineAccuracy.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-blue-500" />
                       Deadline Accuracy
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">% projects completed on time</span>
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">% completed on or before deadline</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -386,10 +457,10 @@ export default function AnalyticsPage() {
                         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                         <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} unit="%" />
                         <Tooltip
-                          formatter={(v: number, _name, entry) => [
-                            `${v}% (${(entry.payload as DeadlineRow).completed}/${(entry.payload as DeadlineRow).total})`,
-                            "On-time rate",
-                          ]}
+                          formatter={(_v, _name, entry) => {
+                            const d = entry.payload as DeadlineRow;
+                            return [`${d.rate}% (${d.onTime} on-time / ${d.total} total)`, "On-time rate"];
+                          }}
                           contentStyle={{ fontSize: 11, borderRadius: 8 }}
                         />
                         <Area
@@ -407,12 +478,16 @@ export default function AnalyticsPage() {
               )}
 
               {/* No chart data yet */}
-              {charts.bottlenecks.length === 0 && charts.deadlineAccuracy.length === 0 && charts.efficiencyByMonth.length === 0 && (
-                <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
-                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Not enough production history yet for charts. Keep logging work — charts will appear as data accumulates.</p>
-                </div>
-              )}
+              {charts.bottleneckHeatmap.stepNames.length === 0 &&
+                charts.deadlineAccuracy.length === 0 &&
+                charts.efficiencyByMonth.length === 0 && (
+                  <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
+                    <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Not enough production history yet for charts. Keep logging work — charts will appear as data accumulates.
+                    </p>
+                  </div>
+                )}
             </div>
           )}
         </>

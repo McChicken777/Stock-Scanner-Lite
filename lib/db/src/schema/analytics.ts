@@ -9,28 +9,39 @@ export interface AnalyticsInsight {
   metric: string;
 }
 
-export interface BottleneckRow {
-  name: string;
-  avgMinutes: number;
-  count: number;
-}
-
 export interface EfficiencyMonthRow {
   month: string;
   [key: string]: number | string;
+}
+
+/** One cell in the bottleneck wait-time heatmap (step × month). */
+export interface BottleneckHeatmapCell {
+  stepName: string;
+  month: string;
+  avgWaitMinutes: number;
+  count: number;
+}
+
+/** Full heatmap payload: step names (y), months (x), cells, and scale max. */
+export interface BottleneckHeatmapData {
+  stepNames: string[];
+  months: string[];
+  cells: BottleneckHeatmapCell[];
+  maxWait: number;
 }
 
 export interface DeadlineRow {
   month: string;
   total: number;
   completed: number;
+  onTime: number;
   rate: number;
 }
 
 export interface AnalyticsChartsData {
   efficiencyByMonth: EfficiencyMonthRow[];
   topProcedures: string[];
-  bottlenecks: BottleneckRow[];
+  bottleneckHeatmap: BottleneckHeatmapData;
   deadlineAccuracy: DeadlineRow[];
 }
 
@@ -43,7 +54,7 @@ export const analyticsSnapshotsTable = pgTable("analytics_snapshots", {
   charts: jsonb("charts").notNull().$type<AnalyticsChartsData>().$defaultFn(() => ({
     efficiencyByMonth: [],
     topProcedures: [],
-    bottlenecks: [],
+    bottleneckHeatmap: { stepNames: [], months: [], cells: [], maxWait: 0 },
     deadlineAccuracy: [],
   })),
 });

@@ -90,11 +90,13 @@ router.post("/logout", (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   // Refresh features from DB each time /me is called
   let features = req.session.features;
+  let plan: "basic" | "pro" | null = null;
   if (req.session.companyId) {
     const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.session.companyId));
     if (company) {
       features = company.features as CompanyFeatures;
       req.session.features = features;
+      plan = company.plan ?? null;
     }
   }
 
@@ -108,6 +110,7 @@ router.get("/me", requireAuth, async (req, res) => {
     isSupervisor: meUser?.isSupervisor ?? false,
     companyId: req.session.companyId,
     features,
+    plan,
   });
 });
 

@@ -2155,6 +2155,8 @@ router.put("/projects/:id", requireAdmin, async (req, res) => {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const updates: Record<string, unknown> = { ...parsed.data };
     if (parsed.data.deadline) updates.deadline = new Date(parsed.data.deadline);
+    if (parsed.data.status === "completed") updates.completedAt = new Date();
+    if (parsed.data.status === "in_progress") updates.completedAt = null;
     const [project] = await db.update(workProjectsTable).set(updates as never)
       .where(and(eq(workProjectsTable.id, id), eq(workProjectsTable.companyId, companyId))).returning();
     if (!project) { res.status(404).json({ error: "Not found" }); return; }

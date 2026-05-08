@@ -43,6 +43,7 @@ export const workProjectsTable = pgTable("work_projects", {
   requiresExternalParts: boolean("requires_external_parts").notNull().default(false),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
 });
 
 // Items within a project (copied from templates at creation time)

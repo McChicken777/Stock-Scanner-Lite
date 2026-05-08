@@ -225,15 +225,17 @@ function AdminBottomNav() {
 
           <div className="space-y-1 mt-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work Setup</p>
-            <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">AI Analytics</p>
-                  <p className="text-xs text-muted-foreground">Production insights & trends (Pro)</p>
+            {user?.plan === "pro" && (
+              <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
+                <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                  <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">AI Analytics</p>
+                    <p className="text-xs text-muted-foreground">Production insights &amp; trends</p>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            )}
             <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />

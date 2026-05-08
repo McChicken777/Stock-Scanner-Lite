@@ -16,6 +16,7 @@ export interface AuthUser {
   isSupervisor: boolean;
   companyId: number | null;
   features: CompanyFeatures;
+  plan: "basic" | "pro" | null;
 }
 
 interface AuthContextValue {
@@ -31,6 +32,8 @@ const defaultFeatures: CompanyFeatures = {
   progress_tracking: true, deadline_alerts: true, time_tracking: true,
 };
 
+const defaultPlan = null as "basic" | "pro" | null;
+
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -41,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const r = await fetch("/api/auth/me", { credentials: "include" });
     if (r.ok) {
       const data = await r.json();
-      setUser({ ...data, features: data.features ?? defaultFeatures });
+      setUser({ ...data, features: data.features ?? defaultFeatures, plan: data.plan ?? defaultPlan });
     } else {
       setUser(null);
     }
@@ -63,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(data.error || "Login failed");
     }
     const data = await res.json();
-    setUser({ ...data, features: data.features ?? defaultFeatures });
+    setUser({ ...data, features: data.features ?? defaultFeatures, plan: data.plan ?? defaultPlan });
   };
 
   const logout = async () => {
