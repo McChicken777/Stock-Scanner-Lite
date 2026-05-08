@@ -1706,18 +1706,24 @@ async function getProjectWithItems(projectId: number) {
     }));
   }
 
-  // ── DAG: fetch step dependencies and compute blocked state per step ───────
-  // stepNameMap: stepId → name (for display)
-  // stepStatusMap: stepId → status (for checking completion)
+  // ── DAG: fetch step dependencies and compute blocked state per step ─────────
+  // Only computed for Pro-tier companies; free/basic companies get all steps unblocked.
+  const [projectCompany] = await db
+    .select({ plan: companiesTable.plan })
+    .from(companiesTable)
+    .where(eq(companiesTable.id, project.companyId!));
+  const isProProject = projectCompany?.plan === "pro";
+
+  const dagBlockerIdsMap = new Map<number, number[]>(); // blockedStepId → [blockerStepIds]
   const stepNameMap = new Map<number, string>();
   const stepStatusMap = new Map<number, string>();
-  for (const p of procedures) {
-    stepNameMap.set(p.id, p.name);
-    stepStatusMap.set(p.id, p.status);
-  }
-  // dagBlockerIdsMap: blockedStepId → [blockerStepId, ...] (all declared blockers)
-  const dagBlockerIdsMap = new Map<number, number[]>();
-  if (itemIds.length > 0) {
+
+  if (isProProject && itemIds.length > 0) {
+    // Seed name/status map from this project's own procedures
+    for (const p of procedures) {
+      stepNameMap.set(p.id, p.name);
+      stepStatusMap.set(p.id, p.status);
+    }
     const allStepIds = procedures.map((p) => p.id);
     if (allStepIds.length > 0) {
       const dagDeps = await db.select().from(stepDependenciesTable)
@@ -1725,7 +1731,7 @@ async function getProjectWithItems(projectId: number) {
           inArray(stepDependenciesTable.blockedStepId, allStepIds),
           eq(stepDependenciesTable.companyId, project.companyId!),
         ));
-      // Fetch names + statuses for blocker steps that live in other items
+      // Fetch names + statuses for blocker steps that live in other items (cross-item)
       const foreignBlockerIds = [...new Set(
         dagDeps.map((d) => d.blockerStepId).filter((id) => !stepNameMap.has(id)),
       )];
@@ -1747,6 +1753,9 @@ async function getProjectWithItems(projectId: number) {
 
   const itemsWithProcs = items.map((item) => {
     const procs = procedures.filter((p) => p.itemId === item.id).map((p) => {
+      // Free/basic plan: no DAG blocking — all steps are unblocked
+      if (!isProProject) return { ...p, dagBlockerNames: [] as string[], dagBlocked: false };
+
       const allBlockerIds = dagBlockerIdsMap.get(p.id) ?? [];
       // Only blockers that are NOT yet completed contribute to the blocked state
       const incompleteBlockerIds = allBlockerIds.filter(

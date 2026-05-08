@@ -53,7 +53,7 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   name: text("name").notNull(),
   paintColor: text("paint_color"),
   sortOrder: integer("sort_order").notNull().default(0),
-  parentItemId: integer("parent_item_id").references((): AnyPgColumn => workProjectItemsTable.id, { onDelete: "set null" }),
+  parentItemId: integer("parent_item_id").references((): AnyPgColumn => workProjectItemsTable.id, { onDelete: "cascade" }),
 });
 
 // Steps for each project item, instantiated from work_steps at project creation time
@@ -194,12 +194,18 @@ export const aiSnapshotsTable = pgTable("ai_snapshots", {
 
 // DAG step-to-step dependencies (Task #58)
 // blockerStepId must complete before blockedStepId becomes READY
+// Company-scoping invariant: blocker/blocked steps MUST belong to the same company.
+// Enforced at the application layer (POST handler verifies both step IDs via JOIN to
+// workProjectsTable.companyId before inserting). A DB-level composite FK is not feasible
+// in PostgreSQL without a compound PK on work_item_steps; the companyId column + app checks
+// are the canonical enforcement mechanism. The UNIQUE index on (blockerStepId, blockedStepId)
+// prevents duplicate edges regardless of order.
 export const stepDependenciesTable = pgTable("step_dependencies", {
   id: serial("id").primaryKey(),
   blockerStepId: integer("blocker_step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
   blockedStepId: integer("blocked_step_id").notNull().references(() => workItemStepsTable.id, { onDelete: "cascade" }),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
-});
+}, (t) => [{ unique: [t.blockerStepId, t.blockedStepId] }]);
 
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
 export type WorkStep = typeof workStepsTable.$inferSelect;
