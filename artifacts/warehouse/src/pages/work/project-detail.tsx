@@ -50,6 +50,16 @@ interface ProjectItem {
   nextUp: NextUp | null;
 }
 
+interface StepDep {
+  id: number;
+  blockerStepId: number;
+  blockedStepId: number;
+  blockerName: string;
+  blockedName: string;
+  blockerStatus: "not_started" | "in_progress" | "completed";
+  blockedStatus: "not_started" | "in_progress" | "completed";
+}
+
 interface InboundRecord {
   id: number;
   status: "expected" | "arrived" | "stored" | "in_production";
@@ -509,6 +519,17 @@ export default function WorkProjectDetailPage() {
     enabled: editMode,
   });
 
+  const { data: stepDeps = [] } = useQuery<StepDep[]>({
+    queryKey: [`/api/work/projects/${projectId}/step-dependencies`],
+    queryFn: async () => {
+      const r = await fetch(`/api/work/projects/${projectId}/step-dependencies`, { credentials: "include" });
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!projectId,
+    refetchInterval: editMode ? false : 10000,
+  });
+
   const { data: originQuotes = [] } = useQuery<Array<{ id: number; quoteNumber: string }>>({
     queryKey: [`/api/quotes?workProjectId=${projectId}`],
     queryFn: async () => {
@@ -792,6 +813,57 @@ export default function WorkProjectDetailPage() {
             return <>{topLevel.map((item) => renderItem(item))}</>;
           })()}
         </div>
+
+        {/* Step dependency visualization (read-only, pro-tier) */}
+        {stepDeps.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <ArrowRight className="h-3.5 w-3.5" /> Step Dependencies
+            </p>
+            <div className="rounded-xl border bg-muted/30 divide-y divide-border overflow-hidden">
+              {stepDeps.map((dep) => (
+                <div key={dep.id} className="flex items-center gap-2 px-3 py-2">
+                  {/* Blocker step pill */}
+                  <span className={cn(
+                    "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full shrink-0 max-w-[38%] truncate",
+                    dep.blockerStatus === "completed"
+                      ? "bg-green-100 text-green-800"
+                      : dep.blockerStatus === "in_progress"
+                      ? "bg-orange-100 text-orange-800"
+                      : "bg-muted text-muted-foreground",
+                  )}>
+                    {dep.blockerStatus === "completed"
+                      ? <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      : dep.blockerStatus === "in_progress"
+                      ? <Play className="h-3 w-3 shrink-0" />
+                      : <Circle className="h-3 w-3 shrink-0" />}
+                    <span className="truncate">{dep.blockerName}</span>
+                  </span>
+
+                  {/* Arrow */}
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+
+                  {/* Blocked step pill */}
+                  <span className={cn(
+                    "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full shrink-0 max-w-[38%] truncate",
+                    dep.blockedStatus === "completed"
+                      ? "bg-green-100 text-green-800"
+                      : dep.blockerStatus !== "completed"
+                      ? "bg-red-100 text-red-800"
+                      : "bg-muted text-muted-foreground",
+                  )}>
+                    {dep.blockedStatus === "completed"
+                      ? <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      : dep.blockerStatus !== "completed"
+                      ? <Lock className="h-3 w-3 shrink-0" />
+                      : <Circle className="h-3 w-3 shrink-0" />}
+                    <span className="truncate">{dep.blockedName}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {isAdmin && project.status === "in_progress" && project.progress === 100 && !editMode && (
           <Button
