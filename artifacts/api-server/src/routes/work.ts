@@ -2098,18 +2098,53 @@ router.get("/projects", requireAuth, async (req, res) => {
         const itemIds = items.map((i) => i.id);
         let totalProcedures = 0;
         let completedProcedures = 0;
+        let inProgressCount = 0;
+        let blockedCount = 0;
+        let activeWorkers: string[] = [];
+
         if (itemIds.length > 0) {
           const procs = await db.select().from(workItemStepsTable).where(
             sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`,
           );
           totalProcedures = procs.length;
           completedProcedures = procs.filter((p) => p.status === "completed").length;
+          inProgressCount = procs.filter((p) => p.status === "in_progress").length;
+          const procIds = procs.map((p) => p.id);
+
+          if (procIds.length > 0) {
+            // Active workers: users with open time log sessions on this project's steps
+            const openLogs = await db.select({ username: usersTable.username })
+              .from(workTimeLogsTable)
+              .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+              .where(and(
+                isNull(workTimeLogsTable.endTime),
+                inArray(workTimeLogsTable.stepId, procIds),
+              ));
+            activeWorkers = [...new Set(openLogs.map((l) => l.username))];
+
+            // Blocked steps: not_started steps that have at least one incomplete blocker
+            const deps = await db.select({
+              blockedStepId: stepDependenciesTable.blockedStepId,
+              blockerStatus: workItemStepsTable.status,
+            })
+              .from(stepDependenciesTable)
+              .innerJoin(workItemStepsTable, eq(stepDependenciesTable.blockerStepId, workItemStepsTable.id))
+              .where(inArray(stepDependenciesTable.blockedStepId, procIds));
+            const blockedIds = new Set(
+              deps.filter((d) => d.blockerStatus !== "completed").map((d) => d.blockedStepId)
+            );
+            const notStarted = new Set(procs.filter((p) => p.status === "not_started").map((p) => p.id));
+            blockedCount = [...blockedIds].filter((id) => notStarted.has(id)).length;
+          }
         }
         return {
           ...project,
           itemCount: items.length,
           totalProcedures,
           completedProcedures,
+          inProgressCount,
+          blockedCount,
+          activeWorkers,
           progress: totalProcedures > 0 ? Math.round((completedProcedures / totalProcedures) * 100) : 0,
         };
       }),
