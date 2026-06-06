@@ -126,35 +126,53 @@ function PriorityPicker({ priority, setPriority }: {
   );
 }
 
-// ─── Make-from-template dialog ──────────────────────────────────────────────
-// Focused job-creation form for a single template. Keeps the boss on the catalog
-// page — no bouncing to the template editor.
-function MakeJobDialog({ template, onClose, onCreated }: {
-  template: Template;
+interface SelectedItem { template: Template; quantity: number }
+
+// ─── Review & create dialog ─────────────────────────────────────────────────
+// Shared job details for one OR MANY selected templates. The boss assembles an
+// order from the catalog (e.g. roll cage + engine protection + step) and this
+// dialog collects the order-level details and creates a single work order.
+function ReviewJobDialog({ items, onClose, onCreated }: {
+  items: SelectedItem[];
   onClose: () => void;
   onCreated: (id: number) => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [name, setName] = useState(template.name);
-  const [quantity, setQuantity] = useState(1);
+  const [name, setName] = useState(items.length === 1 ? items[0].template.name : "");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
   const [paintColor, setPaintColor] = useState("");
   const [requiresExternalParts, setRequiresExternalParts] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [bomConfirmed, setBomConfirmed] = useState(false);
+  // Order multiplier: the per-product quantities form one "package"; this many packages are made.
+  const [packages, setPackages] = useState(1);
 
-  const { data: bom } = useQuery<BomCheckResult>({
-    queryKey: ["/api/work/bom-check", template.id, quantity],
-    queryFn: async () => {
-      const res = await fetch(`/api/work/bom-check?templateId=${template.id}&quantity=${quantity}`, { credentials: "include" });
+  // Effective quantity of a product across the whole order (per-package qty × packages).
+  const effectiveQty = (perPackage: number) => perPackage * packages;
+
+  // Combined stock check across every selected item, scaled by the package multiplier.
+  const { data: bomResults = [] } = useQuery<BomCheckResult[]>({
+    queryKey: ["/api/work/bom-check", items.map((i) => [i.template.id, i.quantity]), packages],
+    queryFn: async () => Promise.all(items.map(async (it) => {
+      const res = await fetch(`/api/work/bom-check?templateId=${it.template.id}&quantity=${effectiveQty(it.quantity)}`, { credentials: "include" });
       if (!res.ok) return { ok: true, shortages: [] };
       return res.json();
-    },
+    })),
   });
-  const shortages = bom?.shortages ?? [];
+
+  // Merge shortages by product so the same part across two items shows once.
+  const shortageMap = new Map<number, BomShortage>();
+  for (const s of bomResults.flatMap((r) => r.shortages)) {
+    const existing = shortageMap.get(s.productId);
+    if (existing) { existing.needed += s.needed; existing.shortfall += s.shortfall; }
+    else shortageMap.set(s.productId, { ...s });
+  }
+  const shortages = [...shortageMap.values()];
+
+  const totalItems = items.reduce((sum, it) => sum + effectiveQty(it.quantity), 0);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -166,7 +184,7 @@ function MakeJobDialog({ template, onClose, onCreated }: {
           paintColor: paintColor || null,
           requiresExternalParts,
           quickJob: false,
-          templateItems: [{ templateId: template.id, quantity }],
+          templateItems: items.map((it) => ({ templateId: it.template.id, quantity: effectiveQty(it.quantity) })),
         }),
       });
       if (!res.ok) {
@@ -196,36 +214,52 @@ function MakeJobDialog({ template, onClose, onCreated }: {
       <DialogContent className="w-[92vw] max-w-md rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" /> Make: {template.name}
+            <Package className="h-5 w-5 text-primary" /> Review work order
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Quantity */}
-          <div className="space-y-2">
-            <Label className="text-sm font-bold">How many?</Label>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 bg-background border-2 border-primary/20 rounded-lg">
-                <button type="button" className="p-2 hover:bg-muted rounded-l-lg" onClick={() => setQuantity((q) => Math.max(1, q - 1))}>
-                  <Minus className="h-4 w-4" />
-                </button>
-                <input
-                  type="number" min={1} max={100} value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-                  className="w-14 text-center text-lg font-black bg-transparent outline-none py-1"
-                />
-                <button type="button" className="p-2 hover:bg-muted rounded-r-lg" onClick={() => setQuantity((q) => Math.min(100, q + 1))}>
-                  <Plus className="h-4 w-4" />
-                </button>
+          {/* Items summary */}
+          <div className="rounded-xl border-2 border-border bg-muted/20 p-3 space-y-1.5">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              {items.length} product{items.length !== 1 ? "s" : ""} · {totalItems} item{totalItems !== 1 ? "s" : ""}
+            </p>
+            {items.map((it) => (
+              <div key={it.template.id} className="flex items-center justify-between text-sm">
+                <span className="font-medium truncate">{it.template.name}</span>
+                <span className="text-muted-foreground font-bold flex-shrink-0 ml-2">
+                  ×{it.quantity}
+                  {packages > 1 && <span className="text-primary"> → {effectiveQty(it.quantity)}</span>}
+                </span>
               </div>
-              <span className="text-sm text-muted-foreground">{quantity} item{quantity !== 1 ? "s" : ""}</span>
+            ))}
+          </div>
+
+          {/* Order multiplier */}
+          <div className="flex items-center justify-between rounded-xl border-2 border-border bg-card p-3">
+            <div className="min-w-0">
+              <p className="font-bold text-sm">Packages</p>
+              <p className="text-xs text-muted-foreground">Make this whole set this many times</p>
+            </div>
+            <div className="flex items-center gap-1 bg-background border-2 border-primary/20 rounded-lg flex-shrink-0">
+              <button type="button" className="p-2 hover:bg-muted rounded-l-lg" onClick={() => setPackages((p) => Math.max(1, p - 1))}>
+                <Minus className="h-4 w-4" />
+              </button>
+              <input
+                type="number" min={1} max={100} value={packages}
+                onChange={(e) => setPackages(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
+                className="w-12 text-center text-lg font-black bg-transparent outline-none py-1"
+              />
+              <button type="button" className="p-2 hover:bg-muted rounded-r-lg" onClick={() => setPackages((p) => Math.min(100, p + 1))}>
+                <Plus className="h-4 w-4" />
+              </button>
             </div>
           </div>
 
           {/* Job name */}
           <div className="space-y-2">
             <Label className="text-sm font-bold">Job name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11 border-2 text-base" placeholder="Job name" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11 border-2 text-base" placeholder="e.g. Smith roll cage order" />
           </div>
 
           {/* Deadline */}
@@ -673,7 +707,9 @@ export default function WorkProjectFormPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  const [makeTemplate, setMakeTemplate] = useState<Template | null>(null);
+  // Selected items accumulate as the boss taps catalog cards. Keyed by templateId.
+  const [selected, setSelected] = useState<Record<number, number>>({});
+  const [reviewing, setReviewing] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
 
   const { data: templates = [], isLoading } = useQuery({
@@ -692,6 +728,20 @@ export default function WorkProjectFormPage() {
 
   const goToProject = (id: number) => setLocation(`/work/projects/${id}`);
 
+  const toggle = (id: number) =>
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id]; else next[id] = 1;
+      return next;
+    });
+  const setQty = (id: number, qty: number) =>
+    setSelected((prev) => ({ ...prev, [id]: Math.max(1, Math.min(100, qty)) }));
+
+  const selectedItems: SelectedItem[] = templates
+    .filter((t) => selected[t.id])
+    .map((t) => ({ template: t, quantity: selected[t.id] }));
+  const totalItems = selectedItems.reduce((sum, it) => sum + it.quantity, 0);
+
   if (quickOpen) {
     return <QuickJobView roles={roles} onClose={() => setQuickOpen(false)} onCreated={goToProject} />;
   }
@@ -705,7 +755,7 @@ export default function WorkProjectFormPage() {
         <h1 className="text-xl font-bold">What are we making?</h1>
       </div>
 
-      <div className="p-4 space-y-4 pb-24">
+      <div className="p-4 space-y-4 pb-28">
         {/* Quick one-off job */}
         <button
           onClick={() => setQuickOpen(true)}
@@ -722,7 +772,7 @@ export default function WorkProjectFormPage() {
         </button>
 
         <div className="flex items-center justify-between pt-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">From a template</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Tap to add products</h2>
           <Link href="/work/templates" className="text-xs font-bold text-primary hover:underline flex items-center gap-1">
             <Wrench className="h-3 w-3" /> Manage templates
           </Link>
@@ -743,32 +793,74 @@ export default function WorkProjectFormPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                onClick={() => setMakeTemplate(template)}
-                className="rounded-xl border-2 border-border bg-card p-4 flex flex-col items-start text-left hover:border-primary hover:bg-primary/5 transition-all min-h-32"
-              >
-                <div className="h-11 w-11 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                  <Package className="h-5 w-5 text-primary" />
+            {templates.map((template) => {
+              const qty = selected[template.id];
+              const isSelected = !!qty;
+              return (
+                <div
+                  key={template.id}
+                  onClick={() => { if (!isSelected) toggle(template.id); }}
+                  className={cn(
+                    "rounded-xl border-2 p-4 flex flex-col items-start text-left transition-all min-h-32 cursor-pointer",
+                    isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-card hover:border-primary/50",
+                  )}
+                >
+                  <div className="flex items-start justify-between w-full">
+                    <div className="h-11 w-11 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
+                      <Package className="h-5 w-5 text-primary" />
+                    </div>
+                    {isSelected && (
+                      <span className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0">
+                        <Check className="h-4 w-4" />
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-bold text-sm leading-tight line-clamp-2">{template.name}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {template.stepCount ?? 0} step{(template.stepCount ?? 0) !== 1 ? "s" : ""}
+                  </p>
+
+                  {isSelected ? (
+                    <div className="mt-auto pt-2 flex items-center gap-2 w-full" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 bg-background border-2 border-primary/20 rounded-lg">
+                        <button type="button" className="p-1.5 hover:bg-muted rounded-l-lg" onClick={() => setQty(template.id, qty - 1)}>
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="w-7 text-center text-sm font-black">{qty}</span>
+                        <button type="button" className="p-1.5 hover:bg-muted rounded-r-lg" onClick={() => setQty(template.id, qty + 1)}>
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <button type="button" onClick={() => toggle(template.id)} className="p-1 text-muted-foreground hover:text-destructive ml-auto">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="mt-auto pt-2 inline-flex items-center gap-1 text-xs font-bold text-primary">
+                      <Plus className="h-3.5 w-3.5" /> Add
+                    </span>
+                  )}
                 </div>
-                <p className="font-bold text-sm leading-tight line-clamp-2">{template.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {template.stepCount ?? 0} step{(template.stepCount ?? 0) !== 1 ? "s" : ""}
-                </p>
-                <span className="mt-auto pt-2 inline-flex items-center gap-1 text-xs font-bold text-primary">
-                  <FolderPlus className="h-3.5 w-3.5" /> Make
-                </span>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {makeTemplate && (
-        <MakeJobDialog
-          template={makeTemplate}
-          onClose={() => setMakeTemplate(null)}
+      {/* Sticky review bar */}
+      {selectedItems.length > 0 && (
+        <div className="sticky bottom-0 z-20 p-3 bg-background/95 backdrop-blur border-t-2 border-border">
+          <Button onClick={() => setReviewing(true)} className="w-full h-14 font-bold text-base">
+            <FolderPlus className="mr-2 h-5 w-5" />
+            Review &amp; Create · {selectedItems.length} product{selectedItems.length !== 1 ? "s" : ""} ({totalItems} item{totalItems !== 1 ? "s" : ""})
+          </Button>
+        </div>
+      )}
+
+      {reviewing && selectedItems.length > 0 && (
+        <ReviewJobDialog
+          items={selectedItems}
+          onClose={() => setReviewing(false)}
           onCreated={goToProject}
         />
       )}

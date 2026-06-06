@@ -3,7 +3,7 @@ import {
   db, quotesTable, quoteItemsTable, quoteRevisionsTable, customersTable,
   productsTable, workProjectsTable, workProjectItemsTable, workItemStepsTable,
   workTemplatesTable, workStepsTable, productComponentsTable, companiesTable,
-  rolesTable, inboundTable,
+  rolesTable, inboundTable, templateStepDependenciesTable, stepDependenciesTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -504,11 +504,19 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
               .orderBy(productComponentsTable.sortOrder)
           : [];
 
+        // Template step dependencies (Step 1 feature) — copied to each item's live
+        // steps so quote-converted jobs get the same auto-sequencing as catalog jobs.
+        const templateDeps = await tx.select().from(templateStepDependenciesTable)
+          .where(eq(templateStepDependenciesTable.templateId, template.id));
+
         for (let copy = 0; copy < qty; copy++) {
           const itemName = qty > 1 ? `${li.name} #${copy + 1}` : li.name;
           const [pItem] = await tx.insert(workProjectItemsTable).values({
             projectId: project.id, name: itemName, sortOrder: sortOrder++,
           }).returning();
+
+          // Maps top-level templateStepId → this copy's live step id for dependency copying.
+          const topStepMap = new Map<number, number>();
 
           for (const comp of components) {
             const [compProduct] = await tx.select().from(productsTable)
@@ -540,7 +548,7 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
           for (let i = 0; i < topSteps.length; i++) {
             const s = topSteps[i];
             const rid = s.roleId ?? null;
-            await tx.insert(workItemStepsTable).values({
+            const [liveStep] = await tx.insert(workItemStepsTable).values({
               itemId: pItem.id,
               name: s.name,
               sortOrder: 1000 + i,
@@ -548,7 +556,21 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
               batchMode: s.batchMode,
               durationEstimate: s.durationEstimate,
               templateStepId: s.id,
-            });
+            }).returning({ id: workItemStepsTable.id });
+            topStepMap.set(s.id, liveStep.id);
+          }
+
+          // Copy template step dependencies onto this item's live steps.
+          for (const dep of templateDeps) {
+            const liveBlocker = topStepMap.get(dep.blockerStepId);
+            const liveBlocked = topStepMap.get(dep.blockedStepId);
+            if (liveBlocker && liveBlocked) {
+              await tx.insert(stepDependenciesTable).values({
+                blockerStepId: liveBlocker,
+                blockedStepId: liveBlocked,
+                companyId,
+              }).onConflictDoNothing();
+            }
           }
         }
       } else {

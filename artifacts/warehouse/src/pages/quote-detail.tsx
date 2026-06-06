@@ -128,8 +128,27 @@ export default function QuoteDetailPage() {
     onError: (e) => toast({ title: e instanceof Error ? e.message : "Failed", variant: "destructive" }),
   });
 
+  // Templates are matched to quote line items by productId so the convert preview can
+  // flag which items will get production steps vs. land as empty items needing attention.
+  const { data: templates = [] } = useQuery<{ id: number; name: string; productId: number | null }[]>({
+    queryKey: ["/api/work/templates"],
+    queryFn: async () => {
+      const res = await fetch("/api/work/templates", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!id && isAdmin,
+  });
+  const templateProductIds = new Set(
+    templates.filter((t) => t.productId != null).map((t) => t.productId as number),
+  );
+
   if (isLoading) return <div className="p-4"><Skeleton className="h-64 w-full rounded-xl" /></div>;
   if (!quote) return <div className="p-6 text-center text-muted-foreground">Not found</div>;
+
+  const itemsWithoutTemplate = quote.items.filter(
+    (it) => it.productId == null || !templateProductIds.has(it.productId),
+  );
 
   const editable = quote.status !== "converted";
   const customerDisplay = quote.customer?.name ?? quote.customerName ?? "—";
@@ -347,8 +366,43 @@ export default function QuoteDetailPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              This creates a work order from the quoted items. If a quoted item has a matching template, its production steps will be copied in.
+              Review the items below, then create the work order. Items with a matching template get their production steps; others come in empty for you to fill in.
             </p>
+
+            {/* Item preview — lets the boss check the order before confirming */}
+            <div className="rounded-xl border-2 border-border bg-muted/20 p-3 space-y-1.5 max-h-56 overflow-y-auto">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {quote.items.length} item{quote.items.length !== 1 ? "s" : ""} going to production
+              </p>
+              {quote.items.map((it) => {
+                const hasTemplate = it.productId != null && templateProductIds.has(it.productId);
+                const qty = Math.max(1, Math.floor(Number(it.quantity)));
+                return (
+                  <div key={it.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="font-medium truncate">
+                      {qty > 1 && <span className="text-muted-foreground font-bold">{qty}× </span>}
+                      {it.name}
+                    </span>
+                    {hasTemplate ? (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        <Check className="h-3 w-3" /> has steps
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        <X className="h-3 w-3" /> no template
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {itemsWithoutTemplate.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {itemsWithoutTemplate.length} item{itemsWithoutTemplate.length !== 1 ? "s" : ""} ha{itemsWithoutTemplate.length !== 1 ? "ve" : "s"} no matching template and will be created empty — you can add steps after, or set up a template first.
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className="text-sm font-bold">Deadline</Label>
               <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="h-11 border-2" min={new Date().toISOString().split("T")[0]} />
