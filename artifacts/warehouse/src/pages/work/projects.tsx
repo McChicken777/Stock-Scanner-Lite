@@ -168,9 +168,9 @@ export default function WorkProjectsPage() {
                               )}
                             </div>
                           </div>
-                          {project.activeWorkers.length > 0 && (
+                          {(project.activeWorkers ?? []).length > 0 && (
                             <div className="flex items-center gap-1 flex-wrap">
-                              {project.activeWorkers.map((w) => (
+                              {(project.activeWorkers ?? []).map((w) => (
                                 <span key={w} className="flex items-center gap-1 text-[11px] font-semibold bg-green-100 text-green-700 border border-green-200 rounded-full px-2 py-0.5">
                                   <User className="h-3 w-3" /> {w}
                                 </span>
