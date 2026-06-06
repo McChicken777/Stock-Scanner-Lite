@@ -457,7 +457,7 @@ function AddItemsModal({
               <button key={t.id} onClick={() => setSelectedTemplateId(t.id)}
                 className={cn("w-full text-left p-2.5 rounded-lg border-2 transition-all text-sm",
                   selectedTemplateId === t.id ? "border-primary bg-primary/5 font-bold" : "border-border")}>
-                {t.name} <span className="text-muted-foreground font-normal">· {t.procedures.length} steps</span>
+                {t.name} <span className="text-muted-foreground font-normal">{t.procedures?.length ? `· ${t.procedures.length} steps` : ""}</span>
               </button>
             ))}
           </div>
