@@ -1,22 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   ChevronLeft, ChevronDown, ChevronUp, Monitor, CheckCircle2,
-  Clock, AlertTriangle, Loader2, Inbox,
+  Clock, Loader2, Inbox, Play, User, Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth, type AuthUser } from "@/contexts/auth";
 
 interface Workstation { id: number; name: string; priority: number; isActive: boolean; }
 interface StationType  { id: number; name: string; color: string; }
 
 interface QueueStep {
   stepId: number; stepName: string; sortOrder: number;
+  status: "not_started" | "in_progress";
   durationEstimate: number | null; batchMode: string;
   workstationId: number | null;
+  claimedByUsername: string | null;
+  startTime: string | null;
   itemId: number; itemName: string;
   projectId: number; projectName: string;
   projectDeadline: string; projectPriority: string;
@@ -50,6 +54,25 @@ function urgencyColor(deadline: string) {
   return "text-green-600";
 }
 
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+function formatSeconds(s: number) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: "bg-red-100 text-red-700 border-red-200",
   high:   "bg-orange-100 text-orange-700 border-orange-200",
@@ -57,14 +80,106 @@ const PRIORITY_COLORS: Record<string, string> = {
   low:    "bg-gray-100 text-gray-600 border-gray-200",
 };
 
+function StepRow({
+  step, user, activeWorkstations, completing, starting, onStart, onComplete, onAssign,
+}: {
+  step: QueueStep;
+  user: AuthUser | null;
+  activeWorkstations: Workstation[];
+  completing: Set<number>;
+  starting: Set<number>;
+  onStart: (id: number) => void;
+  onComplete: (id: number) => void;
+  onAssign: (workstationId: number | null) => void;
+}) {
+  const isInProgress = step.status === "in_progress";
+  const claimedByMe = isInProgress && step.claimedByUsername === user?.username;
+  const claimedByOther = isInProgress && !claimedByMe && step.claimedByUsername;
+  const isAdmin = user?.role === "admin";
+  const isCompleting = completing.has(step.stepId);
+  const isStarting = starting.has(step.stepId);
+
+  const now = useNow(isInProgress && !!step.startTime);
+  const elapsedSeconds = isInProgress && step.startTime
+    ? Math.max(0, Math.floor((now - new Date(step.startTime).getTime()) / 1000))
+    : 0;
+
+  return (
+    <div className={`flex items-center gap-3 px-4 py-3 ${isInProgress ? "bg-blue-50/60 border-l-4 border-blue-400" : ""}`}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold">{step.stepName}</p>
+        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+          {step.durationEstimate && !isInProgress && (
+            <span className="text-xs text-muted-foreground">~{step.durationEstimate} min</span>
+          )}
+          {isInProgress && step.startTime && (
+            <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 animate-pulse">
+              <Timer className="h-3 w-3" /> {formatSeconds(elapsedSeconds)}
+            </span>
+          )}
+          {claimedByMe && (
+            <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100 rounded-full px-2 py-0.5">
+              <User className="h-3 w-3" /> You
+            </span>
+          )}
+          {claimedByOther && (
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+              <User className="h-3 w-3" /> {step.claimedByUsername}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {activeWorkstations.length > 0 && (
+        <select
+          value={step.workstationId ?? ""}
+          onChange={(e) => onAssign(e.target.value ? Number(e.target.value) : null)}
+          className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 max-w-[110px] flex-shrink-0"
+        >
+          <option value="">— machine</option>
+          {activeWorkstations.map((ws) => (
+            <option key={ws.id} value={ws.id}>{ws.name}</option>
+          ))}
+        </select>
+      )}
+
+      {!isInProgress && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-9 px-3 font-bold flex-shrink-0 gap-1.5 border-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+          disabled={isStarting}
+          onClick={() => onStart(step.stepId)}
+        >
+          {isStarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Play className="h-3.5 w-3.5" /> Start</>}
+        </Button>
+      )}
+
+      {/* Done: show for in_progress steps; admin can also complete any in_progress step */}
+      {isInProgress && (
+        <Button
+          size="sm"
+          className="h-9 px-3 font-bold flex-shrink-0 gap-1.5"
+          disabled={isCompleting}
+          onClick={() => onComplete(step.stepId)}
+        >
+          {isCompleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function StationQueuePage() {
   const { typeId } = useParams<{ typeId: string }>();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   const [machineFilter, setMachineFilter] = useState<number | "all">("all");
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const [completing, setCompleting] = useState<Set<number>>(new Set());
+  const [starting, setStarting] = useState<Set<number>>(new Set());
 
   const key = [`/api/stations/queue/${typeId}`];
   const { data, isLoading } = useQuery<QueueData>({
@@ -86,6 +201,19 @@ export default function StationQueuePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
+
+  async function startStep(stepId: number) {
+    setStarting((prev) => new Set(prev).add(stepId));
+    try {
+      await apiFetch(`/api/work/steps/${stepId}/start`, { method: "POST" });
+      qc.invalidateQueries({ queryKey: key });
+      toast({ title: "Step started — good luck! 💪" });
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    } finally {
+      setStarting((prev) => { const n = new Set(prev); n.delete(stepId); return n; });
+    }
+  }
 
   async function completeStep(stepId: number) {
     setCompleting((prev) => new Set(prev).add(stepId));
@@ -223,48 +351,19 @@ export default function StationQueuePage() {
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-4 py-1.5 bg-muted/30">
                           {item.itemName}
                         </p>
-                        {item.steps.map((step) => {
-                          const isDone = completing.has(step.stepId);
-                          return (
-                            <div key={step.stepId} className="flex items-center gap-3 px-4 py-3">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold">{step.stepName}</p>
-                                {step.durationEstimate && (
-                                  <p className="text-xs text-muted-foreground mt-0.5">~{step.durationEstimate} min</p>
-                                )}
-                              </div>
-
-                              {/* Machine assignment */}
-                              {activeWorkstations.length > 0 && (
-                                <select
-                                  value={step.workstationId ?? ""}
-                                  onChange={(e) => assignMutation.mutate({
-                                    stepId: step.stepId,
-                                    workstationId: e.target.value ? Number(e.target.value) : null,
-                                  })}
-                                  className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 max-w-[120px] flex-shrink-0"
-                                >
-                                  <option value="">— unassigned</option>
-                                  {activeWorkstations.map((ws) => (
-                                    <option key={ws.id} value={ws.id}>{ws.name}</option>
-                                  ))}
-                                </select>
-                              )}
-
-                              {/* Done button */}
-                              <Button
-                                size="sm"
-                                className="h-9 px-3 font-bold flex-shrink-0 gap-1.5"
-                                disabled={isDone}
-                                onClick={() => completeStep(step.stepId)}
-                              >
-                                {isDone
-                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  : <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>}
-                              </Button>
-                            </div>
-                          );
-                        })}
+                        {item.steps.map((step) => (
+                          <StepRow
+                            key={step.stepId}
+                            step={step}
+                            user={user}
+                            activeWorkstations={activeWorkstations}
+                            completing={completing}
+                            starting={starting}
+                            onStart={startStep}
+                            onComplete={completeStep}
+                            onAssign={(workstationId) => assignMutation.mutate({ stepId: step.stepId, workstationId })}
+                          />
+                        ))}
                       </div>
                     ))}
                   </div>

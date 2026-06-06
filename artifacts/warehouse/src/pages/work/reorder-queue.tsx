@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, AlertTriangle, RefreshCw, ShoppingCart, CheckCircle2,
-  Package2, TrendingDown, Plus,
+  ArrowLeft, AlertTriangle, ShoppingCart, CheckCircle2,
+  Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
+  Truck, Building2, HelpCircle,
 } from "lucide-react";
 
 interface ReorderItem {
@@ -27,6 +28,7 @@ interface ReorderItem {
   supplierId: number | null;
   supplierSku: string | null;
   supplierName: string | null;
+  supplierEmail: string | null;
   unitCost: number;
   estimatedReorderCost: number;
 }
@@ -41,10 +43,193 @@ interface ShortageFlag {
   createdAt: string;
 }
 
+interface SupplierGroup {
+  supplierId: number | null;
+  supplierName: string | null;
+  supplierEmail: string | null;
+  items: ReorderItem[];
+}
+
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
   return res.json();
+}
+
+function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: ReorderItem[]) {
+  const subject = `Purchase Order #${poId} — Order Request`;
+  const rows = items.map((item) => {
+    const sku = item.supplierSku ? ` (SKU: ${item.supplierSku})` : "";
+    const price = item.unitCost > 0 ? ` @ $${Number(item.unitCost).toFixed(2)} each` : "";
+    return `  • ${item.name}${sku} — Qty: ${item.shortfall}${price}`;
+  }).join("\n");
+  const total = items.reduce((s, i) => s + i.estimatedReorderCost, 0);
+  const totalLine = total > 0 ? `\n\nEstimated total: $${total.toFixed(2)}` : "";
+  const body = `Dear ${supplierName},\n\nPlease process the following purchase order:\n\nPO #${poId}\n\n${rows}${totalLine}\n\nPlease confirm receipt and expected delivery date.\n\nThank you`;
+  return `mailto:${supplierEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+const statusColors: Record<string, string> = {
+  draft: "bg-gray-100 text-gray-700",
+  ordered: "bg-blue-100 text-blue-700",
+  partially_arrived: "bg-yellow-100 text-yellow-800",
+  arrived: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-600",
+};
+
+function SupplierGroupCard({
+  group, activeFlags, onOrderCreated,
+}: {
+  group: SupplierGroup;
+  activeFlags: ShortageFlag[];
+  onOrderCreated: (poId: number, supplierEmail: string | null, supplierName: string | null, items: ReorderItem[]) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [quantities, setQuantities] = useState<Record<number, number>>(
+    Object.fromEntries(group.items.map((i) => [i.id, i.shortfall]))
+  );
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
+
+  const hasSupplier = group.supplierId != null;
+  const allPending = group.items.every((i) => i.pendingPo != null);
+  const totalCost = group.items.reduce((s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0), 0);
+
+  const batchMutation = useMutation({
+    mutationFn: () => apiFetch("/api/purchase-orders/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        supplierId: group.supplierId,
+        items: group.items
+          .filter((i) => !i.pendingPo)
+          .map((i) => ({
+            productId: i.id,
+            quantityOrdered: Math.max(1, quantities[i.id] ?? i.shortfall),
+            unitPrice: i.unitCost > 0 ? i.unitCost : null,
+          })),
+      }),
+    }),
+    onSuccess: (po) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      toast({ title: `PO #${po.id} created` });
+      onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const itemsToOrder = group.items.filter((i) => !i.pendingPo);
+
+  return (
+    <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
+      {/* Supplier header */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? "bg-blue-100" : "bg-muted"}`}>
+          {hasSupplier ? <Building2 className="h-4 w-4 text-blue-700" /> : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm">{group.supplierName ?? "No supplier assigned"}</p>
+          <p className="text-xs text-muted-foreground">
+            {group.items.length} item{group.items.length !== 1 ? "s" : ""} to reorder
+            {totalCost > 0 && ` · est. $${totalCost.toFixed(2)}`}
+          </p>
+        </div>
+        {group.supplierEmail && (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
+            <Mail className="h-3 w-3" /> {group.supplierEmail}
+          </span>
+        )}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+      </button>
+
+      {expanded && (
+        <>
+          {/* Item rows */}
+          <div className="border-t border-border divide-y divide-border/60">
+            {group.items.map((item) => {
+              const flagsForItem = activeFlags.filter((f) =>
+                f.productName.trim().toLowerCase() === item.name.trim().toLowerCase()
+              );
+              return (
+                <div key={item.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm">{item.name}</p>
+                      {flagsForItem.length > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200 rounded-full px-1.5 py-0.5">
+                          <AlertTriangle className="h-2.5 w-2.5" /> flagged
+                        </span>
+                      )}
+                      {item.pendingPo && (
+                        <Link href={`/work/purchase-orders/${item.pendingPo.poId}`}>
+                          <Badge className={`text-[10px] cursor-pointer ${statusColors[item.pendingPo.status] ?? "bg-gray-100 text-gray-700"}`}>
+                            PO #{item.pendingPo.poId} · {item.pendingPo.status.replace("_", " ")}
+                          </Badge>
+                        </Link>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                      {item.supplierSku && <span className="font-mono">SKU: {item.supplierSku}</span>}
+                      {item.category && <span>{item.category}</span>}
+                      <span className="text-red-600 font-semibold">
+                        {item.available} / {item.minStock} min — short {item.shortfall}
+                      </span>
+                      {item.unitCost > 0 && (
+                        <span>${Number(item.unitCost).toFixed(2)} ea</span>
+                      )}
+                    </div>
+                  </div>
+                  {/* Editable quantity — only for items without a pending PO */}
+                  {!item.pendingPo && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs text-muted-foreground">Qty:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={quantities[item.id] ?? item.shortfall}
+                        onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: Math.max(1, Number(e.target.value)) }))}
+                        className="w-16 h-8 text-xs text-center border-2 border-border rounded-lg font-bold outline-none focus:border-primary"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Action bar */}
+          <div className="border-t border-border bg-muted/20 px-4 py-3 flex items-center gap-2 flex-wrap">
+            {allPending ? (
+              <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
+                <CheckCircle2 className="h-4 w-4" /> All items have pending POs
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-9 font-bold gap-1.5"
+                disabled={batchMutation.isPending || itemsToOrder.length === 0}
+                onClick={() => batchMutation.mutate()}
+              >
+                {batchMutation.isPending
+                  ? "Creating…"
+                  : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} item{itemsToOrder.length !== 1 ? "s" : ""} from {group.supplierName ?? "supplier"}</>}
+              </Button>
+            )}
+            <Link href="/work/purchase-orders">
+              <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
+                <Truck className="h-3.5 w-3.5" /> View POs
+              </Button>
+            </Link>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function ReorderQueuePage() {
@@ -55,6 +240,8 @@ export default function ReorderQueuePage() {
   const [showFlagForm, setShowFlagForm] = useState(false);
   const [flagProductName, setFlagProductName] = useState("");
   const [flagNote, setFlagNote] = useState("");
+  // After a batch order: prompt to email
+  const [emailPrompt, setEmailPrompt] = useState<{ poId: number; mailtoUrl: string; supplierName: string } | null>(null);
 
   const { data: queue = [], isLoading } = useQuery<ReorderItem[]>({
     queryKey: ["/api/work/reorder-queue"],
@@ -77,9 +264,7 @@ export default function ReorderQueuePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
       toast({ title: "Shortage flagged" });
-      setFlagProductName("");
-      setFlagNote("");
-      setShowFlagForm(false);
+      setFlagProductName(""); setFlagNote(""); setShowFlagForm(false);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -95,15 +280,38 @@ export default function ReorderQueuePage() {
 
   const activeFlags = flags.filter((f) => !f.resolvedAt);
 
-  const statusColors: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700",
-    ordered: "bg-blue-100 text-blue-700",
-    partially_arrived: "bg-yellow-100 text-yellow-700",
-    arrived: "bg-green-100 text-green-700",
-    cancelled: "bg-red-100 text-red-700",
-  };
+  function handleOrderCreated(poId: number, supplierEmail: string | null, supplierName: string | null, items: ReorderItem[]) {
+    if (supplierEmail && supplierName) {
+      const mailtoUrl = buildMailtoLink(supplierEmail, supplierName, poId, items);
+      setEmailPrompt({ poId, mailtoUrl, supplierName });
+    }
+  }
 
-  // Non-admins see only the shortage flag submission UI
+  // Group items by supplier
+  const supplierGroups: SupplierGroup[] = [];
+  const supplierMap = new Map<string, SupplierGroup>();
+  for (const item of queue) {
+    const key = item.supplierId != null ? String(item.supplierId) : "__none__";
+    if (!supplierMap.has(key)) {
+      const group: SupplierGroup = {
+        supplierId: item.supplierId,
+        supplierName: item.supplierName,
+        supplierEmail: item.supplierEmail,
+        items: [],
+      };
+      supplierMap.set(key, group);
+      supplierGroups.push(group);
+    }
+    supplierMap.get(key)!.items.push(item);
+  }
+  // Sort: suppliers with items first, no-supplier last
+  supplierGroups.sort((a, b) => {
+    if (a.supplierId == null && b.supplierId != null) return 1;
+    if (a.supplierId != null && b.supplierId == null) return -1;
+    return (a.supplierName ?? "").localeCompare(b.supplierName ?? "");
+  });
+
+  // Non-admin view
   if (!isAdmin) {
     return (
       <div className="flex flex-col min-h-full">
@@ -164,7 +372,7 @@ export default function ReorderQueuePage() {
         </Link>
         <div className="flex-1">
           <h1 className="text-xl font-bold">Reorder Queue</h1>
-          <p className="text-xs opacity-70">{queue.length} items below min stock</p>
+          <p className="text-xs opacity-70">{queue.length} item{queue.length !== 1 ? "s" : ""} below min stock</p>
         </div>
         <Link href="/work/purchase-orders">
           <Button size="sm" variant="outline" className="font-bold h-9">
@@ -175,15 +383,36 @@ export default function ReorderQueuePage() {
 
       <div className="p-4 space-y-5 pb-24">
 
-        {/* Worker shortage flag section */}
+        {/* Email prompt — shown after batch order if supplier has email */}
+        {emailPrompt && (
+          <div className="border-2 border-blue-300 bg-blue-50 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-bold text-sm text-blue-900">PO #{emailPrompt.poId} created</p>
+                <p className="text-xs text-blue-700 mt-0.5">Send the order to {emailPrompt.supplierName}?</p>
+              </div>
+              <button onClick={() => setEmailPrompt(null)} className="text-blue-400 hover:text-blue-600 flex-shrink-0">✕</button>
+            </div>
+            <div className="flex gap-2">
+              <a href={emailPrompt.mailtoUrl} onClick={() => setEmailPrompt(null)}>
+                <Button size="sm" className="h-9 font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
+                  <Mail className="h-3.5 w-3.5" /> Open in email app
+                </Button>
+              </a>
+              <Link href={`/work/purchase-orders/${emailPrompt.poId}`} onClick={() => setEmailPrompt(null)}>
+                <Button size="sm" variant="outline" className="h-9 font-semibold">View PO</Button>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Shortage flags */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5" /> Shortage Flags
               {activeFlags.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">
-                  {activeFlags.length}
-                </span>
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">{activeFlags.length}</span>
               )}
             </h2>
             <Button size="sm" variant="outline" className="h-8 font-bold text-xs" onClick={() => setShowFlagForm((v) => !v)}>
@@ -193,39 +422,33 @@ export default function ReorderQueuePage() {
 
           {showFlagForm && (
             <div className="border-2 border-rose-200 bg-rose-50 rounded-xl p-3 space-y-3">
-              <p className="text-xs font-bold text-rose-700">Report a missing or low part</p>
               <input
                 type="text"
                 placeholder="Part / product name"
                 value={flagProductName}
                 onChange={(e) => setFlagProductName(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none"
               />
               <input
                 type="text"
-                placeholder="Note (optional, e.g. needed for job #42)"
+                placeholder="Note (optional)"
                 value={flagNote}
                 onChange={(e) => setFlagNote(e.target.value)}
-                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
+                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none"
               />
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="flex-1 h-9" onClick={() => setShowFlagForm(false)}>Cancel</Button>
                 <Button
-                  size="sm"
-                  className="flex-1 h-9 font-bold bg-rose-600 hover:bg-rose-700"
+                  size="sm" className="flex-1 h-9 font-bold bg-rose-600 hover:bg-rose-700"
                   disabled={!flagProductName.trim() || flagMutation.isPending}
                   onClick={() => flagMutation.mutate({ productName: flagProductName.trim(), note: flagNote.trim() || undefined })}
-                >
-                  Submit Flag
-                </Button>
+                >Submit</Button>
               </div>
             </div>
           )}
 
-          {flagsLoading ? (
-            <Skeleton className="h-16 rounded-xl" />
-          ) : activeFlags.length === 0 ? (
-            <div className="text-center py-4 text-xs text-muted-foreground">No active shortage flags</div>
+          {flagsLoading ? <Skeleton className="h-16 rounded-xl" /> : activeFlags.length === 0 ? (
+            <div className="text-center py-3 text-xs text-muted-foreground">No active shortage flags</div>
           ) : (
             <div className="space-y-2">
               {activeFlags.map((flag) => (
@@ -233,61 +456,32 @@ export default function ReorderQueuePage() {
                   <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-rose-900">{flag.productName}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {flag.quantityNeeded && (
-                        <span className="text-xs font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
-                          Need: {flag.quantityNeeded}
-                        </span>
-                      )}
-                      {flag.flaggedByUsername && (
-                        <span className="text-xs text-rose-600">by {flag.flaggedByUsername}</span>
-                      )}
-                    </div>
+                    {flag.flaggedByUsername && <p className="text-xs text-rose-600">by {flag.flaggedByUsername}</p>}
                     {flag.note && <p className="text-xs text-rose-700 mt-0.5">{flag.note}</p>}
-                    <p className="text-[10px] text-rose-500 mt-1">
-                      {new Date(flag.createdAt).toLocaleDateString()}
-                    </p>
                   </div>
-                  {isAdmin && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs font-bold flex-shrink-0 border-rose-300 text-rose-700 hover:bg-rose-100"
-                      onClick={() => resolveMutation.mutate(flag.id)}
-                      disabled={resolveMutation.isPending}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Resolve
-                    </Button>
-                  )}
+                  <Button size="sm" variant="outline"
+                    className="h-8 text-xs font-bold flex-shrink-0 border-rose-300 text-rose-700 hover:bg-rose-100"
+                    onClick={() => resolveMutation.mutate(flag.id)} disabled={resolveMutation.isPending}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Resolve
+                  </Button>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Reorder queue */}
+        {/* Reorder queue — grouped by supplier */}
         <div className="space-y-2">
           <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
             <TrendingDown className="h-3.5 w-3.5" /> Below Min Stock
             {queue.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
-                {queue.length}
-              </span>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
             )}
           </h2>
 
-          {!isLoading && queue.length > 0 && (() => {
-            const totalCost = queue.reduce((sum, q) => sum + (Number(q.estimatedReorderCost) || 0), 0);
-            return totalCost > 0 ? (
-              <div className="border-2 border-amber-300 bg-amber-100/60 rounded-xl px-3 py-2 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">Total est. reorder cost</span>
-                <span className="text-lg font-black font-mono text-amber-900">${totalCost.toFixed(2)}</span>
-              </div>
-            ) : null;
-          })()}
-
           {isLoading ? (
-            <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+            <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>
           ) : queue.length === 0 ? (
             <div className="text-center py-10 px-4 bg-green-50 rounded-xl border border-green-200">
               <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-2" />
@@ -295,81 +489,19 @@ export default function ReorderQueuePage() {
               <p className="text-xs text-green-600 mt-1">No items below minimum threshold</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {queue.map((item) => (
-                <div key={item.id} className="border-2 border-amber-200 bg-amber-50 rounded-xl p-3 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Package2 className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                        <p className="font-bold text-sm truncate">{item.name}</p>
-                      </div>
-                      {item.category && (
-                        <p className="text-xs text-muted-foreground mt-0.5 ml-6">{item.category}</p>
-                      )}
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xl font-black text-amber-700 leading-none">{item.totalStock}</p>
-                      <p className="text-[10px] text-muted-foreground">of {item.minStock} min</p>
-                    </div>
-                  </div>
-
-                  {/* Worker shortage flag badges for this specific product */}
-                  {activeFlags.filter((f) => f.productName.trim().toLowerCase() === item.name.trim().toLowerCase()).map((f) => (
-                    <div key={f.id} className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
-                      <AlertTriangle className="h-3 w-3 text-rose-600 flex-shrink-0" />
-                      <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wide">Flagged by worker</span>
-                      {f.flaggedByUsername && <span className="text-[10px] text-rose-600">({f.flaggedByUsername})</span>}
-                      {f.note && <span className="text-[10px] text-rose-600 truncate">— {f.note}</span>}
-                    </div>
-                  ))}
-
-                  <div className="space-y-1 text-xs">
-                    <div className="flex items-center gap-3">
-                      <span className="text-muted-foreground">Total: <span className="font-bold text-foreground">{item.totalStock}</span></span>
-                      {item.reserved > 0 && (
-                        <span className="text-purple-700">Reserved: <span className="font-bold">{item.reserved}</span></span>
-                      )}
-                      <span className="text-foreground">Available: <span className="font-bold text-amber-700">{item.available}</span></span>
-                    </div>
-                    <div className="flex items-center gap-1 text-red-700 font-bold">
-                      <RefreshCw className="h-3 w-3" />
-                      Short by {item.shortfall} (min: {item.minStock})
-                    </div>
-                    {item.unitCost > 0 && (
-                      <div className="text-muted-foreground">
-                        Est. reorder cost: <span className="font-bold font-mono text-foreground">${Number(item.estimatedReorderCost).toFixed(2)}</span>
-                        <span className="text-[10px] ml-1">({item.shortfall} × ${Number(item.unitCost).toFixed(2)})</span>
-                      </div>
-                    )}
-                    {item.supplierName && (
-                      <span className="text-muted-foreground">
-                        Supplier: <span className="font-semibold">{item.supplierName}</span>
-                      </span>
-                    )}
-                    {item.supplierSku && (
-                      <span className="text-muted-foreground font-mono">SKU: {item.supplierSku}</span>
-                    )}
-                  </div>
-
-                  {item.pendingPo ? (
-                    <div className="flex items-center gap-2">
-                      <Badge className={`text-[10px] font-bold ${statusColors[item.pendingPo.status] ?? "bg-gray-100 text-gray-700"}`}>
-                        PO #{item.pendingPo.poId} · {item.pendingPo.status.replace("_", " ")} · qty {item.pendingPo.quantity}
-                      </Badge>
-                    </div>
-                  ) : isAdmin ? (
-                    <Link href={`/work/purchase-orders/new?productId=${item.id}`}>
-                      <Button size="sm" className="w-full h-9 font-bold bg-amber-600 hover:bg-amber-700 text-white">
-                        <ShoppingCart className="h-3.5 w-3.5 mr-1.5" /> Create Purchase Order
-                      </Button>
-                    </Link>
-                  ) : null}
-                </div>
+            <div className="space-y-3">
+              {supplierGroups.map((group, idx) => (
+                <SupplierGroupCard
+                  key={group.supplierId ?? `__none__${idx}`}
+                  group={group}
+                  activeFlags={activeFlags}
+                  onOrderCreated={handleOrderCreated}
+                />
               ))}
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

@@ -78,6 +78,50 @@ router.post("/", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── BATCH CREATE PO WITH ITEMS ───────────────────────────────────────────────
+// Creates a PO and adds all line items in one request — used by the supplier order view.
+
+router.post("/batch", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      supplierId: z.number().int().nullable().optional(),
+      notes: z.string().optional(),
+      items: z.array(z.object({
+        productId: z.number().int(),
+        quantityOrdered: z.number().int().min(1),
+        unitPrice: z.number().min(0).nullable().optional(),
+      })).min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const { supplierId, notes, items } = parsed.data;
+
+    const [po] = await db.insert(purchaseOrdersTable).values({
+      supplierId: supplierId ?? null,
+      notes: notes ?? null,
+      companyId,
+      status: "draft",
+    }).returning();
+
+    const insertedItems = await db.insert(purchaseOrderItemsTable).values(
+      items.map((item) => ({
+        poId: po.id,
+        productId: item.productId,
+        quantityOrdered: item.quantityOrdered,
+        quantityArrived: 0,
+        unitPrice: item.unitPrice ?? null,
+        companyId,
+      }))
+    ).returning();
+
+    res.status(201).json({ ...po, items: insertedItems });
+  } catch (err) {
+    req.log.error({ err }, "Failed to batch-create purchase order");
+    res.status(500).json({ error: "Failed to create purchase order" });
+  }
+});
+
 // ─── GET SINGLE PO WITH ITEMS ──────────────────────────────────────────────────
 
 router.get("/:id", requireAuth, async (req, res) => {

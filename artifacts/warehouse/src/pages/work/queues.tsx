@@ -9,6 +9,7 @@ interface StationType {
   name: string;
   color: string;
   flowOrder: number;
+  pendingCount: number;
   workstations: { id: number; name: string; isActive: boolean }[];
 }
 
@@ -76,6 +77,15 @@ export default function QueuesPage() {
                         : "No machines configured"}
                     </p>
                   </div>
+                  {type.pendingCount > 0 ? (
+                    <span className="flex-shrink-0 text-xs font-bold rounded-full px-2.5 py-1 text-white" style={{ backgroundColor: type.color }}>
+                      {type.pendingCount}
+                    </span>
+                  ) : (
+                    <span className="flex-shrink-0 text-xs font-semibold text-muted-foreground bg-muted rounded-full px-2.5 py-1">
+                      0
+                    </span>
+                  )}
                   <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                 </div>
               </Link>
