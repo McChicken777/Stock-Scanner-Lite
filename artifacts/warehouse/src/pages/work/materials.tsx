@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
-import { Plus, Upload, Download, Search, Trash2, Loader2, PackageOpen, X, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, Upload, Download, Search, Trash2, Loader2, PackageOpen, X, CheckCircle2, AlertTriangle, TrendingDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,8 +13,10 @@ interface Material {
   name: string;
   category: string | null;
   unit: string | null;
+  minStock: number;
   bufferStock: number;
   targetStock: number;
+  totalStock: number;
 }
 
 interface ImportRow {
@@ -116,14 +118,11 @@ export default function MaterialsPage() {
   const [showImportPreview, setShowImportPreview] = useState(false);
 
   const { data: materials = [], isLoading } = useQuery<Material[]>({
-    queryKey: ["/api/products"],
-    queryFn: async () => {
-      const all = await apiFetch("/api/products");
-      return all.filter((p: Material & { itemType?: string }) => p.itemType === "purchased_part");
-    },
+    queryKey: ["/api/work/materials"],
+    queryFn: () => apiFetch("/api/work/materials"),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/work/materials"] });
 
   const addMutation = useMutation({
     mutationFn: (data: { name: string; category: string; unit: string }) =>
@@ -358,34 +357,53 @@ export default function MaterialsPage() {
           <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider px-1">
             {filtered.length} material{filtered.length !== 1 ? "s" : ""}
           </p>
-          {filtered.map((m) => (
-            <div key={m.id} className="flex items-center justify-between gap-3 bg-card border-2 rounded-xl px-4 py-3">
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate">{m.name}</p>
-                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  {m.category && (
-                    <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
-                      {m.category}
+          {filtered.map((m) => {
+            const isLow = m.minStock > 0 && m.totalStock < m.minStock;
+            const isOut = m.totalStock === 0;
+            return (
+              <div key={m.id} className={`flex items-center justify-between gap-3 bg-card border-2 rounded-xl px-4 py-3 ${isOut ? "border-red-300" : isLow ? "border-orange-300" : "border-border"}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-sm truncate">{m.name}</p>
+                    {isOut && (
+                      <span className="flex items-center gap-0.5 text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                        <AlertTriangle className="h-3 w-3" /> OUT
+                      </span>
+                    )}
+                    {!isOut && isLow && (
+                      <span className="flex items-center gap-0.5 text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                        <TrendingDown className="h-3 w-3" /> LOW
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {m.category && (
+                      <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2 py-0.5">
+                        {m.category}
+                      </span>
+                    )}
+                    {m.unit && (
+                      <span className="text-[10px] font-semibold bg-muted text-muted-foreground rounded-full px-2 py-0.5">
+                        {m.unit}
+                      </span>
+                    )}
+                    <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${isOut ? "bg-red-50 text-red-600" : isLow ? "bg-orange-50 text-orange-600" : "bg-green-50 text-green-700"}`}>
+                      {m.totalStock} in stock{m.minStock > 0 ? ` / min ${m.minStock}` : ""}
                     </span>
-                  )}
-                  {m.unit && (
-                    <span className="text-[10px] font-semibold bg-muted text-muted-foreground rounded-full px-2 py-0.5">
-                      {m.unit}
-                    </span>
-                  )}
+                  </div>
                 </div>
+                {isAdmin && (
+                  <button
+                    onClick={() => deleteMutation.mutate(m.id)}
+                    disabled={deleteMutation.isPending}
+                    className="text-muted-foreground hover:text-destructive p-1 rounded flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => deleteMutation.mutate(m.id)}
-                  disabled={deleteMutation.isPending}
-                  className="text-muted-foreground hover:text-destructive p-1 rounded flex-shrink-0"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

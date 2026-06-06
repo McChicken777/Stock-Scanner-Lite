@@ -4406,16 +4406,96 @@ router.post("/cutting-queue/complete", requireAuth, async (req, res) => {
   }
 });
 
+// POST /work/steps/:stepId/start
+// Claim a step → in_progress. Checks prerequisites (all lower sortOrder steps on same item must be completed).
+router.post("/steps/:stepId/start", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
+    const stepId = Number(req.params.stepId);
+
+    // Verify ownership and get step details
+    const [row] = await db
+      .select({
+        id: workItemStepsTable.id,
+        status: workItemStepsTable.status,
+        sortOrder: workItemStepsTable.sortOrder,
+        itemId: workItemStepsTable.itemId,
+        name: workItemStepsTable.name,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workItemStepsTable.id, stepId), eq(workProjectsTable.companyId, companyId)));
+
+    if (!row) { res.status(404).json({ error: "Step not found" }); return; }
+    if (row.status === "completed") { res.status(400).json({ error: "Step is already completed" }); return; }
+
+    // Check if already in_progress (by this user or someone else)
+    if (row.status === "in_progress") {
+      // Check if this user already has an open time log for this step
+      const [existingLog] = await db.select({ id: workTimeLogsTable.id })
+        .from(workTimeLogsTable)
+        .where(and(eq(workTimeLogsTable.stepId, stepId), eq(workTimeLogsTable.userId, userId), isNull(workTimeLogsTable.endTime)));
+      if (existingLog) { res.json({ ok: true }); return; } // idempotent
+
+      // Someone else has it — return 409
+      const [claimer] = await db.select({ username: usersTable.username })
+        .from(workTimeLogsTable)
+        .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+        .where(and(eq(workTimeLogsTable.stepId, stepId), isNull(workTimeLogsTable.endTime)));
+      res.status(409).json({ error: `Already being worked on${claimer ? " by " + claimer.username : ""}` });
+      return;
+    }
+
+    // Prerequisite check: all steps with lower sortOrder on same item must be completed
+    const priorSteps = await db.select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+      .from(workItemStepsTable)
+      .where(and(
+        eq(workItemStepsTable.itemId, row.itemId),
+        sql`${workItemStepsTable.sortOrder} < ${row.sortOrder}`,
+      ));
+    const blocked = priorSteps.filter((s) => s.status !== "completed");
+    if (blocked.length > 0) {
+      res.status(400).json({ error: "Cannot start — earlier steps are not yet completed" });
+      return;
+    }
+
+    // Mark as in_progress and create open time log
+    await db.update(workItemStepsTable)
+      .set({ status: "in_progress" })
+      .where(eq(workItemStepsTable.id, stepId));
+
+    await db.insert(workTimeLogsTable).values({
+      stepId,
+      userId,
+      startTime: new Date(),
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to start step");
+    res.status(500).json({ error: "Failed to start step" });
+  }
+});
+
 // POST /work/steps/:stepId/complete
-// General step completion — marks not_started → completed (used by station queues)
+// General step completion — marks in_progress/not_started → completed (used by station queues).
+// Also auto-completes the project if all steps across all items are done.
 router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
     const stepId = Number(req.params.stepId);
 
-    // Verify ownership
+    // Verify ownership and get project context
     const [row] = await db
-      .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+      .select({
+        id: workItemStepsTable.id,
+        status: workItemStepsTable.status,
+        projectId: workProjectsTable.id,
+        projectStatus: workProjectsTable.status,
+      })
       .from(workItemStepsTable)
       .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
       .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
@@ -4424,14 +4504,62 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
     if (!row) { res.status(404).json({ error: "Step not found" }); return; }
     if (row.status === "completed") { res.json({ ok: true }); return; } // idempotent
 
+    // Close any open time log for this step
+    await db.update(workTimeLogsTable)
+      .set({ endTime: new Date(), durationSeconds: sql`EXTRACT(EPOCH FROM (NOW() - ${workTimeLogsTable.startTime}))::int` })
+      .where(and(eq(workTimeLogsTable.stepId, stepId), isNull(workTimeLogsTable.endTime)));
+
     await db.update(workItemStepsTable)
       .set({ status: "completed" })
       .where(eq(workItemStepsTable.id, stepId));
+
+    // Auto-complete project: if all steps in the project are now completed, close it
+    if (row.projectStatus !== "completed") {
+      const allSteps = await db
+        .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+        .from(workItemStepsTable)
+        .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+        .where(eq(workProjectItemsTable.projectId, row.projectId));
+
+      const allDone = allSteps.every((s) => s.id === stepId ? true : s.status === "completed");
+      if (allDone && allSteps.length > 0) {
+        await db.update(workProjectsTable)
+          .set({ status: "completed", completedAt: new Date() })
+          .where(eq(workProjectsTable.id, row.projectId));
+      }
+    }
 
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to complete step");
     res.status(500).json({ error: "Failed to complete step" });
+  }
+});
+
+// GET /work/materials — purchased_part products with total stock across all locations
+router.get("/materials", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const products = await db
+      .select({
+        id: productsTable.id,
+        name: productsTable.name,
+        category: productsTable.category,
+        minStock: productsTable.minStock,
+        bufferStock: productsTable.bufferStock,
+        targetStock: productsTable.targetStock,
+        unitCost: productsTable.unitCost,
+        totalStock: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`.as("total_stock"),
+      })
+      .from(productsTable)
+      .leftJoin(stockTable, eq(stockTable.productId, productsTable.id))
+      .where(and(eq(productsTable.companyId, companyId), eq(productsTable.itemType, "purchased_part")))
+      .groupBy(productsTable.id)
+      .orderBy(productsTable.name);
+    res.json(products);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get materials");
+    res.status(500).json({ error: "Failed to get materials" });
   }
 });
 

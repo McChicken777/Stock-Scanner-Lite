@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, AlertTriangle, Clock, CheckCircle2, ChevronRight, Trash2, User, Zap, ShieldAlert } from "lucide-react";
+import { Plus, AlertTriangle, Clock, CheckCircle2, ChevronRight, Trash2, User, Zap, ShieldAlert, Flame } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   AlertDialog,
@@ -46,18 +46,21 @@ async function deleteProject(id: number) {
 }
 
 function urgencyInfo(deadline: string, status: string) {
-  if (status === "completed") return { label: "Completed", color: "text-green-600", bg: "bg-green-500/10 border-green-500/20" };
+  if (status === "completed") return { label: "Completed", color: "text-green-600", bg: "border-green-300", badge: null };
   const days = differenceInDays(new Date(deadline), new Date());
-  if (isPast(new Date(deadline))) return { label: "Overdue!", color: "text-red-600", bg: "bg-red-500/10 border-red-500/30" };
-  if (days < 2) return { label: `${days}d left`, color: "text-red-600", bg: "bg-red-500/10 border-red-500/30" };
-  if (days < 5) return { label: `${days}d left`, color: "text-orange-600", bg: "bg-orange-500/10 border-orange-500/30" };
-  return { label: `${days}d left`, color: "text-green-600", bg: "bg-green-500/10 border-green-500/20" };
+  if (isPast(new Date(deadline))) return { label: "OVERDUE", color: "text-red-600", bg: "border-red-400 bg-red-50/40", badge: "overdue" };
+  if (days === 0) return { label: "Due today!", color: "text-red-600", bg: "border-red-300 bg-red-50/20", badge: "today" };
+  if (days < 3) return { label: `${days}d left`, color: "text-orange-600", bg: "border-orange-300", badge: "soon" };
+  if (days < 7) return { label: `${days}d left`, color: "text-amber-600", bg: "border-amber-200", badge: null };
+  return { label: `${days}d left`, color: "text-muted-foreground", bg: "border-border", badge: null };
 }
 
 const priorityColors: Record<string, string> = {
-  high: "bg-red-100 text-red-700 border-red-200",
+  urgent: "bg-red-100 text-red-700 border-red-200",
+  high: "bg-orange-100 text-orange-700 border-orange-200",
+  normal: "bg-blue-100 text-blue-700 border-blue-200",
   medium: "bg-orange-100 text-orange-700 border-orange-200",
-  low: "bg-blue-100 text-blue-700 border-blue-200",
+  low: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
 export default function WorkProjectsPage() {
@@ -123,9 +126,26 @@ export default function WorkProjectsPage() {
                       <div className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-lg leading-tight truncate">{project.name}</h3>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-bold text-lg leading-tight truncate">{project.name}</h3>
+                              {urgency.badge === "overdue" && (
+                                <span className="flex items-center gap-0.5 text-[10px] font-black bg-red-600 text-white rounded px-1.5 py-0.5 flex-shrink-0 animate-pulse">
+                                  <Flame className="h-3 w-3" /> OVERDUE
+                                </span>
+                              )}
+                              {urgency.badge === "today" && (
+                                <span className="flex items-center gap-0.5 text-[10px] font-black bg-red-500 text-white rounded px-1.5 py-0.5 flex-shrink-0">
+                                  <AlertTriangle className="h-3 w-3" /> TODAY
+                                </span>
+                              )}
+                              {urgency.badge === "soon" && (
+                                <span className="text-[10px] font-black bg-orange-100 text-orange-700 border border-orange-300 rounded px-1.5 py-0.5 flex-shrink-0">
+                                  DUE SOON
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <Badge className={`text-[10px] font-bold uppercase ${priorityColors[project.priority]}`}>
+                              <Badge className={`text-[10px] font-bold uppercase ${priorityColors[project.priority] ?? priorityColors.normal}`}>
                                 {project.priority}
                               </Badge>
                               <span className={`text-xs font-semibold ${urgency.color}`}>

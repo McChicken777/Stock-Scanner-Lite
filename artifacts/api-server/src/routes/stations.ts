@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import {
   db, stationTypesTable, workstationsTable, workItemStepsTable,
-  workProjectItemsTable, workProjectsTable,
+  workProjectItemsTable, workProjectsTable, workTimeLogsTable, usersTable,
 } from "@workspace/db";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
 
@@ -198,8 +198,8 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
       .where(and(eq(workstationsTable.stationTypeId, typeId), eq(workstationsTable.companyId, companyId)))
       .orderBy(asc(workstationsTable.priority));
 
-    // Get all not_started steps for this station type
-    const steps = await db
+    // Get all not_started + in_progress steps for this station type in active projects
+    const candidateSteps = await db
       .select({
         stepId: workItemStepsTable.id,
         stepName: workItemStepsTable.name,
@@ -222,7 +222,7 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
       .where(
         and(
           eq(workItemStepsTable.stationTypeId, typeId),
-          eq(workItemStepsTable.status, "not_started"),
+          inArray(workItemStepsTable.status, ["not_started", "in_progress"]),
           eq(workProjectsTable.status, "in_progress"),
           eq(workProjectsTable.companyId, companyId),
         )
@@ -232,6 +232,44 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
         asc(workProjectItemsTable.sortOrder),
         asc(workItemStepsTable.sortOrder),
       );
+
+    // Prerequisite gating: for each item, fetch all step statuses so we can check if
+    // prior steps (lower sortOrder) are all completed before showing a not_started step.
+    const itemIds = [...new Set(candidateSteps.map((s) => s.itemId))];
+    const allItemSteps = itemIds.length
+      ? await db
+          .select({ id: workItemStepsTable.id, itemId: workItemStepsTable.itemId, sortOrder: workItemStepsTable.sortOrder, status: workItemStepsTable.status })
+          .from(workItemStepsTable)
+          .where(inArray(workItemStepsTable.itemId, itemIds))
+      : [];
+
+    // Build a map: itemId → sorted step statuses
+    const itemStepMap = new Map<number, typeof allItemSteps>();
+    for (const s of allItemSteps) {
+      if (!itemStepMap.has(s.itemId)) itemStepMap.set(s.itemId, []);
+      itemStepMap.get(s.itemId)!.push(s);
+    }
+
+    // Get open time logs for claimed steps (in_progress) to show who's working
+    const stepIds = candidateSteps.map((s) => s.stepId);
+    const openLogs = stepIds.length
+      ? await db
+          .select({ stepId: workTimeLogsTable.stepId, username: usersTable.username })
+          .from(workTimeLogsTable)
+          .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+          .where(and(inArray(workTimeLogsTable.stepId, stepIds), isNull(workTimeLogsTable.endTime)))
+      : [];
+    const claimedByMap = new Map(openLogs.map((l) => [l.stepId, l.username]));
+
+    // Filter: keep in_progress always; keep not_started only if all prior steps completed
+    const steps = candidateSteps.filter((s) => {
+      if (s.status === "in_progress") return true;
+      const siblings = itemStepMap.get(s.itemId) ?? [];
+      const priorIncomplete = siblings.filter(
+        (sib) => sib.sortOrder < s.sortOrder && sib.status !== "completed"
+      );
+      return priorIncomplete.length === 0;
+    }).map((s) => ({ ...s, claimedByUsername: claimedByMap.get(s.stepId) ?? null }));
 
     // Group by project → items → steps
     const projectMap = new Map<number, {
