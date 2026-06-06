@@ -128,7 +128,21 @@ router.get("/templates", requireAuth, async (req, res) => {
       }
     }
 
-    res.json(templates);
+    // Attach top-level step count per template so the job catalog can show "N steps"
+    // without an extra round-trip. Counts only top-level steps (templateComponentId IS NULL).
+    const templateIds = templates.map((t) => t.id);
+    const stepCountMap = new Map<number, number>();
+    if (templateIds.length > 0) {
+      const counts = await db
+        .select({ templateId: workStepsTable.templateId, count: sql<number>`count(*)::int` })
+        .from(workStepsTable)
+        .where(and(inArray(workStepsTable.templateId, templateIds), isNull(workStepsTable.templateComponentId)))
+        .groupBy(workStepsTable.templateId);
+      for (const row of counts) stepCountMap.set(row.templateId, row.count);
+    }
+    const withCounts = templates.map((t) => ({ ...t, stepCount: stepCountMap.get(t.id) ?? 0 }));
+
+    res.json(withCounts);
   } catch (err) {
     req.log.error({ err }, "Failed to list templates");
     res.status(500).json({ error: "Failed to list templates" });
