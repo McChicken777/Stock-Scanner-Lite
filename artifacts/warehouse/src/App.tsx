@@ -45,6 +45,9 @@ import PurchaseOrdersPage from "@/pages/work/purchase-orders";
 import PaintQueuePage from "@/pages/work/paint-queue";
 import CuttingQueuePage from "@/pages/work/cutting-queue";
 import MaterialsPage from "@/pages/work/materials";
+import AdminStationsPage from "@/pages/admin-stations";
+import QueuesPage from "@/pages/work/queues";
+import StationQueuePage from "@/pages/work/station-queue";
 import CustomersPage from "@/pages/customers";
 import CustomerDetailPage from "@/pages/customer-detail";
 import QuotesPage from "@/pages/quotes";
@@ -68,6 +71,8 @@ function WorkerRoutes() {
       <Route path="/work/inbound" component={WorkInboundPage} />
       <Route path="/work/paint-queue" component={PaintQueuePage} />
       <Route path="/work/cutting-queue" component={CuttingQueuePage} />
+      <Route path="/work/queues" component={QueuesPage} />
+      <Route path="/work/queue/:typeId" component={StationQueuePage} />
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/attendance/report" component={AttendanceReportPage} />
       <Route path="/">
@@ -155,6 +160,9 @@ function ProtectedRoutes() {
         <Route path="/work/paint-queue" component={PaintQueuePage} />
         <Route path="/work/cutting-queue" component={CuttingQueuePage} />
         <Route path="/work/materials" component={MaterialsPage} />
+        <Route path="/work/queues" component={QueuesPage} />
+        <Route path="/work/queue/:typeId" component={StationQueuePage} />
+        <Route path="/admin/stations" component={AdminStationsPage} />
 
         {/* Analytics (Pro, admin-only) */}
         <Route path="/analytics" component={AnalyticsPage} />

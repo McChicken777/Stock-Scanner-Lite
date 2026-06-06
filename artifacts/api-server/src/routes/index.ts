@@ -20,6 +20,7 @@ import quotesRouter from "./quotes";
 import settingsRouter from "./settings";
 import leaveRouter from "./leave";
 import analyticsRouter from "./analytics";
+import stationsRouter from "./stations";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -45,5 +46,6 @@ router.use("/quotes", requireAuth, quotesRouter);
 router.use("/settings", requireAuth, settingsRouter);
 router.use("/leave", requireAuth, leaveRouter);
 router.use("/analytics", analyticsRouter);
+router.use("/stations", requireAuth, stationsRouter);
 
 export default router;

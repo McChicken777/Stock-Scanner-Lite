@@ -1,0 +1,279 @@
+import { useState } from "react";
+import { useParams, Link } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { format, differenceInDays, isPast } from "date-fns";
+import {
+  ChevronLeft, ChevronDown, ChevronUp, Monitor, CheckCircle2,
+  Clock, AlertTriangle, Loader2, Inbox,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+
+interface Workstation { id: number; name: string; priority: number; isActive: boolean; }
+interface StationType  { id: number; name: string; color: string; }
+
+interface QueueStep {
+  stepId: number; stepName: string; sortOrder: number;
+  durationEstimate: number | null; batchMode: string;
+  workstationId: number | null;
+  itemId: number; itemName: string;
+  projectId: number; projectName: string;
+  projectDeadline: string; projectPriority: string;
+}
+
+interface QueueItem  { itemId: number; itemName: string; steps: QueueStep[]; }
+interface QueueProject {
+  projectId: number; projectName: string;
+  projectDeadline: string; projectPriority: string;
+  items: QueueItem[];
+}
+
+interface QueueData {
+  type: StationType;
+  workstations: Workstation[];
+  projects: QueueProject[];
+}
+
+async function apiFetch(url: string, opts?: RequestInit) {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function urgencyColor(deadline: string) {
+  if (isPast(new Date(deadline))) return "text-red-600";
+  const days = differenceInDays(new Date(deadline), new Date());
+  if (days < 2) return "text-red-600";
+  if (days < 5) return "text-orange-600";
+  return "text-green-600";
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "bg-red-100 text-red-700 border-red-200",
+  high:   "bg-orange-100 text-orange-700 border-orange-200",
+  normal: "bg-blue-100 text-blue-700 border-blue-200",
+  low:    "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+export default function StationQueuePage() {
+  const { typeId } = useParams<{ typeId: string }>();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const [machineFilter, setMachineFilter] = useState<number | "all">("all");
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
+  const [completing, setCompleting] = useState<Set<number>>(new Set());
+
+  const key = [`/api/stations/queue/${typeId}`];
+  const { data, isLoading } = useQuery<QueueData>({
+    queryKey: key,
+    queryFn: () => apiFetch(`/api/stations/queue/${typeId}`),
+    refetchInterval: 20000,
+    enabled: !!typeId,
+  });
+
+  const toggleProject = (id: number) =>
+    setExpandedProjects((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ stepId, workstationId }: { stepId: number; workstationId: number | null }) =>
+      apiFetch(`/api/stations/queue/assign/${stepId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workstationId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  async function completeStep(stepId: number) {
+    setCompleting((prev) => new Set(prev).add(stepId));
+    try {
+      await apiFetch(`/api/work/steps/${stepId}/complete`, { method: "POST" });
+      qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: ["/api/work/projects"] });
+      toast({ title: "Step completed ✓" });
+    } catch (e) {
+      toast({ title: (e as Error).message, variant: "destructive" });
+    } finally {
+      setCompleting((prev) => { const n = new Set(prev); n.delete(stepId); return n; });
+    }
+  }
+
+  if (isLoading) return (
+    <div className="p-4 space-y-4 pb-24">
+      <Skeleton className="h-10 w-48" />
+      {[1, 2].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}
+    </div>
+  );
+
+  if (!data) return (
+    <div className="p-4 pt-6 text-center">
+      <p className="font-semibold text-muted-foreground">Station not found</p>
+      <Link href="/work/queues"><p className="text-primary underline text-sm mt-2">← Back to Queues</p></Link>
+    </div>
+  );
+
+  const { type, workstations, projects } = data;
+  const activeWorkstations = workstations.filter((w) => w.isActive);
+
+  // Filter steps by selected machine
+  const filteredProjects = projects.map((proj) => ({
+    ...proj,
+    items: proj.items.map((item) => ({
+      ...item,
+      steps: item.steps.filter((s) =>
+        machineFilter === "all" ? true : s.workstationId === machineFilter
+      ),
+    })).filter((item) => item.steps.length > 0),
+  })).filter((proj) => proj.items.length > 0);
+
+  const totalSteps = filteredProjects.reduce((sum, p) =>
+    sum + p.items.reduce((s, i) => s + i.steps.length, 0), 0);
+
+  return (
+    <div className="p-4 space-y-4 pb-24">
+      {/* Header */}
+      <div className="flex items-center gap-3 pt-2">
+        <Link href="/work/queues">
+          <button className="text-muted-foreground hover:text-foreground">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        </Link>
+        <div className="flex items-center gap-2 flex-1">
+          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: type.color }} />
+          <h1 className="text-2xl font-black">{type.name}</h1>
+        </div>
+        <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-2.5 py-1">
+          {totalSteps} pending
+        </span>
+      </div>
+
+      {/* Machine filter tabs */}
+      {activeWorkstations.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            onClick={() => setMachineFilter("all")}
+            className={`flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors ${machineFilter === "all" ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/40"}`}
+          >
+            All
+          </button>
+          {activeWorkstations.map((ws) => (
+            <button
+              key={ws.id}
+              onClick={() => setMachineFilter(ws.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors ${machineFilter === ws.id ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/40"}`}
+            >
+              <Monitor className="h-3 w-3" /> {ws.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Queue */}
+      {filteredProjects.length === 0 ? (
+        <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
+          <Inbox className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+          <p className="font-semibold">
+            {machineFilter === "all" ? "Nothing pending at this station" : "Nothing assigned to this machine"}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">Steps tagged to this station will appear here when projects are active.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredProjects.map((proj) => {
+            const isOpen = expandedProjects.has(proj.projectId);
+            const stepCount = proj.items.reduce((s, i) => s + i.steps.length, 0);
+            const uc = urgencyColor(proj.projectDeadline);
+
+            return (
+              <div key={proj.projectId} className="rounded-xl border-2 border-border bg-card overflow-hidden">
+                {/* Project header */}
+                <button
+                  onClick={() => toggleProject(proj.projectId)}
+                  className="w-full flex items-center gap-3 p-3 text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm truncate">{proj.projectName}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${PRIORITY_COLORS[proj.projectPriority] ?? PRIORITY_COLORS.normal}`}>
+                        {proj.projectPriority.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className={`text-xs font-semibold ${uc}`}>
+                        {isPast(new Date(proj.projectDeadline))
+                          ? "Overdue"
+                          : `${differenceInDays(new Date(proj.projectDeadline), new Date())}d left`}
+                        {" · "}{format(new Date(proj.projectDeadline), "dd MMM")}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-1">· {stepCount} step{stepCount !== 1 ? "s" : ""}</span>
+                    </div>
+                  </div>
+                  {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
+                </button>
+
+                {/* Steps */}
+                {isOpen && (
+                  <div className="border-t border-border divide-y divide-border">
+                    {proj.items.map((item) => (
+                      <div key={item.itemId}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-4 py-1.5 bg-muted/30">
+                          {item.itemName}
+                        </p>
+                        {item.steps.map((step) => {
+                          const isDone = completing.has(step.stepId);
+                          return (
+                            <div key={step.stepId} className="flex items-center gap-3 px-4 py-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold">{step.stepName}</p>
+                                {step.durationEstimate && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">~{step.durationEstimate} min</p>
+                                )}
+                              </div>
+
+                              {/* Machine assignment */}
+                              {activeWorkstations.length > 0 && (
+                                <select
+                                  value={step.workstationId ?? ""}
+                                  onChange={(e) => assignMutation.mutate({
+                                    stepId: step.stepId,
+                                    workstationId: e.target.value ? Number(e.target.value) : null,
+                                  })}
+                                  className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 max-w-[120px] flex-shrink-0"
+                                >
+                                  <option value="">— unassigned</option>
+                                  {activeWorkstations.map((ws) => (
+                                    <option key={ws.id} value={ws.id}>{ws.name}</option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {/* Done button */}
+                              <Button
+                                size="sm"
+                                className="h-9 px-3 font-bold flex-shrink-0 gap-1.5"
+                                disabled={isDone}
+                                onClick={() => completeStep(step.stepId)}
+                              >
+                                {isDone
+                                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  : <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

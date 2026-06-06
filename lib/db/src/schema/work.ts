@@ -16,6 +16,28 @@ export const workTemplatesTable = pgTable("work_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Station types: company-defined production flow stations (Cutting, CNC, Welding, …)
+export const stationTypesTable = pgTable("station_types", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#6366f1"),
+  flowOrder: integer("flow_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Physical workstations (CNC Machine 1, Bandsaw 2, …) under a station type
+export const workstationsTable = pgTable("workstations", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  stationTypeId: integer("station_type_id").notNull().references(() => stationTypesTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  priority: integer("priority").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Production steps defined per template; templateComponentId links to a BOM sub-component (null = top-level step)
 export const workStepsTable = pgTable("work_steps", {
   id: serial("id").primaryKey(),
@@ -29,6 +51,7 @@ export const workStepsTable = pgTable("work_steps", {
   templateComponentId: integer("template_component_id"),
   consumesProductId: integer("consumes_product_id").references(() => productsTable.id, { onDelete: "set null" }),
   consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
+  stationTypeId: integer("station_type_id").references(() => stationTypesTable.id, { onDelete: "set null" }),
 });
 
 /** @deprecated use workStepsTable */
@@ -76,6 +99,8 @@ export const workItemStepsTable = pgTable("work_item_steps", {
   templateStepId: integer("template_step_id").references(() => workStepsTable.id, { onDelete: "set null" }),
   consumesProductId: integer("consumes_product_id").references(() => productsTable.id, { onDelete: "set null" }),
   consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
+  stationTypeId: integer("station_type_id").references(() => stationTypesTable.id, { onDelete: "set null" }),
+  workstationId: integer("workstation_id").references(() => workstationsTable.id, { onDelete: "set null" }),
 });
 
 /** @deprecated use workItemStepsTable */
@@ -261,3 +286,5 @@ export type ProductionZone = typeof productionZonesTable.$inferSelect;
 export type WipLocation = typeof wipLocationsTable.$inferSelect;
 export type StepDependency = typeof stepDependenciesTable.$inferSelect;
 export type TemplateStepDependency = typeof templateStepDependenciesTable.$inferSelect;
+export type StationType = typeof stationTypesTable.$inferSelect;
+export type Workstation = typeof workstationsTable.$inferSelect;

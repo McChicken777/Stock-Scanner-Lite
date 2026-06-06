@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -169,8 +169,11 @@ function AdminBottomNav() {
     location.startsWith("/work/reorder") ||
     location.startsWith("/work/purchase-orders");
 
+  const isQueuesActive = location.startsWith("/work/queue") || location.startsWith("/work/queues");
+
   const tabs = [
     { key: "jobs", href: "/work/projects", icon: FolderKanban, label: "Jobs", active: isJobsActive },
+    { key: "queues", href: "/work/queues", icon: Layers, label: "Queues", active: isQueuesActive },
     { key: "customers", href: "/customers", icon: Store, label: "Customers", active: isCustomersActive },
     { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: "Purchasing", active: isPurchasingActive },
   ];
@@ -227,6 +230,15 @@ function AdminBottomNav() {
                 <div>
                   <p className="text-sm font-semibold">Materials</p>
                   <p className="text-xs text-muted-foreground">Raw materials & purchased parts — import via Excel</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/admin/stations" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Layers className="h-5 w-5 text-indigo-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Production Flow</p>
+                  <p className="text-xs text-muted-foreground">Station types & workstations (machines)</p>
                 </div>
               </div>
             </Link>
@@ -459,8 +471,8 @@ function WorkerBottomNav() {
 
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
+    { href: "/work/queues", icon: Layers, label: "Queues" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/work/cutting-queue", icon: Scissors, label: "Cutting" },
     ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop" }] : []),
   ];
 

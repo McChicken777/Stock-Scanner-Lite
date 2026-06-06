@@ -102,6 +102,7 @@ const procSchema = z.object({
   durationEstimate: z.number().int().nullable().optional(),
   consumesProductId: z.number().int().nullable().optional(),
   consumesQuantity: z.number().nonnegative().optional(),
+  stationTypeId: z.number().int().nullable().optional(),
 });
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
@@ -2267,6 +2268,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
               templateStepId: proc.id,
               consumesProductId: proc.consumesProductId ?? null,
               consumesQuantity: proc.consumesQuantity ?? 0,
+              stationTypeId: proc.stationTypeId ?? null,
             }).returning({ id: workItemStepsTable.id });
             templateToLiveStepId.set(proc.id, liveStep.id);
           }
@@ -2302,6 +2304,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
                     templateStepId: proc.id,
                     consumesProductId: proc.consumesProductId ?? null,
                     consumesQuantity: proc.consumesQuantity ?? 0,
+                    stationTypeId: proc.stationTypeId ?? null,
                   }).returning({ id: workItemStepsTable.id });
                   templateToLiveStepId.set(proc.id, liveStep.id);
                 }
@@ -2333,6 +2336,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
                   templateStepId: proc.id,
                   consumesProductId: templateStep?.consumesProductId ?? null,
                   consumesQuantity: templateStep?.consumesQuantity ?? 0,
+                  stationTypeId: templateStep?.stationTypeId ?? null,
                 }).returning({ id: workItemStepsTable.id });
                 templateToLiveStepId.set(proc.id, liveStep.id);
               }
@@ -4399,6 +4403,35 @@ router.post("/cutting-queue/complete", requireAuth, async (req, res) => {
     if (statusCode === 404) { res.status(404).json({ error: (err as Error).message }); return; }
     req.log.error({ err }, "Failed to complete cut step");
     res.status(500).json({ error: "Failed to complete cut step" });
+  }
+});
+
+// POST /work/steps/:stepId/complete
+// General step completion — marks not_started → completed (used by station queues)
+router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const stepId = Number(req.params.stepId);
+
+    // Verify ownership
+    const [row] = await db
+      .select({ id: workItemStepsTable.id, status: workItemStepsTable.status })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workItemStepsTable.id, stepId), eq(workProjectsTable.companyId, companyId)));
+
+    if (!row) { res.status(404).json({ error: "Step not found" }); return; }
+    if (row.status === "completed") { res.json({ ok: true }); return; } // idempotent
+
+    await db.update(workItemStepsTable)
+      .set({ status: "completed" })
+      .where(eq(workItemStepsTable.id, stepId));
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to complete step");
+    res.status(500).json({ error: "Failed to complete step" });
   }
 });
 
