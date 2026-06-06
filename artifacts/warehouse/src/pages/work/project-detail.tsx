@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock,
+  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock, History,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -92,6 +92,17 @@ interface Template {
   id: number;
   name: string;
   procedures: { id: number; name: string }[];
+}
+
+interface TimeLogEntry {
+  id: number;
+  stepId: number;
+  stepName: string;
+  itemName: string;
+  username: string;
+  startTime: string;
+  endTime: string | null;
+  durationSeconds: number | null;
 }
 
 async function fetchProject(id: number): Promise<Project> {
@@ -495,6 +506,7 @@ export default function WorkProjectDetailPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
+  const [showTimeLogs, setShowTimeLogs] = useState(false);
   const itemRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [showAddItems, setShowAddItems] = useState(false);
   const [editingProjectColor, setEditingProjectColor] = useState(false);
@@ -528,6 +540,16 @@ export default function WorkProjectDetailPage() {
     },
     enabled: !!projectId,
     refetchInterval: editMode ? false : 10000,
+  });
+
+  const { data: timeLogs = [] } = useQuery<TimeLogEntry[]>({
+    queryKey: [`/api/work/projects/${projectId}/time-logs`],
+    queryFn: async () => {
+      const r = await fetch(`/api/work/projects/${projectId}/time-logs`, { credentials: "include" });
+      if (!r.ok) return [];
+      return r.json();
+    },
+    enabled: !!projectId && showTimeLogs,
   });
 
   const { data: originQuotes = [] } = useQuery<Array<{ id: number; quoteNumber: string }>>({
@@ -857,6 +879,56 @@ export default function WorkProjectDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Time logs */}
+        <div className="rounded-xl border border-border overflow-hidden">
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
+            onClick={() => setShowTimeLogs((v) => !v)}
+          >
+            <span className="flex items-center gap-2 text-sm font-bold">
+              <History className="h-4 w-4 text-muted-foreground" />
+              Time Logs
+            </span>
+            {showTimeLogs ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </button>
+          {showTimeLogs && (
+            <div className="border-t border-border divide-y divide-border">
+              {timeLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">No time logs yet.</p>
+              ) : (
+                timeLogs.map((log) => {
+                  const duration = log.durationSeconds != null
+                    ? formatSeconds(log.durationSeconds)
+                    : log.endTime == null ? "In progress" : "—";
+                  return (
+                    <div key={log.id} className="flex items-center gap-3 px-4 py-2.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold truncate">{log.stepName}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{log.itemName}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-bold">{duration}</p>
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1 justify-end">
+                          <User className="h-2.5 w-2.5" /> {log.username}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {timeLogs.length > 0 && (() => {
+                const totalSeconds = timeLogs.reduce((sum, l) => sum + (l.durationSeconds ?? 0), 0);
+                return totalSeconds > 0 ? (
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total</span>
+                    <span className="text-sm font-black">{formatSeconds(totalSeconds)}</span>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+        </div>
 
         {isAdmin && project.status === "in_progress" && project.progress === 100 && !editMode && (
           <Button

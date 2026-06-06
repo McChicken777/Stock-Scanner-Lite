@@ -3,7 +3,7 @@ import {
   db, stationTypesTable, workstationsTable, workItemStepsTable,
   workProjectItemsTable, workProjectsTable, workTimeLogsTable, usersTable,
 } from "@workspace/db";
-import { eq, and, asc, inArray, isNull } from "drizzle-orm";
+import { eq, and, asc, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
 
@@ -26,9 +26,32 @@ router.get("/types", requireAuth, async (req, res) => {
           .orderBy(asc(workstationsTable.priority))
       : [];
 
+    // Count pending (not_started + in_progress) steps per station type across active projects
+    const pendingCounts = typeIds.length
+      ? await db
+          .select({
+            stationTypeId: workItemStepsTable.stationTypeId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(workItemStepsTable)
+          .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+          .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+          .where(
+            and(
+              inArray(workItemStepsTable.stationTypeId, typeIds),
+              inArray(workItemStepsTable.status, ["not_started", "in_progress"]),
+              eq(workProjectsTable.status, "in_progress"),
+              eq(workProjectsTable.companyId, companyId),
+            )
+          )
+          .groupBy(workItemStepsTable.stationTypeId)
+      : [];
+    const pendingCountMap = new Map(pendingCounts.map((r) => [r.stationTypeId, r.count]));
+
     const result = types.map((t) => ({
       ...t,
       workstations: workstations.filter((w) => w.stationTypeId === t.id),
+      pendingCount: pendingCountMap.get(t.id) ?? 0,
     }));
     res.json(result);
   } catch (err) {
@@ -215,6 +238,11 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
         projectDeadline: workProjectsTable.deadline,
         projectPriority: workProjectsTable.priority,
         projectStatus: workProjectsTable.status,
+        startTime: sql<string | null>`(
+          SELECT start_time FROM work_time_logs
+          WHERE step_id = ${workItemStepsTable.id} AND end_time IS NULL
+          ORDER BY start_time DESC LIMIT 1
+        )`,
       })
       .from(workItemStepsTable)
       .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))

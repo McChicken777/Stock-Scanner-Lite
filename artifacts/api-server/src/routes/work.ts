@@ -4537,6 +4537,42 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
 });
 
 // GET /work/materials — purchased_part products with total stock across all locations
+// GET /work/projects/:id/time-logs — all completed time log sessions for a project
+router.get("/projects/:id/time-logs", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const projectId = Number(req.params.id);
+
+    const [project] = await db.select({ id: workProjectsTable.id })
+      .from(workProjectsTable)
+      .where(and(eq(workProjectsTable.id, projectId), eq(workProjectsTable.companyId, companyId)));
+    if (!project) { res.status(404).json({ error: "Not found" }); return; }
+
+    const logs = await db
+      .select({
+        id: workTimeLogsTable.id,
+        stepId: workTimeLogsTable.stepId,
+        stepName: workItemStepsTable.name,
+        itemName: workProjectItemsTable.name,
+        username: usersTable.username,
+        startTime: workTimeLogsTable.startTime,
+        endTime: workTimeLogsTable.endTime,
+        durationSeconds: workTimeLogsTable.durationSeconds,
+      })
+      .from(workTimeLogsTable)
+      .innerJoin(workItemStepsTable, eq(workTimeLogsTable.stepId, workItemStepsTable.id))
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+      .where(eq(workProjectItemsTable.projectId, projectId))
+      .orderBy(desc(workTimeLogsTable.startTime));
+
+    res.json(logs);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get project time logs");
+    res.status(500).json({ error: "Failed to get time logs" });
+  }
+});
+
 router.get("/materials", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
