@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Plus, Trash2, Loader2, Package, ChevronDown, ChevronRight,
+  Plus, Trash2, Loader2, Package, ChevronDown, ChevronUp, ChevronRight,
   Wrench, ShoppingCart, X, ListPlus, GripVertical,
   Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, Check,
 } from "lucide-react";
@@ -593,6 +593,13 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   const [newPartName, setNewPartName] = useState("");
   const [componentQty, setComponentQty] = useState(1);
   const [newPartType, setNewPartType] = useState<"manufactured_part" | "purchased_part">("manufactured_part");
+  // Which manufactured_part rows have their sub-section expanded (lazy — only query when opened)
+  const [expandedComps, setExpandedComps] = useState<Set<number>>(new Set());
+  const toggleComp = (id: number) => setExpandedComps((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const compKey = [`/api/work/templates/${templateId}/components`, productId];
   const { data: components = [], isLoading } = useQuery<ComponentEntry[]>({
@@ -677,16 +684,24 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
             {isManufactured && comp.product && (
               <>
                 <ComponentProcedureList templateId={templateId} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
-                {/* Recurse: sub-parts of this manufactured part */}
-                <BomSection
-                  templateId={templateId}
-                  productId={comp.product.id}
-                  allProducts={allProducts}
-                  roles={roles}
-                  presets={presets}
-                  depth={depth + 1}
-                  onInvalidateParent={invalidate}
-                />
+                {/* Sub-parts toggle — only mounts BomSection (and fires its query) when opened */}
+                <button
+                  onClick={() => toggleComp(comp.id)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 mt-1 pl-1"
+                >
+                  {expandedComps.has(comp.id) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  Sub-parts of {comp.product.name}
+                </button>
+                {expandedComps.has(comp.id) && (
+                  <BomSection
+                    templateId={templateId}
+                    productId={comp.product.id}
+                    allProducts={allProducts}
+                    roles={roles}
+                    presets={presets}
+                    depth={depth + 1}
+                  />
+                )}
               </>
             )}
             {!isManufactured && (
