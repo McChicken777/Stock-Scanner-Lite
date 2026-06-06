@@ -577,28 +577,32 @@ function ComponentProcedureList({ templateId, comp, roles, presets, products, on
   );
 }
 
-// ─── BOM (existing, enhanced) ────────────────────────────────────────────────
+// ─── BOM (recursive) ─────────────────────────────────────────────────────────
 
-function TemplateBOM({ template, allProducts, roles, presets }: {
-  template: Template; allProducts: Product[]; roles: Role[]; presets: StepPreset[];
+// BomSection renders the sub-parts of ONE product within a template.
+// Called recursively for each manufactured_part so you get arbitrary depth.
+function BomSection({ templateId, productId, allProducts, roles, presets, depth = 0, onInvalidateParent }: {
+  templateId: number; productId: number; allProducts: Product[];
+  roles: Role[]; presets: StepPreset[]; depth?: number; onInvalidateParent?: () => void;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const productId = template.productId;
 
   const [addingComponent, setAddingComponent] = useState(false);
   const [selectedComponentId, setSelectedComponentId] = useState<number | "new">("new");
   const [newPartName, setNewPartName] = useState("");
   const [componentQty, setComponentQty] = useState(1);
 
-  const compKey = [`/api/work/templates/${template.id}/components`];
+  const compKey = [`/api/work/templates/${templateId}/components`, productId];
   const { data: components = [], isLoading } = useQuery<ComponentEntry[]>({
     queryKey: compKey,
-    queryFn: () => apiFetch(`/api/work/templates/${template.id}/components`),
-    enabled: !!productId,
+    queryFn: () => apiFetch(`/api/work/templates/${templateId}/components?productId=${productId}`),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: compKey });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: compKey });
+    onInvalidateParent?.();
+  };
 
   const addComponentMutation = useMutation({
     mutationFn: ({ componentProductId, quantity }: { componentProductId: number; quantity: number }) =>
@@ -611,10 +615,10 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
   });
 
   const createPartAndAddMutation = useMutation({
-    mutationFn: async ({ name, quantity }: { name: string; quantity: number }) => {
+    mutationFn: async ({ name, quantity, itemType }: { name: string; quantity: number; itemType: string }) => {
       const newPart: Product = await apiFetch("/api/products", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, itemType: "manufactured_part", bufferStock: 0, targetStock: 0 }),
+        body: JSON.stringify({ name, itemType, bufferStock: 0, targetStock: 0 }),
       });
       return apiFetch(`/api/products/${productId}/components`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -625,7 +629,7 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       setAddingComponent(false); setSelectedComponentId("new"); setNewPartName(""); setComponentQty(1);
-      toast({ title: "Manufactured part created and added" });
+      toast({ title: "Part created and added" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -638,59 +642,26 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const reorderComponentsMutation = useMutation({
-    mutationFn: (order: { id: number; sortOrder: number }[]) =>
-      apiFetch(`/api/products/${productId}/components/reorder`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order }),
-      }),
-    onSuccess: invalidate,
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
+  const indent = depth * 16;
+  const alreadyLinked = new Set(components.map((c) => c.componentProductId));
+  const availableParts = allProducts.filter((p) =>
+    (p.itemType === "manufactured_part" || p.itemType === "purchased_part") && !alreadyLinked.has(p.id)
+  );
 
-  const bomDragIdx = useRef<number | null>(null);
-  const handleBomDrop = (targetIdx: number) => {
-    const from = bomDragIdx.current;
-    if (from === null || from === targetIdx) return;
-    bomDragIdx.current = null;
-    const reordered = [...components];
-    const [moved] = reordered.splice(from, 1);
-    reordered.splice(targetIdx, 0, moved);
-    const order = reordered.map((c, i) => ({ id: c.id, sortOrder: i }));
-    reorderComponentsMutation.mutate(order);
-  };
+  // For deeper levels only allow purchased_part as raw material OR manufactured_part as sub-component
+  const [newPartType, setNewPartType] = useState<"manufactured_part" | "purchased_part">("manufactured_part");
 
-  const availableParts = [...allProducts.filter((p) => p.itemType === "manufactured_part" || p.itemType === "purchased_part" || p.itemType === "purchase")]
-    .filter((p) => !components.some((c) => c.componentProductId === p.id));
-
-  if (!productId) return null;
-  if (isLoading) return <div className="px-4 pb-4"><div className="h-16 bg-muted/40 rounded-lg animate-pulse" /></div>;
+  if (isLoading) return null;
 
   return (
-    <div className="px-4 pb-4 space-y-3">
-      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sub-parts (BOM)</p>
-      {components.length === 0 && (
-        <p className="text-xs text-muted-foreground italic">No sub-parts yet.</p>
-      )}
-
-      {components.map((comp, compIndex) => {
+    <div style={{ marginLeft: indent }} className="space-y-2 mt-2">
+      {components.map((comp) => {
         const isManufactured = comp.product?.itemType === "manufactured_part";
-        const isPurchased = !isManufactured;
         return (
-          <div
-            key={comp.id}
-            draggable={isManufactured}
-            onDragStart={() => { if (isManufactured) bomDragIdx.current = compIndex; }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={() => isManufactured && handleBomDrop(compIndex)}
-            className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40 cursor-grab active:cursor-grabbing active:border-blue-400" : "border-orange-200 bg-orange-50/40"}`}
-          >
+          <div key={comp.id} className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40" : "border-orange-200 bg-orange-50/40"}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {isManufactured && (
-                  <GripVertical className="h-4 w-4 text-slate-300 flex-shrink-0 cursor-grab" />
-                )}
-                {isManufactured ? <Wrench className="h-4 w-4 text-blue-600" /> : <ShoppingCart className="h-4 w-4 text-orange-600" />}
+              <div className="flex items-center gap-2 flex-wrap">
+                {isManufactured ? <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" /> : <ShoppingCart className="h-4 w-4 text-orange-600 flex-shrink-0" />}
                 <span className="font-bold text-sm">{comp.product?.name ?? "Unknown"}</span>
                 <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isManufactured ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
                   {isManufactured ? "Manufactured" : "Purchased"}
@@ -699,18 +670,28 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
                   <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">×{comp.quantity}</span>
                 )}
               </div>
-              {isManufactured && (
-                <button onClick={() => removeComponentMutation.mutate(comp.id)} disabled={removeComponentMutation.isPending}
-                  className="text-destructive hover:text-destructive/80 p-1 rounded">
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+              <button onClick={() => removeComponentMutation.mutate(comp.id)} disabled={removeComponentMutation.isPending}
+                className="text-destructive hover:text-destructive/80 p-1 rounded flex-shrink-0">
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            {isManufactured && (
-              <ComponentProcedureList templateId={template.id} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
+            {isManufactured && comp.product && (
+              <>
+                <ComponentProcedureList templateId={templateId} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
+                {/* Recurse: sub-parts of this manufactured part */}
+                <BomSection
+                  templateId={templateId}
+                  productId={comp.product.id}
+                  allProducts={allProducts}
+                  roles={roles}
+                  presets={presets}
+                  depth={depth + 1}
+                  onInvalidateParent={invalidate}
+                />
+              </>
             )}
-            {isPurchased && (
+            {!isManufactured && (
               <p className="pl-6 text-xs text-muted-foreground italic">Tracked via stock / inbound</p>
             )}
           </div>
@@ -719,21 +700,37 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
 
       {addingComponent ? (
         <div className="rounded-lg border-2 border-dashed border-muted-foreground/30 p-3 space-y-3">
-          <p className="text-sm font-bold">Add Component</p>
+          <p className="text-sm font-bold">Add Sub-part</p>
+          {/* Part type selector for deeper levels */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setNewPartType("manufactured_part")}
+              className={`flex-1 text-xs font-semibold py-1.5 rounded border-2 transition-colors ${newPartType === "manufactured_part" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border"}`}
+            >
+              <Wrench className="h-3 w-3 inline mr-1" />Manufactured
+            </button>
+            <button
+              onClick={() => setNewPartType("purchased_part")}
+              className={`flex-1 text-xs font-semibold py-1.5 rounded border-2 transition-colors ${newPartType === "purchased_part" ? "border-orange-500 bg-orange-50 text-orange-700" : "border-border"}`}
+            >
+              <ShoppingCart className="h-3 w-3 inline mr-1" />Purchased
+            </button>
+          </div>
           <select
             value={selectedComponentId}
             onChange={(e) => setSelectedComponentId(e.target.value === "new" ? "new" : Number(e.target.value))}
             className="w-full rounded-md border-2 border-border bg-background px-3 py-2 text-sm"
           >
-            <option value="new">+ Create new manufactured part</option>
-            {availableParts.length > 0 && <option disabled>── Existing parts ──</option>}
-            {availableParts.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} ({p.itemType === "manufactured_part" ? "Manufactured" : "Purchased"})</option>
+            <option value="new">+ Create new part</option>
+            {availableParts.filter((p) => p.itemType === newPartType).length > 0 && <option disabled>── Existing ──</option>}
+            {availableParts.filter((p) => p.itemType === newPartType).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           {selectedComponentId === "new" && (
             <Input value={newPartName} onChange={(e) => setNewPartName(e.target.value)}
-              placeholder="e.g. Steel Bracket, Frame" className="h-9 border-2" autoFocus />
+              placeholder={newPartType === "manufactured_part" ? "e.g. CNC Cone" : "e.g. 40mm Steel Rod"}
+              className="h-9 border-2" autoFocus />
           )}
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium">Qty:</span>
@@ -747,7 +744,7 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
               onClick={() => {
                 if (selectedComponentId === "new") {
                   if (!newPartName.trim()) return;
-                  createPartAndAddMutation.mutate({ name: newPartName.trim(), quantity: componentQty });
+                  createPartAndAddMutation.mutate({ name: newPartName.trim(), quantity: componentQty, itemType: newPartType });
                 } else {
                   addComponentMutation.mutate({ componentProductId: selectedComponentId as number, quantity: componentQty });
                 }
@@ -764,11 +761,30 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
       ) : (
         <button
           onClick={() => setAddingComponent(true)}
-          className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-primary border-2 border-dashed border-primary/30 rounded-lg py-2.5 hover:border-primary/60 hover:bg-primary/5 transition-all"
+          className="w-full flex items-center justify-center gap-2 text-xs font-semibold text-primary border-2 border-dashed border-primary/30 rounded-lg py-2 hover:border-primary/60 hover:bg-primary/5 transition-all"
         >
-          <ListPlus className="h-4 w-4" /> Add sub-part
+          <ListPlus className="h-3.5 w-3.5" /> Add sub-part {depth > 0 ? `(level ${depth + 2})` : ""}
         </button>
       )}
+    </div>
+  );
+}
+
+function TemplateBOM({ template, allProducts, roles, presets }: {
+  template: Template; allProducts: Product[]; roles: Role[]; presets: StepPreset[];
+}) {
+  if (!template.productId) return null;
+  return (
+    <div className="px-4 pb-4 space-y-3">
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sub-parts (BOM)</p>
+      <BomSection
+        templateId={template.id}
+        productId={template.productId}
+        allProducts={allProducts}
+        roles={roles}
+        presets={presets}
+        depth={0}
+      />
     </div>
   );
 }

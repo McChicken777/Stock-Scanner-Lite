@@ -1029,17 +1029,20 @@ router.post("/templates/:id/apply-preset", requireAdmin, async (req, res) => {
 // Steps for BOM sub-parts live in work_steps with templateComponentId = productComponent.id
 // This decouples component step sequences from global product_procedures.
 
-// List BOM components for a template, with their per-template steps
+// List BOM components for a template, with their per-template steps.
+// Optional ?productId= overrides the root product so the UI can fetch sub-levels recursively.
 router.get("/templates/:id/components", requireAuth, async (req, res) => {
   try {
     const templateId = Number(req.params.id);
     const companyId = req.session.companyId!;
     const tmpl = await getOwnedTemplate(templateId, companyId);
     if (!tmpl) { res.status(404).json({ error: "Not found" }); return; }
-    if (!tmpl.productId) { res.json([]); return; }
+
+    const rootProductId = req.query.productId ? Number(req.query.productId) : tmpl.productId;
+    if (!rootProductId) { res.json([]); return; }
 
     const components = await db.select().from(productComponentsTable)
-      .where(eq(productComponentsTable.parentProductId, tmpl.productId))
+      .where(eq(productComponentsTable.parentProductId, rootProductId))
       .orderBy(productComponentsTable.sortOrder);
 
     const result = await Promise.all(components.map(async (comp) => {
@@ -2269,7 +2272,46 @@ router.post("/projects", requireAdmin, async (req, res) => {
             templateToLiveStepId.set(proc.id, liveStep.id);
           }
 
-          // Create sub-items for each manufactured_part in BOM
+          // Recursively create sub-items for all manufactured_part levels in the BOM
+          const createSubItems = async (parentProductId: number, parentItemId: number, namePrefix: string) => {
+            const subComps = await db.select().from(productComponentsTable)
+              .where(eq(productComponentsTable.parentProductId, parentProductId))
+              .orderBy(productComponentsTable.sortOrder);
+            for (const subComp of subComps) {
+              const [subCompProduct] = await db.select().from(productsTable).where(eq(productsTable.id, subComp.componentProductId));
+              if (!subCompProduct || subCompProduct.itemType !== "manufactured_part") continue;
+              for (let q = 1; q <= subComp.quantity; q++) {
+                const subName = subComp.quantity > 1
+                  ? `${namePrefix} › ${subCompProduct.name} #${q}`
+                  : `${namePrefix} › ${subCompProduct.name}`;
+                const [subItem] = await db.insert(workProjectItemsTable).values({
+                  projectId: project.id, name: subName, sortOrder, parentItemId,
+                  productId: subComp.componentProductId,
+                }).returning();
+                sortOrder++;
+                // Load steps for this sub-component from the template
+                const subSteps = await db.select().from(workStepsTable)
+                  .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, subComp.id)))
+                  .orderBy(workStepsTable.sortOrder);
+                for (const proc of subSteps) {
+                  const [liveStep] = await db.insert(workItemStepsTable).values({
+                    itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
+                    requiresInbound: false,
+                    roleId: proc.roleId ?? null,
+                    batchMode: proc.batchMode ?? "individual",
+                    durationEstimate: proc.durationEstimate ?? null,
+                    templateStepId: proc.id,
+                    consumesProductId: proc.consumesProductId ?? null,
+                    consumesQuantity: proc.consumesQuantity ?? 0,
+                  }).returning({ id: workItemStepsTable.id });
+                  templateToLiveStepId.set(proc.id, liveStep.id);
+                }
+                // Recurse deeper
+                await createSubItems(subComp.componentProductId, subItem.id, subName);
+              }
+            }
+          };
+
           for (const comp of bomComponents) {
             if (comp.itemType !== "manufactured_part") continue;
             for (let q = 1; q <= comp.quantity; q++) {
@@ -2295,6 +2337,8 @@ router.post("/projects", requireAdmin, async (req, res) => {
                 }).returning({ id: workItemStepsTable.id });
                 templateToLiveStepId.set(proc.id, liveStep.id);
               }
+              // Recurse into sub-sub-components
+              await createSubItems(comp.componentProductId, subItem.id, subName);
             }
           }
 
