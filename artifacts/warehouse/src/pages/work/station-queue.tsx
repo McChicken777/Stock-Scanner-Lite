@@ -207,6 +207,7 @@ export default function StationQueuePage() {
     try {
       await apiFetch(`/api/work/steps/${stepId}/start`, { method: "POST" });
       qc.invalidateQueries({ queryKey: key });
+      qc.invalidateQueries({ queryKey: ["/api/work/active-timer"] });
       toast({ title: "Step started — good luck! 💪" });
     } catch (e) {
       toast({ title: (e as Error).message, variant: "destructive" });

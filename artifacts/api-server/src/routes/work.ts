@@ -1959,7 +1959,7 @@ async function getProjectWithItems(projectId: number) {
         workTimeLogsTable,
         and(eq(workTimeLogsTable.stepId, workItemStepsTable.id), isNull(workTimeLogsTable.endTime)),
       )
-      .where(sql`${workItemStepsTable.itemId} = ANY(${sql.raw(`ARRAY[${itemIds.join(",")}]::int[]`)})`)
+      .where(inArray(workItemStepsTable.itemId, itemIds))
       .orderBy(workItemStepsTable.sortOrder);
     procedures = rows.map((r) => ({
       ...r.step,
@@ -2593,6 +2593,10 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
           roleId: proc.roleId ?? null,
           batchMode: proc.batchMode ?? "individual",
           durationEstimate: proc.durationEstimate ?? null,
+          templateStepId: proc.id,
+          consumesProductId: proc.consumesProductId ?? null,
+          consumesQuantity: proc.consumesQuantity ?? 0,
+          stationTypeId: proc.stationTypeId ?? null,
         });
       }
 
@@ -2848,7 +2852,14 @@ router.post("/procedures/:procedureId/stop", requireAuth, async (req, res) => {
 
 router.post("/procedures/:procedureId/reset", requireAdmin, async (req, res) => {
   try {
+    const companyId = req.session.companyId!;
     const procedureId = Number(req.params.procedureId);
+    const [ownership] = await db.select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(eq(workItemStepsTable.id, procedureId), eq(workProjectsTable.companyId, companyId)));
+    if (!ownership) { res.status(404).json({ error: "Step not found" }); return; }
     const [proc] = await db.update(workItemStepsTable)
       .set({ status: "not_started", totalTimeSeconds: 0 })
       .where(eq(workItemStepsTable.id, procedureId)).returning();
@@ -2891,7 +2902,10 @@ router.post("/production-zones", requireAdmin, async (req, res) => {
 
 router.delete("/production-zones/:id", requireAdmin, async (req, res) => {
   try {
-    await db.delete(productionZonesTable).where(eq(productionZonesTable.id, Number(req.params.id)));
+    const companyId = req.session.companyId!;
+    await db.delete(productionZonesTable).where(
+      and(eq(productionZonesTable.id, Number(req.params.id)), eq(productionZonesTable.companyId, companyId))
+    );
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete production zone");
