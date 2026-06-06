@@ -485,7 +485,7 @@ function ComponentProcedureList({ templateId, comp, roles, presets, products, on
                   className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[120px]"
                 >
                   <option value="">— no material —</option>
-                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {products.filter((p) => p.itemType === "purchased_part").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 {proc.consumesProductId && (
                   <>
