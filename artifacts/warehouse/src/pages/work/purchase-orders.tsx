@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Plus, ShoppingCart, Package2, CheckCircle2,
-  Truck, AlertCircle, ChevronRight, Trash2, Edit2, X,
+  Truck, AlertCircle, ChevronRight, Trash2, Edit2, X, Mail,
 } from "lucide-react";
 
 interface PurchaseOrder {
@@ -63,6 +63,7 @@ interface Product {
 interface Supplier {
   id: number;
   name: string;
+  email: string | null;
 }
 
 interface Location {
@@ -91,6 +92,26 @@ const statusIcons: Record<string, React.ReactNode> = {
   arrived: <CheckCircle2 className="h-3 w-3" />,
   cancelled: <X className="h-3 w-3" />,
 };
+
+function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: POItem[]) {
+  const subject = encodeURIComponent(`Purchase Order #${poId} — ${supplierName}`);
+  const lines = [
+    `Hi ${supplierName},`,
+    ``,
+    `Please process the following order (PO #${poId}):`,
+    ``,
+    ...items.map((item) => {
+      const sku = item.supplierSku ? ` (SKU: ${item.supplierSku})` : "";
+      const price = item.unitPrice != null ? ` @ $${Number(item.unitPrice).toFixed(2)} each` : "";
+      return `• ${item.productName}${sku}  —  Qty: ${item.quantityOrdered}${price}`;
+    }),
+    ``,
+    `Please confirm receipt and estimated delivery date.`,
+    ``,
+    `Thank you,`,
+  ];
+  return `mailto:${supplierEmail}?subject=${subject}&body=${encodeURIComponent(lines.join("\n"))}`;
+}
 
 // ─── PO Detail View ────────────────────────────────────────────────────────────
 
@@ -209,6 +230,10 @@ function PODetailPage({ poId }: { poId: number }) {
   const purchasedProducts = products.filter((p) => p.itemType === "purchased_part" || p.itemType === "purchase");
   const canEdit = po.status !== "arrived" && po.status !== "cancelled";
   const currentItem = arriveItemId ? po.items.find((i) => i.id === arriveItemId) : null;
+  const supplierEmail = po.supplierId ? (suppliers.find((s) => s.id === po.supplierId)?.email ?? null) : null;
+  const mailtoUrl = supplierEmail && po.items.length > 0
+    ? buildMailtoLink(supplierEmail, po.supplierName ?? "Supplier", po.id, po.items)
+    : null;
 
   return (
     <div className="p-4 space-y-4 pb-24">
@@ -253,6 +278,20 @@ function PODetailPage({ poId }: { poId: number }) {
           <div className="flex items-center gap-2 text-green-700 text-sm font-semibold">
             <CheckCircle2 className="h-4 w-4" /> All items received
           </div>
+        )}
+
+        {/* Email supplier */}
+        {mailtoUrl && (
+          <a href={mailtoUrl} className="block">
+            <Button size="sm" variant="outline" className="w-full h-9 font-bold text-blue-700 border-blue-300 hover:bg-blue-50">
+              <Mail className="h-3.5 w-3.5 mr-1.5" /> Send by email to {po.supplierName}
+            </Button>
+          </a>
+        )}
+        {po.supplierId && !supplierEmail && (
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <Mail className="h-3 w-3" /> No email on file for this supplier — add one in Settings to enable emailing.
+          </p>
         )}
       </div>
 

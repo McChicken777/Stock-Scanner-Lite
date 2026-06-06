@@ -3553,15 +3553,16 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
     // Resolve supplier names for display and linking
     const supplierIds = [...new Set(lowStockProducts.map((p) => p.supplierId).filter((id): id is number => id != null))];
     const supplierRows = supplierIds.length > 0
-      ? await db.select({ id: suppliersTable.id, name: suppliersTable.name })
+      ? await db.select({ id: suppliersTable.id, name: suppliersTable.name, email: suppliersTable.email })
           .from(suppliersTable)
           .where(inArray(suppliersTable.id, supplierIds))
       : [];
-    const supplierNameById = new Map(supplierRows.map((s) => [s.id, s.name]));
+    const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
 
     res.json(lowStockProducts.map((p) => ({
       ...p,
-      supplierName: p.supplierId ? (supplierNameById.get(p.supplierId) ?? null) : null,
+      supplierName: p.supplierId ? (supplierById.get(p.supplierId)?.name ?? null) : null,
+      supplierEmail: p.supplierId ? (supplierById.get(p.supplierId)?.email ?? null) : null,
       pendingPo: pendingPoByProduct.get(p.id) ?? null,
     })));
   } catch (err) {
