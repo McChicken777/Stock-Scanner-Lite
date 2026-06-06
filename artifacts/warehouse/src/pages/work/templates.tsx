@@ -592,16 +592,17 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   const [selectedComponentId, setSelectedComponentId] = useState<number | "new">("new");
   const [newPartName, setNewPartName] = useState("");
   const [componentQty, setComponentQty] = useState(1);
+  const [newPartType, setNewPartType] = useState<"manufactured_part" | "purchased_part">("manufactured_part");
 
   const compKey = [`/api/work/templates/${templateId}/components`, productId];
   const { data: components = [], isLoading } = useQuery<ComponentEntry[]>({
     queryKey: compKey,
     queryFn: () => apiFetch(`/api/work/templates/${templateId}/components?productId=${productId}`),
+    staleTime: 30000,
   });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: compKey });
-    onInvalidateParent?.();
   };
 
   const addComponentMutation = useMutation({
@@ -648,10 +649,7 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
     (p.itemType === "manufactured_part" || p.itemType === "purchased_part") && !alreadyLinked.has(p.id)
   );
 
-  // For deeper levels only allow purchased_part as raw material OR manufactured_part as sub-component
-  const [newPartType, setNewPartType] = useState<"manufactured_part" | "purchased_part">("manufactured_part");
-
-  if (isLoading) return null;
+  if (isLoading) return <div style={{ marginLeft: indent }} className="h-6 bg-muted/30 rounded animate-pulse mt-2" />;
 
   return (
     <div style={{ marginLeft: indent }} className="space-y-2 mt-2">
