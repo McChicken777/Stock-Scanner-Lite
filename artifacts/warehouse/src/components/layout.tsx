@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette,
-  BarChart2, ShoppingCart,
+  BarChart2, ShoppingCart, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -163,7 +163,8 @@ function AdminBottomNav() {
     location.startsWith("/work/templates");
   const isCustomersActive =
     location.startsWith("/customers") ||
-    location.startsWith("/quotes");
+    location.startsWith("/quotes") ||
+    location.startsWith("/orders");
   const isPurchasingActive =
     location.startsWith("/work/reorder") ||
     location.startsWith("/work/purchase-orders");
@@ -226,15 +227,6 @@ function AdminBottomNav() {
                 <div>
                   <p className="text-sm font-semibold">Roles</p>
                   <p className="text-xs text-muted-foreground">Who does which step</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/work/paint-queue" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Palette className="h-5 w-5 text-orange-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Paint Shop</p>
-                  <p className="text-xs text-muted-foreground">Batch painting queue by color</p>
                 </div>
               </div>
             </Link>
@@ -450,9 +442,16 @@ function WorkOrdersBottomNav() {
 function WorkerBottomNav() {
   const [location] = useLocation();
 
+  const { data: painterData } = useQuery<{ isPainter: boolean }>({
+    queryKey: ["/api/work/painter-access"],
+    queryFn: () => fetch("/api/work/painter-access", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
+    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop" }] : []),
   ];
 
   return (
