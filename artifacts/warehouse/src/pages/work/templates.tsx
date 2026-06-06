@@ -670,7 +670,9 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   const indent = depth * 16;
   const alreadyLinked = new Set(components.map((c) => c.componentProductId));
   const availableParts = allProducts.filter((p) =>
-    (p.itemType === "manufactured_part" || p.itemType === "purchased_part") && !alreadyLinked.has(p.id)
+    (p.itemType === "manufactured_part" || p.itemType === "purchased_part") &&
+    !alreadyLinked.has(p.id) &&
+    p.id !== productId  // prevent a part from being added as its own sub-component
   );
 
   if (isLoading) return <div style={{ marginLeft: indent }} className="h-6 bg-muted/30 rounded animate-pulse mt-2" />;
@@ -685,9 +687,9 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                 {isManufactured ? <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" /> : <ShoppingCart className="h-4 w-4 text-orange-600 flex-shrink-0" />}
-                {/* Inline editable name */}
+                {/* Inline editable name — key on comp.id (stable) so React never confuses two inputs */}
                 <input
-                  key={comp.product?.name}
+                  key={comp.id}
                   defaultValue={comp.product?.name ?? ""}
                   className="font-bold text-sm bg-transparent border-b border-transparent hover:border-muted-foreground/40 focus:border-primary focus:outline-none min-w-0 flex-1"
                   onBlur={(e) => {

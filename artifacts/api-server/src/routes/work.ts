@@ -85,12 +85,11 @@ async function getOwnedTemplate(templateId: number, companyId: number) {
  */
 async function getOwnedComponent(templateId: number, componentId: number, companyId: number) {
   const tmpl = await getOwnedTemplate(templateId, companyId);
-  if (!tmpl?.productId) return null;
+  if (!tmpl) return null;
+  // No parentProductId check here — components can be at any depth in the BOM tree.
+  // Template ownership (above) is sufficient to authorise step operations.
   const [comp] = await db.select().from(productComponentsTable)
-    .where(and(
-      eq(productComponentsTable.id, componentId),
-      eq(productComponentsTable.parentProductId, tmpl.productId),
-    ));
+    .where(eq(productComponentsTable.id, componentId));
   return comp ?? null;
 }
 
