@@ -274,15 +274,6 @@ function AdminBottomNav() {
 
             {/* Business section */}
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">Business</p>
-            <Link href="/quotes" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <FileText className="h-5 w-5 text-blue-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Quotes</p>
-                  <p className="text-xs text-muted-foreground">Send quotes & convert to jobs</p>
-                </div>
-              </div>
-            </Link>
             <Link href="/products" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Package2 className="h-5 w-5 text-muted-foreground shrink-0" />

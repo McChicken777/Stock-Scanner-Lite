@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Mail, Phone, Users, ChevronRight, X } from "lucide-react";
+import { Plus, Search, Mail, Phone, Users, ChevronRight, X, FileText } from "lucide-react";
 
 interface Customer {
   id: number;
@@ -74,12 +74,19 @@ export default function CustomersPage() {
             {customers.length} total
           </p>
         </div>
-        {isAdmin && (
-          <Button size="sm" className="font-bold gap-1" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {showForm ? "Cancel" : "New"}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link href="/quotes">
+            <Button size="sm" variant="outline" className="font-bold gap-1 border-2">
+              <FileText className="h-4 w-4" /> Quotes
+            </Button>
+          </Link>
+          {isAdmin && (
+            <Button size="sm" className="font-bold gap-1" onClick={() => setShowForm((v) => !v)}>
+              {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {showForm ? "Cancel" : "New"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {showForm && (
