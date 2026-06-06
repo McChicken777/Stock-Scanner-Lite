@@ -72,7 +72,7 @@ interface Project {
   id: number;
   name: string;
   deadline: string;
-  priority: "low" | "medium" | "high";
+  priority: "low" | "normal" | "high" | "urgent";
   status: "in_progress" | "completed";
   progress: number;
   totalProcedures: number;
@@ -84,7 +84,7 @@ interface Project {
 }
 
 interface ActiveTimer {
-  log: { id: number; procedureId: number; startTime: string };
+  log: { id: number; stepId: number; startTime: string };
   procedure: Procedure;
 }
 
@@ -172,9 +172,10 @@ function RoleBadge({ name }: { name: string | null }) {
 }
 
 const priorityColors: Record<string, string> = {
-  high: "bg-red-100 text-red-700 border-red-200",
-  medium: "bg-orange-100 text-orange-700 border-orange-200",
-  low: "bg-blue-100 text-blue-700 border-blue-200",
+  urgent: "bg-red-100 text-red-700 border-red-200",
+  high: "bg-orange-100 text-orange-700 border-orange-200",
+  normal: "bg-blue-100 text-blue-700 border-blue-200",
+  low: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
 function ProcedureRow({
@@ -210,7 +211,9 @@ function ProcedureRow({
   });
 
   const resetMutation = useMutation({
-    mutationFn: () => fetch(`/api/work/procedures/${proc.id}/reset`, { method: "POST", credentials: "include" }).then(r => r.json()),
+    mutationFn: () => fetch(`/api/work/procedures/${proc.id}/reset`, { method: "POST", credentials: "include" }).then(async (r) => {
+      const d = await r.json(); if (!r.ok) throw new Error(d.error); return d;
+    }),
     onSuccess: invalidate,
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Error", variant: "destructive" }),
   });
@@ -568,19 +571,22 @@ export default function WorkProjectDetailPage() {
       method: "PUT", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "completed" }),
-    }).then(r => r.json()),
+    }).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/work/projects/${projectId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/work/projects"] });
       toast({ title: "Project marked as complete!" });
     },
-    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to update", variant: "destructive" }),
   });
 
   const deleteItemMutation = useMutation({
-    mutationFn: (itemId: number) => fetch(`/api/work/project-items/${itemId}`, { method: "DELETE", credentials: "include" }),
+    mutationFn: async (itemId: number) => {
+      const r = await fetch(`/api/work/project-items/${itemId}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to remove item"); }
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/work/projects/${projectId}`] }),
-    onError: () => toast({ title: "Failed to remove item", variant: "destructive" }),
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to remove item", variant: "destructive" }),
   });
 
   const updateItemColorMutation = useMutation({
@@ -589,9 +595,9 @@ export default function WorkProjectDetailPage() {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paintColor }),
-      }).then(r => r.json()),
+      }).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/work/projects/${projectId}`] }),
-    onError: () => toast({ title: "Failed to update color", variant: "destructive" }),
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to update color", variant: "destructive" }),
   });
 
   const updateProjectColorMutation = useMutation({
@@ -607,7 +613,7 @@ export default function WorkProjectDetailPage() {
     onError: () => toast({ title: "Failed to update color", variant: "destructive" }),
   });
 
-  const activeTimerProcedureId = activeTimer?.log?.procedureId ?? null;
+  const activeTimerProcedureId = activeTimer?.log?.stepId ?? null;
 
   // Scroll to deep-linked item when data loads
   useEffect(() => {

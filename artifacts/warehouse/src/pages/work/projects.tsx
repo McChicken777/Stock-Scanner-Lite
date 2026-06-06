@@ -23,7 +23,7 @@ interface Project {
   id: number;
   name: string;
   deadline: string;
-  priority: "low" | "medium" | "high";
+  priority: "low" | "normal" | "high" | "urgent";
   status: "in_progress" | "completed";
   itemCount: number;
   totalProcedures: number;
@@ -59,7 +59,6 @@ const priorityColors: Record<string, string> = {
   urgent: "bg-red-100 text-red-700 border-red-200",
   high: "bg-orange-100 text-orange-700 border-orange-200",
   normal: "bg-blue-100 text-blue-700 border-blue-200",
-  medium: "bg-orange-100 text-orange-700 border-orange-200",
   low: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
