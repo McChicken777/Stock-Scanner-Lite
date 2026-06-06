@@ -101,6 +101,8 @@ const procSchema = z.object({
   roleId: z.number().int().nullable().optional(),
   batchMode: z.string().optional(),
   durationEstimate: z.number().int().nullable().optional(),
+  consumesProductId: z.number().int().nullable().optional(),
+  consumesQuantity: z.number().nonnegative().optional(),
 });
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
@@ -2261,6 +2263,8 @@ router.post("/projects", requireAdmin, async (req, res) => {
               batchMode: proc.batchMode ?? "individual",
               durationEstimate: proc.durationEstimate ?? null,
               templateStepId: proc.id,
+              consumesProductId: proc.consumesProductId ?? null,
+              consumesQuantity: proc.consumesQuantity ?? 0,
             }).returning({ id: workItemStepsTable.id });
             templateToLiveStepId.set(proc.id, liveStep.id);
           }
@@ -2274,9 +2278,11 @@ router.post("/projects", requireAdmin, async (req, res) => {
                 : `${itemName} › ${comp.name}`;
               const [subItem] = await db.insert(workProjectItemsTable).values({
                 projectId: project.id, name: subName, sortOrder, parentItemId: item.id,
+                productId: comp.componentProductId,
               }).returning();
               sortOrder++;
               for (const proc of comp.procedures) {
+                const templateStep = templateProcs.find((p) => p.id === proc.id);
                 const [liveStep] = await db.insert(workItemStepsTable).values({
                   itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
                   requiresInbound: false,
@@ -2284,6 +2290,8 @@ router.post("/projects", requireAdmin, async (req, res) => {
                   batchMode: proc.batchMode ?? "individual",
                   durationEstimate: proc.durationEstimate ?? null,
                   templateStepId: proc.id,
+                  consumesProductId: templateStep?.consumesProductId ?? null,
+                  consumesQuantity: templateStep?.consumesQuantity ?? 0,
                 }).returning({ id: workItemStepsTable.id });
                 templateToLiveStepId.set(proc.id, liveStep.id);
               }
@@ -4164,6 +4172,190 @@ router.post("/dev/seed-maska-subparts", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Dev seed failed");
     res.status(500).json({ error: "Seed failed" });
+  }
+});
+
+// ─── CUTTING QUEUE ────────────────────────────────────────────────────────────
+// GET /work/cutting-queue
+// Returns all not-started/in-progress steps that consume a raw material,
+// batched by material (consumesProductId), sorted ascending by consumesQuantity (length),
+// each step annotated with project name, item name, and job box slot.
+router.get("/cutting-queue", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // Load all active projects for this company
+    const activeProjects = await db.select({ id: workProjectsTable.id, name: workProjectsTable.name, priority: workProjectsTable.priority, deadline: workProjectsTable.deadline })
+      .from(workProjectsTable)
+      .where(and(eq(workProjectsTable.companyId, companyId), eq(workProjectsTable.status, "in_progress")));
+
+    if (activeProjects.length === 0) { res.json({ batches: [], slots: [] }); return; }
+
+    const projectIds = activeProjects.map((p) => p.id);
+    const projectMap = new Map(activeProjects.map((p) => [p.id, p]));
+
+    // Assign slot numbers (1–10) sorted by deadline asc, priority desc
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+    const sorted = [...activeProjects].sort((a, b) => {
+      const deadlineDiff = new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+      if (deadlineDiff !== 0) return deadlineDiff;
+      return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
+    });
+    const slotByProject = new Map(sorted.slice(0, 10).map((p, i) => [p.id, i + 1]));
+
+    // Load steps that have consumesProductId set and are not completed
+    const steps = await db
+      .select({
+        stepId: workItemStepsTable.id,
+        stepName: workItemStepsTable.name,
+        status: workItemStepsTable.status,
+        consumesProductId: workItemStepsTable.consumesProductId,
+        consumesQuantity: workItemStepsTable.consumesQuantity,
+        itemId: workProjectItemsTable.id,
+        itemName: workProjectItemsTable.name,
+        projectId: workProjectsTable.id,
+        materialName: productsTable.name,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .innerJoin(productsTable, eq(workItemStepsTable.consumesProductId, productsTable.id))
+      .where(and(
+        inArray(workProjectsTable.id, projectIds),
+        ne(workItemStepsTable.status, "completed"),
+        sql`${workItemStepsTable.consumesProductId} IS NOT NULL`,
+      ));
+
+    // Group by consumesProductId (material)
+    type BatchEntry = {
+      stepId: number;
+      stepName: string;
+      status: string;
+      consumesQuantity: number;
+      itemId: number;
+      itemName: string;
+      projectId: number;
+      projectName: string;
+      slot: number;
+    };
+    type Batch = {
+      materialId: number;
+      materialName: string;
+      cuts: BatchEntry[];
+    };
+
+    const batchMap = new Map<number, Batch>();
+    for (const s of steps) {
+      if (!s.consumesProductId) continue;
+      const slot = slotByProject.get(s.projectId) ?? 0;
+      if (!batchMap.has(s.consumesProductId)) {
+        batchMap.set(s.consumesProductId, {
+          materialId: s.consumesProductId,
+          materialName: s.materialName,
+          cuts: [],
+        });
+      }
+      batchMap.get(s.consumesProductId)!.cuts.push({
+        stepId: s.stepId,
+        stepName: s.stepName,
+        status: s.status,
+        consumesQuantity: Number(s.consumesQuantity),
+        itemId: s.itemId,
+        itemName: s.itemName,
+        projectId: s.projectId,
+        projectName: projectMap.get(s.projectId)?.name ?? "",
+        slot,
+      });
+    }
+
+    // Sort cuts within each batch by consumesQuantity asc (shortest first)
+    const batches = [...batchMap.values()].map((b) => ({
+      ...b,
+      cuts: b.cuts.sort((a, c) => a.consumesQuantity - c.consumesQuantity),
+    }));
+
+    const slots = sorted.slice(0, 10).map((p, i) => ({
+      slot: i + 1,
+      projectId: p.id,
+      projectName: p.name,
+    }));
+
+    res.json({ batches, slots });
+  } catch (err) {
+    req.log.error({ err }, "Failed to load cutting queue");
+    res.status(500).json({ error: "Failed to load cutting queue" });
+  }
+});
+
+// POST /work/cutting-queue/complete
+// Mark one cut step as completed and deduct the consumed material from stock.
+// Body: { stepId: number }
+router.post("/cutting-queue/complete", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ stepId: z.number().int() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "stepId required" }); return; }
+    const { stepId } = parsed.data;
+
+    await db.transaction(async (tx) => {
+      // Verify ownership + read consumption fields
+      const [step] = await tx
+        .select({
+          id: workItemStepsTable.id,
+          status: workItemStepsTable.status,
+          consumesProductId: workItemStepsTable.consumesProductId,
+          consumesQuantity: workItemStepsTable.consumesQuantity,
+        })
+        .from(workItemStepsTable)
+        .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+        .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+        .where(and(eq(workItemStepsTable.id, stepId), eq(workProjectsTable.companyId, companyId)));
+
+      if (!step) throw Object.assign(new Error("Step not found"), { statusCode: 404 });
+      if (step.status === "completed") { return; } // idempotent
+
+      // Mark completed
+      await tx.update(workItemStepsTable)
+        .set({ status: "completed" })
+        .where(eq(workItemStepsTable.id, stepId));
+
+      // Deduct stock if this step consumes a material
+      if (step.consumesProductId && Number(step.consumesQuantity) > 0) {
+        // Find the location for this company that has the most of this product, deduct from there
+        const locationIds = (await tx.select({ id: locationsTable.id })
+          .from(locationsTable).where(eq(locationsTable.companyId, companyId)))
+          .map((l) => l.id);
+
+        if (locationIds.length > 0) {
+          const [stockRow] = await tx
+            .select({ locationId: stockTable.locationId, quantity: stockTable.quantity })
+            .from(stockTable)
+            .where(and(
+              eq(stockTable.productId, step.consumesProductId),
+              inArray(stockTable.locationId, locationIds),
+            ))
+            .orderBy(desc(stockTable.quantity))
+            .limit(1);
+
+          if (stockRow) {
+            const newQty = Math.max(0, Number(stockRow.quantity) - Number(step.consumesQuantity));
+            await tx.update(stockTable)
+              .set({ quantity: newQty })
+              .where(and(
+                eq(stockTable.locationId, stockRow.locationId),
+                eq(stockTable.productId, step.consumesProductId),
+              ));
+          }
+        }
+      }
+    });
+
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const statusCode = (err as { statusCode?: number }).statusCode;
+    if (statusCode === 404) { res.status(404).json({ error: (err as Error).message }); return; }
+    req.log.error({ err }, "Failed to complete cut step");
+    res.status(500).json({ error: "Failed to complete cut step" });
   }
 });
 

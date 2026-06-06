@@ -24,6 +24,7 @@ interface Procedure {
 interface TemplateProcedure {
   id: number; templateId: number; name: string; sortOrder: number;
   requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null;
+  consumesProductId: number | null; consumesQuantity: number | null;
 }
 interface ComponentEntry {
   id: number; parentProductId: number; componentProductId: number;
@@ -361,8 +362,8 @@ function TemplateProceduresEditor({ template, roles, presets }: {
 
 // ─── BOM Component Procedures (enhanced with role pickers) ───────────────────
 
-function ComponentProcedureList({ templateId, comp, roles, presets, onInvalidate }: {
-  templateId: number; comp: ComponentEntry; roles: Role[]; presets: StepPreset[]; onInvalidate: () => void;
+function ComponentProcedureList({ templateId, comp, roles, presets, products, onInvalidate }: {
+  templateId: number; comp: ComponentEntry; roles: Role[]; presets: StepPreset[]; products: Product[]; onInvalidate: () => void;
 }) {
   const { toast } = useToast();
   const [addingProc, setAddingProc] = useState(false);
@@ -472,6 +473,37 @@ function ComponentProcedureList({ templateId, comp, roles, presets, onInvalidate
                   }}
                 />
                 <span className="text-xs text-muted-foreground">min</span>
+              </div>
+              {/* Material consumption — for cutting/sawing steps */}
+              <div className="flex items-center gap-1 flex-wrap">
+                <select
+                  value={proc.consumesProductId ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value ? Number(e.target.value) : null;
+                    updateProc.mutate({ procId: proc.id, data: { consumesProductId: v } });
+                  }}
+                  className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[120px]"
+                >
+                  <option value="">— no material —</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {proc.consumesProductId && (
+                  <>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      placeholder="qty"
+                      defaultValue={proc.consumesQuantity ?? ""}
+                      className="text-xs rounded border border-border bg-background px-1.5 py-0.5 w-16 text-center"
+                      onBlur={(e) => {
+                        const v = e.target.value ? Number(e.target.value) : 0;
+                        if (v !== (proc.consumesQuantity ?? 0)) updateProc.mutate({ procId: proc.id, data: { consumesQuantity: v } });
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">mm</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -676,7 +708,7 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
             </div>
 
             {isManufactured && (
-              <ComponentProcedureList templateId={template.id} comp={comp} roles={roles} presets={presets} onInvalidate={invalidate} />
+              <ComponentProcedureList templateId={template.id} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
             )}
             {isPurchased && (
               <p className="pl-6 text-xs text-muted-foreground italic">Tracked via stock / inbound</p>
