@@ -37,20 +37,19 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 function downloadTemplate() {
-  const ws = XLSX.utils.aoa_to_sheet([
-    ["name", "category", "unit", "buffer_stock", "target_stock"],
-    ["40mm Steel Rod", "Raw Metal", "mm", 0, 0],
-    ["M8 Hex Bolt", "Fasteners", "pcs", 100, 500],
-    ["3mm Mild Steel Sheet", "Sheet Metal", "mm", 0, 0],
-  ]);
-
-  // Column widths
-  ws["!cols"] = [{ wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
-
-  // Style header row bold (xlsx community edition supports basic styles)
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Materials");
-  XLSX.writeFile(wb, "materials_import_template.xlsx");
+  const rows = [
+    "name,category,unit,buffer_stock,target_stock",
+    "40mm Steel Rod,Raw Metal,mm,0,0",
+    "M8 Hex Bolt,Fasteners,pcs,100,500",
+    "3mm Mild Steel Sheet,Sheet Metal,mm,0,0",
+  ];
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "materials_import_template.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function parseExcel(file: File): Promise<ImportRow[]> {
