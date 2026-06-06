@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, AlertTriangle, Clock, CheckCircle2, ChevronRight, Trash2 } from "lucide-react";
+import { Plus, AlertTriangle, Clock, CheckCircle2, ChevronRight, Trash2, User, Zap, ShieldAlert } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   AlertDialog,
@@ -28,6 +28,9 @@ interface Project {
   itemCount: number;
   totalProcedures: number;
   completedProcedures: number;
+  inProgressCount: number;
+  blockedCount: number;
+  activeWorkers: string[];
   progress: number;
 }
 
@@ -141,16 +144,39 @@ export default function WorkProjectsPage() {
                             <ChevronRight className="h-5 w-5 text-muted-foreground" />
                           </div>
                         </div>
-                        <div className="space-y-1">
+                        <div className="space-y-2">
                           <div className="h-2.5 bg-black/10 rounded-full overflow-hidden">
                             <div
                               className="h-full bg-primary rounded-full transition-all"
                               style={{ width: `${project.progress}%` }}
                             />
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {project.completedProcedures} / {project.totalProcedures} procedures · {project.itemCount} items
-                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-muted-foreground">
+                              {project.completedProcedures}/{project.totalProcedures} steps · {project.itemCount} items
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {project.blockedCount > 0 && (
+                                <span className="flex items-center gap-0.5 text-[11px] font-bold text-red-600">
+                                  <ShieldAlert className="h-3.5 w-3.5" /> {project.blockedCount} blocked
+                                </span>
+                              )}
+                              {project.inProgressCount > 0 && project.blockedCount === 0 && (
+                                <span className="flex items-center gap-0.5 text-[11px] font-bold text-blue-600">
+                                  <Zap className="h-3.5 w-3.5" /> {project.inProgressCount} active
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {project.activeWorkers.length > 0 && (
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {project.activeWorkers.map((w) => (
+                                <span key={w} className="flex items-center gap-1 text-[11px] font-semibold bg-green-100 text-green-700 border border-green-200 rounded-full px-2 py-0.5">
+                                  <User className="h-3 w-3" /> {w}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Link>
