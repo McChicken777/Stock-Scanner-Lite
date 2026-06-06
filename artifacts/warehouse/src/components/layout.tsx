@@ -169,11 +169,8 @@ function AdminBottomNav() {
     location.startsWith("/work/reorder") ||
     location.startsWith("/work/purchase-orders");
 
-  const isQueuesActive = location.startsWith("/work/queue") || location.startsWith("/work/queues");
-
   const tabs = [
     { key: "jobs", href: "/work/projects", icon: FolderKanban, label: "Jobs", active: isJobsActive },
-    { key: "queues", href: "/work/queues", icon: Layers, label: "Queues", active: isQueuesActive },
     { key: "customers", href: "/customers", icon: Store, label: "Customers", active: isCustomersActive },
     { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: "Purchasing", active: isPurchasingActive },
   ];
