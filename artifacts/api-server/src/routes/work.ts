@@ -2298,8 +2298,101 @@ router.post("/projects", requireAdmin, async (req, res) => {
       await db.insert(inboundTable).values({ projectId: project.id, status: "expected", companyId });
     }
 
+    // ── Auto-procurement: detect shortages and act by part type ──────────────
+    const procurementActions: {
+      type: "draft_po" | "cnc_task_flagged";
+      productName: string;
+      shortfall: number;
+      poId?: number;
+    }[] = [];
+
+    if (!quickJob) {
+      // Gather current stock levels once for efficiency
+      const companyLocationIds = (await db.select({ id: locationsTable.id })
+        .from(locationsTable).where(eq(locationsTable.companyId, companyId)))
+        .map((l) => l.id);
+      const allStock = companyLocationIds.length > 0
+        ? await db.select().from(stockTable).where(inArray(stockTable.locationId, companyLocationIds))
+        : [];
+      const stockByProduct = new Map<number, number>();
+      for (const s of allStock) stockByProduct.set(s.productId, (stockByProduct.get(s.productId) ?? 0) + s.quantity);
+
+      // Aggregate all active reservations (including those just created)
+      const activeRes = await db.select({
+        productId: stockReservationsTable.productId,
+        reserved: sql<number>`sum(${stockReservationsTable.quantity})::int`,
+      }).from(stockReservationsTable)
+        .where(and(eq(stockReservationsTable.companyId, companyId), eq(stockReservationsTable.status, "active")))
+        .groupBy(stockReservationsTable.productId);
+      const reservedByProduct = new Map<number, number>(activeRes.map((r) => [r.productId, r.reserved ?? 0]));
+
+      // Cache open draft POs by supplierId so we reuse one PO per supplier per job
+      const draftPoBySupplier = new Map<number | null, number>(); // supplierId → poId
+
+      for (const { templateId, quantity } of (templateItems ?? [])) {
+        const [tmpl] = await db.select().from(workTemplatesTable).where(eq(workTemplatesTable.id, templateId));
+        if (!tmpl?.productId) continue;
+        const bomComps = await db.select().from(productComponentsTable)
+          .where(eq(productComponentsTable.parentProductId, tmpl.productId));
+
+        for (const comp of bomComps) {
+          const [compProduct] = await db.select().from(productsTable)
+            .where(eq(productsTable.id, comp.componentProductId));
+          if (!compProduct) continue;
+
+          const needed = comp.quantity * quantity;
+          const total = stockByProduct.get(comp.componentProductId) ?? 0;
+          const reserved = reservedByProduct.get(comp.componentProductId) ?? 0;
+          const available = Math.max(0, total - reserved);
+          const shortfall = Math.max(0, needed - available);
+          if (shortfall <= 0) continue;
+
+          if (compProduct.itemType === "purchased_part") {
+            // Find or create a draft PO for this supplier
+            const suppKey = compProduct.supplierId ?? null;
+            let poId = draftPoBySupplier.get(suppKey);
+            if (!poId) {
+              const [po] = await db.insert(purchaseOrdersTable).values({
+                supplierId: suppKey,
+                status: "draft",
+                notes: `Auto-created on job #${project.id}: ${name}`,
+                companyId,
+              }).returning({ id: purchaseOrdersTable.id });
+              poId = po.id;
+              draftPoBySupplier.set(suppKey, poId);
+            }
+            await db.insert(purchaseOrderItemsTable).values({
+              poId,
+              productId: comp.componentProductId,
+              quantityOrdered: shortfall,
+              unitPrice: compProduct.unitCost,
+              companyId,
+            });
+            procurementActions.push({ type: "draft_po", productName: compProduct.name, shortfall, poId });
+
+          } else if (compProduct.itemType === "manufactured_part") {
+            // Flag already-created sub-item steps with a low-stock marker in the name
+            // Sub-items are named: "<itemName> › <compProduct.name>" or "<itemName> › <compProduct.name> #N"
+            const subItemRows = await db.select({ id: workProjectItemsTable.id, name: workProjectItemsTable.name })
+              .from(workProjectItemsTable)
+              .where(and(
+                eq(workProjectItemsTable.projectId, project.id),
+                sql`${workProjectItemsTable.name} like ${"%" + compProduct.name + "%"}`,
+              ));
+            for (const subItem of subItemRows) {
+              if (subItem.name.includes("⚠")) continue; // already marked
+              await db.update(workProjectItemsTable)
+                .set({ name: `⚠ ${subItem.name} (low stock: need ${shortfall} more)` })
+                .where(eq(workProjectItemsTable.id, subItem.id));
+            }
+            procurementActions.push({ type: "cnc_task_flagged", productName: compProduct.name, shortfall });
+          }
+        }
+      }
+    }
+
     const full = await getProjectWithItems(project.id);
-    res.status(201).json(full);
+    res.status(201).json({ ...full, procurementActions });
   } catch (err) {
     req.log.error({ err }, "Failed to create project");
     res.status(500).json({ error: "Failed to create project" });

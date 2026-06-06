@@ -193,10 +193,20 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
       }
       return res.json();
     },
-    onSuccess: (project) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/projects"] });
-      toast({ title: "Work order created!" });
-      onCreated(project.id);
+      const actions: { type: string; productName: string; shortfall: number; poId?: number }[] = data.procurementActions ?? [];
+      const pos = actions.filter((a) => a.type === "draft_po");
+      const cnc = actions.filter((a) => a.type === "cnc_task_flagged");
+      if (pos.length > 0 || cnc.length > 0) {
+        const lines: string[] = [];
+        if (pos.length > 0) lines.push(`Draft PO created for: ${pos.map((a) => a.productName).join(", ")}`);
+        if (cnc.length > 0) lines.push(`CNC tasks flagged: ${cnc.map((a) => a.productName).join(", ")}`);
+        toast({ title: "Work order created — stock shortages detected", description: lines.join(" · ") });
+      } else {
+        toast({ title: "Work order created!" });
+      }
+      onCreated(data.id);
     },
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" }),
   });
