@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb, numeric, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
@@ -27,6 +27,8 @@ export const workStepsTable = pgTable("work_steps", {
   batchMode: text("batch_mode").notNull().default("individual"),
   durationEstimate: integer("duration_estimate"),
   templateComponentId: integer("template_component_id"),
+  consumesProductId: integer("consumes_product_id").references(() => productsTable.id, { onDelete: "set null" }),
+  consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
 });
 
 /** @deprecated use workStepsTable */
@@ -55,6 +57,7 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   paintColor: text("paint_color"),
   sortOrder: integer("sort_order").notNull().default(0),
   parentItemId: integer("parent_item_id").references((): AnyPgColumn => workProjectItemsTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
 });
 
 // Steps for each project item, instantiated from work_steps at project creation time
@@ -71,6 +74,8 @@ export const workItemStepsTable = pgTable("work_item_steps", {
   durationEstimate: integer("duration_estimate"),
   sizeWeight: text("size_weight"),
   templateStepId: integer("template_step_id").references(() => workStepsTable.id, { onDelete: "set null" }),
+  consumesProductId: integer("consumes_product_id").references(() => productsTable.id, { onDelete: "set null" }),
+  consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
 });
 
 /** @deprecated use workItemStepsTable */

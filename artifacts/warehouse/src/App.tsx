@@ -43,6 +43,7 @@ import WorkPrintTagPage from "@/pages/work/print-tag";
 import ReorderQueuePage from "@/pages/work/reorder-queue";
 import PurchaseOrdersPage from "@/pages/work/purchase-orders";
 import PaintQueuePage from "@/pages/work/paint-queue";
+import CuttingQueuePage from "@/pages/work/cutting-queue";
 import CustomersPage from "@/pages/customers";
 import CustomerDetailPage from "@/pages/customer-detail";
 import QuotesPage from "@/pages/quotes";
@@ -65,6 +66,7 @@ function WorkerRoutes() {
       <Route path="/tasks" component={TasksDashboardPage} />
       <Route path="/work/inbound" component={WorkInboundPage} />
       <Route path="/work/paint-queue" component={PaintQueuePage} />
+      <Route path="/work/cutting-queue" component={CuttingQueuePage} />
       <Route path="/attendance" component={AttendancePage} />
       <Route path="/attendance/report" component={AttendanceReportPage} />
       <Route path="/">
@@ -150,6 +152,7 @@ function ProtectedRoutes() {
         <Route path="/work/purchase-orders/:id" component={PurchaseOrdersPage} />
         <Route path="/work/purchase-orders" component={PurchaseOrdersPage} />
         <Route path="/work/paint-queue" component={PaintQueuePage} />
+        <Route path="/work/cutting-queue" component={CuttingQueuePage} />
 
         {/* Analytics (Pro, admin-only) */}
         <Route path="/analytics" component={AnalyticsPage} />

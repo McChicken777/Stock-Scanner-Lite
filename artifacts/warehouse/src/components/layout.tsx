@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
-  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette,
+  BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
   BarChart2, ShoppingCart, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -451,6 +451,7 @@ function WorkerBottomNav() {
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
+    { href: "/work/cutting-queue", icon: Scissors, label: "Cutting" },
     ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop" }] : []),
   ];
 
