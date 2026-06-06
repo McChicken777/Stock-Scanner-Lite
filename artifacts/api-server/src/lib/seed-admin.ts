@@ -33,20 +33,30 @@ export async function seedAdminUser() {
     await db.update(workProjectsTable).set({ companyId: defaultCompanyId }).where(isNull(workProjectsTable.companyId));
     await db.update(historyTable).set({ companyId: defaultCompanyId }).where(isNull(historyTable.companyId));
 
-    // 3. Create default admin if no users exist
-    const [{ userCount }] = await db
-      .select({ userCount: sql<number>`COUNT(*)` })
-      .from(usersTable);
+    // 3. Ensure default admin exists with correct password
+    const [existingAdmin] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`${usersTable.username} = 'admin'`);
 
-    if (Number(userCount) === 0) {
-      const passwordHash = await bcrypt.hash("admin123", 12);
+    const adminPasswordHash = await bcrypt.hash("admin123", 12);
+    if (!existingAdmin) {
       await db.insert(usersTable).values({
         username: "admin",
-        passwordHash,
+        passwordHash: adminPasswordHash,
         role: "admin",
         companyId: defaultCompanyId,
       });
       logger.info("Default admin user created (username: admin, password: admin123)");
+    } else {
+      // Verify the stored hash still works; reset it if not (e.g. after a DB restore)
+      const hashOk = await bcrypt.compare("admin123", existingAdmin.passwordHash);
+      if (!hashOk) {
+        await db.update(usersTable)
+          .set({ passwordHash: adminPasswordHash })
+          .where(sql`${usersTable.username} = 'admin'`);
+        logger.warn("Admin password hash was invalid — reset to admin123");
+      }
     }
 
     // 4. Ensure owner account exists (companyId = null, role = owner)
