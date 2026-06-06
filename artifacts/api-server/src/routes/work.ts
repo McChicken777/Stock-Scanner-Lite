@@ -1558,6 +1558,43 @@ router.post("/batch-complete", requireAuth, async (req, res) => {
 
 // ─── MY STEPS (role-based worker view) ───────────────────────────────────────
 
+// Urgency scoring for the worker queue. Produces a single sortable number so a
+// worker always sees the most important task first, plus a breakdown for badges.
+//
+// Three factors, in order of dominance:
+//   1. Readiness  — a READY step always outranks a BLOCKED one (you can't start a
+//                   blocked task), so readiness contributes a large fixed band.
+//   2. Deadline   — closer deadlines score higher; overdue scores maximum. Ramps
+//                   linearly from 0 (≥14 days out) up to 2000 (overdue).
+//   3. Priority   — urgent/high/normal/low as a tie-breaker within similar deadlines.
+const PRIORITY_WEIGHT: Record<string, number> = { urgent: 1500, high: 900, normal: 400, low: 100 };
+const READY_BAND = 100000;
+const DEADLINE_HORIZON_HOURS = 24 * 14; // 2 weeks: beyond this, deadline adds no pressure
+const DEADLINE_MAX_WEIGHT = 2000;
+
+function computeUrgency(opts: { stepStatus: "ready" | "blocked"; deadline: Date; priority: string; now?: number }) {
+  const now = opts.now ?? Date.now();
+  const hoursUntil = (opts.deadline.getTime() - now) / 3_600_000;
+
+  let deadlineWeight: number;
+  if (hoursUntil <= 0) {
+    deadlineWeight = DEADLINE_MAX_WEIGHT; // overdue — maximum pressure
+  } else if (hoursUntil >= DEADLINE_HORIZON_HOURS) {
+    deadlineWeight = 0; // far out — no pressure yet
+  } else {
+    deadlineWeight = Math.round(DEADLINE_MAX_WEIGHT * (1 - hoursUntil / DEADLINE_HORIZON_HOURS));
+  }
+
+  const priorityWeight = PRIORITY_WEIGHT[opts.priority] ?? PRIORITY_WEIGHT.normal;
+  const readyWeight = opts.stepStatus === "ready" ? READY_BAND : 0;
+
+  return {
+    score: readyWeight + deadlineWeight + priorityWeight,
+    isOverdue: hoursUntil <= 0,
+    hoursUntilDeadline: Math.round(hoursUntil),
+  };
+}
+
 router.get("/my-steps", requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
@@ -1834,10 +1871,20 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         return part;
       });
 
+      const stepStatus: "ready" | "blocked" = (blockedByStep || dagBlocked) ? "blocked" : "ready";
+      const urgency = computeUrgency({
+        stepStatus,
+        deadline: project.deadline,
+        priority: project.priority,
+      });
+
       return {
         ...proc,
         roleName: proc.roleId ? (roleMap.get(proc.roleId) ?? null) : null,
-        stepStatus: (blockedByStep || dagBlocked) ? "blocked" : "ready",
+        stepStatus,
+        urgencyScore: urgency.score,
+        isOverdue: urgency.isOverdue,
+        hoursUntilDeadline: urgency.hoursUntilDeadline,
         blockedByStep: blockedByStep ? { id: blockedByStep.id, name: blockedByStep.name } : null,
         wipLocation: latestWipMap.get(proc.id) ?? null,
         previousWip,
@@ -1852,6 +1899,10 @@ router.get("/my-steps", requireAuth, async (req, res) => {
         },
       };
     });
+
+    // Highest urgency first. Ties keep the DB ordering (deadline, item, step sortOrder)
+    // since Node's Array.sort is stable.
+    result.sort((a, b) => b.urgencyScore - a.urgencyScore);
 
     res.json(result);
   } catch (err) {

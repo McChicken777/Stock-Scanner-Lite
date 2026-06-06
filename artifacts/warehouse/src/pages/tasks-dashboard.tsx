@@ -32,6 +32,9 @@ interface MyStep {
   roleId: number | null; roleName: string | null;
   batchMode: string; durationEstimate: number | null;
   stepStatus: "ready" | "blocked";
+  urgencyScore: number;
+  isOverdue: boolean;
+  hoursUntilDeadline: number;
   blockedByStep: { id: number; name: string } | null;
   wipLocation: WipLocation | null;
   previousWip: WipLocation | null;
@@ -516,12 +519,17 @@ function MyStepsTab() {
   const inProgress = steps.filter((s) => s.status === "in_progress");
   const ready = steps.filter((s) => s.status === "not_started" && s.stepStatus === "ready");
 
-  const StepCard = ({ step, variant }: { step: MyStep; variant: "ready" | "inProgress" }) => {
+  const StepCard = ({ step, variant, isTop }: { step: MyStep; variant: "ready" | "inProgress"; isTop?: boolean }) => {
     const dl = formatDeadline(step.project.deadline);
     const bg = variant === "inProgress" ? "bg-orange-50 border-orange-300"
       : dl.overdue ? "bg-red-50 border-red-300" : "bg-green-50 border-green-200";
     return (
-      <div className={`rounded-xl border-2 p-3 space-y-2 ${bg}`}>
+      <div className={`rounded-xl border-2 p-3 space-y-2 ${bg} ${isTop ? "ring-2 ring-green-500 ring-offset-1" : ""}`}>
+        {isTop && (
+          <span className="inline-block px-2 py-0.5 rounded-full bg-green-600 text-white text-[10px] font-bold uppercase tracking-wider">
+            Next up
+          </span>
+        )}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <p className="font-bold text-sm leading-tight">{step.name}</p>
@@ -542,6 +550,11 @@ function MyStepsTab() {
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold capitalize border ${priorityColors[step.project.priority] ?? "bg-gray-100 text-gray-600"}`}>
             {step.project.priority}
           </span>
+          {step.isOverdue && (
+            <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold uppercase tracking-wider">
+              Overdue
+            </span>
+          )}
           {step.roleName && (
             <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold">
               <User className="h-2.5 w-2.5" /> {step.roleName}
@@ -668,7 +681,7 @@ function MyStepsTab() {
         {ready.length > 0 && (
           <div className="space-y-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">Ready to Start ({ready.length})</h2>
-            {ready.map((s) => <StepCard key={s.id} step={s} variant="ready" />)}
+            {ready.map((s, i) => <StepCard key={s.id} step={s} variant="ready" isTop={i === 0 && inProgress.length === 0} />)}
           </div>
         )}
       </div>
