@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AiTipsPanel } from "@/components/ai-tips-panel";
 
 interface Role { id: number; name: string; }
+interface StationType { id: number; name: string; color: string; }
 interface Product { id: number; name: string; itemType: string; }
 interface Procedure {
   id: number; productId: number; name: string; sortOrder: number;
@@ -25,6 +26,7 @@ interface TemplateProcedure {
   id: number; templateId: number; name: string; sortOrder: number;
   requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null;
   consumesProductId: number | null; consumesQuantity: number | null;
+  stationTypeId: number | null;
 }
 interface ComponentEntry {
   id: number; parentProductId: number; componentProductId: number;
@@ -65,8 +67,8 @@ function RolePicker({ roles, value, onChange }: { roles: Role[]; value: number |
 
 // ─── Template Top-level Procedures Editor ────────────────────────────────────
 
-function TemplateProceduresEditor({ template, roles, presets }: {
-  template: Template; roles: Role[]; presets: StepPreset[];
+function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
+  template: Template; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[];
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -281,6 +283,16 @@ function TemplateProceduresEditor({ template, roles, presets }: {
                 <div className="flex flex-wrap items-center gap-1.5">
                   <RolePicker roles={roles} value={proc.roleId}
                     onChange={(v) => updateProc.mutate({ id: proc.id, data: { roleId: v } })} />
+                  {stationTypes.length > 0 && (
+                    <select
+                      value={proc.stationTypeId ?? ""}
+                      onChange={(e) => updateProc.mutate({ id: proc.id, data: { stationTypeId: e.target.value ? Number(e.target.value) : null } })}
+                      className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[110px]"
+                    >
+                      <option value="">— no station —</option>
+                      {stationTypes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  )}
                   <select
                     value={proc.batchMode ?? "individual"}
                     onChange={(e) => updateProc.mutate({ id: proc.id, data: { batchMode: e.target.value } })}
@@ -362,8 +374,8 @@ function TemplateProceduresEditor({ template, roles, presets }: {
 
 // ─── BOM Component Procedures (enhanced with role pickers) ───────────────────
 
-function ComponentProcedureList({ templateId, comp, roles, presets, products, onInvalidate }: {
-  templateId: number; comp: ComponentEntry; roles: Role[]; presets: StepPreset[]; products: Product[]; onInvalidate: () => void;
+function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets, products, onInvalidate }: {
+  templateId: number; comp: ComponentEntry; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[]; products: Product[]; onInvalidate: () => void;
 }) {
   const { toast } = useToast();
   const [addingProc, setAddingProc] = useState(false);
@@ -453,6 +465,16 @@ function ComponentProcedureList({ templateId, comp, roles, presets, products, on
             <div className="flex flex-wrap items-center gap-1.5">
               <RolePicker roles={roles} value={proc.roleId}
                 onChange={(v) => updateProc.mutate({ procId: proc.id, data: { roleId: v } })} />
+              {stationTypes.length > 0 && (
+                <select
+                  value={proc.stationTypeId ?? ""}
+                  onChange={(e) => updateProc.mutate({ procId: proc.id, data: { stationTypeId: e.target.value ? Number(e.target.value) : null } })}
+                  className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[110px]"
+                >
+                  <option value="">— no station —</option>
+                  {stationTypes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
               <select
                 value={proc.batchMode ?? "individual"}
                 onChange={(e) => updateProc.mutate({ procId: proc.id, data: { batchMode: e.target.value } })}
@@ -584,9 +606,9 @@ function ComponentProcedureList({ templateId, comp, roles, presets, products, on
 // MAX_BOM_DEPTH: 0 = top-level sub-parts, 1 = one level deeper. Stop here.
 const MAX_BOM_DEPTH = 1;
 
-function BomSection({ templateId, productId, allProducts, roles, presets, depth = 0 }: {
+function BomSection({ templateId, productId, allProducts, roles, stationTypes, presets, depth = 0 }: {
   templateId: number; productId: number; allProducts: Product[];
-  roles: Role[]; presets: StepPreset[]; depth?: number;
+  roles: Role[]; stationTypes: StationType[]; presets: StepPreset[]; depth?: number;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -714,7 +736,7 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
 
             {isManufactured && comp.product && (
               <>
-                <ComponentProcedureList templateId={templateId} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
+                <ComponentProcedureList templateId={templateId} comp={comp} roles={roles} stationTypes={stationTypes} presets={presets} products={allProducts} onInvalidate={invalidate} />
                 {canHaveSubParts && (
                   <>
                     <button
@@ -730,6 +752,7 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
                         productId={comp.product.id}
                         allProducts={allProducts}
                         roles={roles}
+                        stationTypes={stationTypes}
                         presets={presets}
                         depth={depth + 1}
                       />
@@ -817,8 +840,8 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   );
 }
 
-function TemplateBOM({ template, allProducts, roles, presets }: {
-  template: Template; allProducts: Product[]; roles: Role[]; presets: StepPreset[];
+function TemplateBOM({ template, allProducts, roles, stationTypes, presets }: {
+  template: Template; allProducts: Product[]; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[];
 }) {
   if (!template.productId) return null;
   return (
@@ -829,6 +852,7 @@ function TemplateBOM({ template, allProducts, roles, presets }: {
         productId={template.productId}
         allProducts={allProducts}
         roles={roles}
+        stationTypes={stationTypes}
         presets={presets}
         depth={0}
       />
@@ -872,6 +896,11 @@ export default function WorkTemplatesPage() {
   const { data: presets = [] } = useQuery<StepPreset[]>({
     queryKey: ["/api/work/step-presets"],
     queryFn: () => apiFetch("/api/work/step-presets"),
+  });
+
+  const { data: stationTypes = [] } = useQuery<StationType[]>({
+    queryKey: ["/api/stations/types"],
+    queryFn: () => apiFetch("/api/stations/types"),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/work/templates"] });
@@ -1196,10 +1225,10 @@ export default function WorkTemplatesPage() {
                     <div className="border-t-2 border-border divide-y-2 divide-border">
                       {/* Production Steps (top-level template procedures) */}
                       <div className="px-4 py-3">
-                        <TemplateProceduresEditor template={template} roles={roles} presets={presets} />
+                        <TemplateProceduresEditor template={template} roles={roles} stationTypes={stationTypes} presets={presets} />
                       </div>
                       {/* BOM */}
-                      <TemplateBOM template={template} allProducts={allProducts} roles={roles} presets={presets} />
+                      <TemplateBOM template={template} allProducts={allProducts} roles={roles} stationTypes={stationTypes} presets={presets} />
                     </div>
                   )}
                 </div>
