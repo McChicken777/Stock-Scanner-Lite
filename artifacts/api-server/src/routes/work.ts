@@ -4046,4 +4046,90 @@ router.put("/shortage-flags/:id/resolve", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── DEV SEED: add subparts to Maska N Serija for procurement testing ────────
+// POST /work/dev/seed-maska-subparts
+// Finds "Maska N Serija" template, creates two subpart products (purchased + manufactured),
+// links them as BOM components, and sets their minStock > 0 so shortages fire on job creation.
+router.post("/dev/seed-maska-subparts", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // Find the template by name (case-insensitive)
+    const allTemplates = await db.select().from(workTemplatesTable)
+      .where(eq(workTemplatesTable.companyId, companyId));
+    const maska = allTemplates.find((t) => t.name.toLowerCase().includes("maska n serija"));
+    if (!maska || !maska.productId) {
+      res.status(404).json({ error: "Template 'Maska N Serija' not found or has no product linked. Make sure it exists first." });
+      return;
+    }
+
+    const results: Record<string, unknown> = { templateId: maska.id, templateName: maska.name };
+
+    // 1. Create purchased_part — Stezna Traka (steel clamp, ordered from supplier)
+    const [existingPurchased] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.companyId, companyId), sql`lower(${productsTable.name}) = 'stezna traka'`));
+    const purchasedPart = existingPurchased ?? (await db.insert(productsTable).values({
+      name: "Stezna Traka",
+      category: "Raw Material",
+      itemType: "purchased_part",
+      minStock: 5,   // reorder point — shortage fires when available < 5
+      bufferStock: 2,
+      targetStock: 20,
+      unitCost: 3.50,
+      companyId,
+    }).returning())[0];
+    results.purchasedPart = { id: purchasedPart.id, name: purchasedPart.name };
+
+    // 2. Create manufactured_part — CNC Nosac (bracket we make in-house)
+    const [existingMfg] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.companyId, companyId), sql`lower(${productsTable.name}) = 'cnc nosac'`));
+    const mfgPart = existingMfg ?? (await db.insert(productsTable).values({
+      name: "CNC Nosac",
+      category: "Manufactured",
+      itemType: "manufactured_part",
+      minStock: 3,
+      bufferStock: 1,
+      targetStock: 10,
+      unitCost: 0,
+      companyId,
+    }).returning())[0];
+    results.manufacturedPart = { id: mfgPart.id, name: mfgPart.name };
+
+    // 3. Link as BOM components (skip if already linked)
+    const existingComps = await db.select().from(productComponentsTable)
+      .where(eq(productComponentsTable.parentProductId, maska.productId));
+    const linkedIds = new Set(existingComps.map((c) => c.componentProductId));
+
+    if (!linkedIds.has(purchasedPart.id)) {
+      await db.insert(productComponentsTable).values({
+        parentProductId: maska.productId,
+        componentProductId: purchasedPart.id,
+        quantity: 4,
+        sortOrder: existingComps.length,
+      });
+      results.linkedPurchased = "added (qty 4)";
+    } else {
+      results.linkedPurchased = "already linked";
+    }
+
+    if (!linkedIds.has(mfgPart.id)) {
+      await db.insert(productComponentsTable).values({
+        parentProductId: maska.productId,
+        componentProductId: mfgPart.id,
+        quantity: 2,
+        sortOrder: existingComps.length + 1,
+      });
+      results.linkedManufactured = "added (qty 2)";
+    } else {
+      results.linkedManufactured = "already linked";
+    }
+
+    results.note = "Stock is intentionally 0. Create a work order with Maska N Serija to trigger auto-procurement.";
+    res.json({ ok: true, ...results });
+  } catch (err) {
+    req.log.error({ err }, "Dev seed failed");
+    res.status(500).json({ error: "Seed failed" });
+  }
+});
+
 export default router;
