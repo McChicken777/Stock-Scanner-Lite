@@ -581,9 +581,12 @@ function ComponentProcedureList({ templateId, comp, roles, presets, products, on
 
 // BomSection renders the sub-parts of ONE product within a template.
 // Called recursively for each manufactured_part so you get arbitrary depth.
-function BomSection({ templateId, productId, allProducts, roles, presets, depth = 0, onInvalidateParent }: {
+// MAX_BOM_DEPTH: 0 = top-level sub-parts, 1 = one level deeper. Stop here.
+const MAX_BOM_DEPTH = 1;
+
+function BomSection({ templateId, productId, allProducts, roles, presets, depth = 0 }: {
   templateId: number; productId: number; allProducts: Product[];
-  roles: Role[]; presets: StepPreset[]; depth?: number; onInvalidateParent?: () => void;
+  roles: Role[]; presets: StepPreset[]; depth?: number;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -593,7 +596,6 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   const [newPartName, setNewPartName] = useState("");
   const [componentQty, setComponentQty] = useState(1);
   const [newPartType, setNewPartType] = useState<"manufactured_part" | "purchased_part">("manufactured_part");
-  // Which manufactured_part rows have their sub-section expanded (lazy — only query when opened)
   const [expandedComps, setExpandedComps] = useState<Set<number>>(new Set());
   const toggleComp = (id: number) => setExpandedComps((prev) => {
     const next = new Set(prev);
@@ -601,16 +603,28 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
     return next;
   });
 
-  const compKey = [`/api/work/templates/${templateId}/components`, productId];
+  // Broad key so invalidation catches all levels under this template
+  const compKey = [`/api/work/templates/${templateId}/components`];
   const { data: components = [], isLoading } = useQuery<ComponentEntry[]>({
-    queryKey: compKey,
+    queryKey: [...compKey, productId],
     queryFn: () => apiFetch(`/api/work/templates/${templateId}/components?productId=${productId}`),
-    staleTime: 30000,
+    staleTime: 10000,
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: compKey });
-  };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: compKey });
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) =>
+      apiFetch(`/api/products/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
 
   const addComponentMutation = useMutation({
     mutationFn: ({ componentProductId, quantity }: { componentProductId: number; quantity: number }) =>
@@ -643,9 +657,12 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
   });
 
   const removeComponentMutation = useMutation({
-    mutationFn: (componentId: number) => fetch(`/api/products/${productId}/components/${componentId}`, {
-      method: "DELETE", credentials: "include",
-    }).then(() => {}),
+    mutationFn: async (componentId: number) => {
+      const r = await fetch(`/api/products/${productId}/components/${componentId}`, {
+        method: "DELETE", credentials: "include",
+      });
+      if (!r.ok) throw new Error("Failed to delete");
+    },
     onSuccess: () => { invalidate(); toast({ title: "Component removed" }); },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -662,17 +679,29 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
     <div style={{ marginLeft: indent }} className="space-y-2 mt-2">
       {components.map((comp) => {
         const isManufactured = comp.product?.itemType === "manufactured_part";
+        const canHaveSubParts = isManufactured && depth < MAX_BOM_DEPTH;
         return (
           <div key={comp.id} className={`rounded-lg border-2 p-3 space-y-2 ${isManufactured ? "border-blue-200 bg-blue-50/40" : "border-orange-200 bg-orange-50/40"}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                 {isManufactured ? <Wrench className="h-4 w-4 text-blue-600 flex-shrink-0" /> : <ShoppingCart className="h-4 w-4 text-orange-600 flex-shrink-0" />}
-                <span className="font-bold text-sm">{comp.product?.name ?? "Unknown"}</span>
-                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${isManufactured ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+                {/* Inline editable name */}
+                <input
+                  key={comp.product?.name}
+                  defaultValue={comp.product?.name ?? ""}
+                  className="font-bold text-sm bg-transparent border-b border-transparent hover:border-muted-foreground/40 focus:border-primary focus:outline-none min-w-0 flex-1"
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val && comp.product && val !== comp.product.name) {
+                      renameMutation.mutate({ id: comp.product.id, name: val });
+                    }
+                  }}
+                />
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${isManufactured ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
                   {isManufactured ? "Manufactured" : "Purchased"}
                 </span>
                 {comp.quantity > 1 && (
-                  <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">×{comp.quantity}</span>
+                  <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">×{comp.quantity}</span>
                 )}
               </div>
               <button onClick={() => removeComponentMutation.mutate(comp.id)} disabled={removeComponentMutation.isPending}
@@ -684,23 +713,26 @@ function BomSection({ templateId, productId, allProducts, roles, presets, depth 
             {isManufactured && comp.product && (
               <>
                 <ComponentProcedureList templateId={templateId} comp={comp} roles={roles} presets={presets} products={allProducts} onInvalidate={invalidate} />
-                {/* Sub-parts toggle — only mounts BomSection (and fires its query) when opened */}
-                <button
-                  onClick={() => toggleComp(comp.id)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 mt-1 pl-1"
-                >
-                  {expandedComps.has(comp.id) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  Sub-parts of {comp.product.name}
-                </button>
-                {expandedComps.has(comp.id) && (
-                  <BomSection
-                    templateId={templateId}
-                    productId={comp.product.id}
-                    allProducts={allProducts}
-                    roles={roles}
-                    presets={presets}
-                    depth={depth + 1}
-                  />
+                {canHaveSubParts && (
+                  <>
+                    <button
+                      onClick={() => toggleComp(comp.id)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 mt-1 pl-1"
+                    >
+                      {expandedComps.has(comp.id) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      Sub-parts of {comp.product.name}
+                    </button>
+                    {expandedComps.has(comp.id) && (
+                      <BomSection
+                        templateId={templateId}
+                        productId={comp.product.id}
+                        allProducts={allProducts}
+                        roles={roles}
+                        presets={presets}
+                        depth={depth + 1}
+                      />
+                    )}
+                  </>
                 )}
               </>
             )}
