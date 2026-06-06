@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, Loader2, GripVertical, ChevronDown, ChevronUp,
-  Settings2, Monitor, X, Check, Pencil,
+  Settings2, Monitor, X, Check, Pencil, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ interface StationType {
   name: string;
   color: string;
   flowOrder: number;
+  pendingCount: number;
   workstations: Workstation[];
 }
 
@@ -207,9 +209,20 @@ export default function AdminStationsPage() {
                 ) : (
                   <>
                     <span className="font-bold text-sm flex-1">{type.name}</span>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {type.workstations.length} machine{type.workstations.length !== 1 ? "s" : ""}
-                    </span>
+                    {type.pendingCount > 0 ? (
+                      <span className="text-[10px] font-bold rounded-full px-2 py-0.5 text-white flex-shrink-0" style={{ backgroundColor: type.color }}>
+                        {type.pendingCount}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {type.workstations.length} machine{type.workstations.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    <Link href={`/work/queue/${type.id}`}>
+                      <button className="text-muted-foreground hover:text-foreground p-1 flex items-center gap-0.5 text-[10px] font-semibold">
+                        Queue <ChevronRight className="h-3 w-3" />
+                      </button>
+                    </Link>
                     <button onClick={() => { setEditingTypeId(type.id); setEditName(type.name); setEditColor(type.color); }}
                       className="text-muted-foreground hover:text-foreground p-1">
                       <Pencil className="h-3.5 w-3.5" />
