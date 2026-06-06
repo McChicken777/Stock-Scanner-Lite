@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText,
+  BarChart2, ShoppingCart, FileText, PackageOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -218,6 +218,15 @@ function AdminBottomNav() {
                 <div>
                   <p className="text-sm font-semibold">Job Templates</p>
                   <p className="text-xs text-muted-foreground">Define steps & parts for each job type</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/work/materials" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <PackageOpen className="h-5 w-5 text-amber-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Materials</p>
+                  <p className="text-xs text-muted-foreground">Raw materials & purchased parts — import via Excel</p>
                 </div>
               </div>
             </Link>
