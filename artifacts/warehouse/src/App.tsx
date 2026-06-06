@@ -111,8 +111,9 @@ function ProtectedRoutes() {
   return (
     <AppLayout>
       <Switch>
-        {/* Inventory */}
-        <Route path="/" component={Dashboard} />
+        {/* Admin home → Jobs */}
+        <Route path="/"><Redirect to="/work/projects" /></Route>
+        <Route path="/dashboard" component={Dashboard} />
         <Route path="/scan" component={ScanPage} />
         <Route path="/locations" component={LocationsPage} />
         <Route path="/location/:id" component={LocationPage} />

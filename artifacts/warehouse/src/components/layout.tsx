@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette,
-  BarChart2,
+  BarChart2, ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
@@ -156,32 +156,22 @@ function AdminBottomNav() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { logout, user } = useAuth();
 
-  const isProjectsActive =
+  const isJobsActive =
     location.startsWith("/work/projects") ||
     location.startsWith("/tasks") ||
     location.startsWith("/work/inbound") ||
-    location.startsWith("/work/reorder") ||
-    location.startsWith("/work/purchase-orders") ||
     location.startsWith("/work/templates");
-  const isStockActive =
-    location === "/" ||
-    location.startsWith("/scan") ||
-    location.startsWith("/products") ||
-    location.startsWith("/locations") ||
-    location.startsWith("/location/") ||
-    location.startsWith("/history") ||
-    location.startsWith("/valuation");
   const isCustomersActive =
     location.startsWith("/customers") ||
-    location.startsWith("/quotes") ||
-    location.startsWith("/orders");
-  const isAttendanceActive = location.startsWith("/attendance");
+    location.startsWith("/quotes");
+  const isPurchasingActive =
+    location.startsWith("/work/reorder") ||
+    location.startsWith("/work/purchase-orders");
 
   const tabs = [
-    { key: "projects", href: "/work/projects", icon: FolderKanban, label: "Projects", active: isProjectsActive },
-    { key: "stock", href: "/", icon: Package2, label: "Stock", active: isStockActive },
+    { key: "jobs", href: "/work/projects", icon: FolderKanban, label: "Jobs", active: isJobsActive },
     { key: "customers", href: "/customers", icon: Store, label: "Customers", active: isCustomersActive },
-    { key: "attendance", href: "/attendance", icon: CalendarCheck, label: "Attendance", active: isAttendanceActive },
+    { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: "Purchasing", active: isPurchasingActive },
   ];
 
   return (
@@ -200,11 +190,7 @@ function AdminBottomNav() {
             </Link>
           ))}
 
-          {/* Settings tab — opens sheet */}
-          <button
-            className="flex-1"
-            onClick={() => setSettingsOpen(true)}
-          >
+          <button className="flex-1" onClick={() => setSettingsOpen(true)}>
             <div className={cn(
               "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
               settingsOpen ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
@@ -216,50 +202,21 @@ function AdminBottomNav() {
         </div>
       </div>
 
-      {/* Settings sheet */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-8">
           <SheetHeader className="pb-2">
-            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Settings & Setup</SheetTitle>
+            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Settings</SheetTitle>
           </SheetHeader>
 
           <div className="space-y-1 mt-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work Setup</p>
-            {user?.plan === "pro" && (
-              <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
-                <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                  <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">AI Analytics</p>
-                    <p className="text-xs text-muted-foreground">Production insights &amp; trends</p>
-                  </div>
-                </div>
-              </Link>
-            )}
+            {/* Work section */}
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work</p>
             <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Item Templates</p>
-                  <p className="text-xs text-muted-foreground">Reusable products with steps & BOM</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/work/paint-queue" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Palette className="h-5 w-5 text-orange-500 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Paint Shop</p>
-                  <p className="text-xs text-muted-foreground">Batch painting queue by color (Pro)</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/admin/procedures" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Wrench className="h-5 w-5 text-indigo-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Procedures</p>
-                  <p className="text-xs text-muted-foreground">Reusable steps for quick jobs</p>
+                  <p className="text-sm font-semibold">Job Templates</p>
+                  <p className="text-xs text-muted-foreground">Define steps & parts for each job type</p>
                 </div>
               </div>
             </Link>
@@ -272,38 +229,83 @@ function AdminBottomNav() {
                 </div>
               </div>
             </Link>
+            <Link href="/work/paint-queue" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Palette className="h-5 w-5 text-orange-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Paint Shop</p>
+                  <p className="text-xs text-muted-foreground">Batch painting queue by color</p>
+                </div>
+              </div>
+            </Link>
+            {user?.plan === "pro" && (
+              <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
+                <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                  <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold">AI Analytics</p>
+                    <p className="text-xs text-muted-foreground">Production insights & trends</p>
+                  </div>
+                </div>
+              </Link>
+            )}
 
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">Administration</p>
+            {/* People section */}
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">People</p>
             <Link href="/admin/users" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Users className="h-5 w-5 text-muted-foreground shrink-0" />
-                <p className="text-sm font-semibold">Manage Users</p>
+                <div>
+                  <p className="text-sm font-semibold">Manage Users</p>
+                  <p className="text-xs text-muted-foreground">Add workers, set roles & permissions</p>
+                </div>
               </div>
             </Link>
-            <Link href="/admin/zones" onClick={() => setSettingsOpen(false)}>
+            <Link href="/attendance" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
-                <p className="text-sm font-semibold">Production Zones</p>
-              </div>
-            </Link>
-            <Link href="/admin/suppliers" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Truck className="h-5 w-5 text-muted-foreground shrink-0" />
-                <p className="text-sm font-semibold">Suppliers</p>
-              </div>
-            </Link>
-            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                <p className="text-sm font-semibold">Company & Plan</p>
+                <CalendarCheck className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Attendance</p>
+                  <p className="text-xs text-muted-foreground">Check-ins, timesheets & reports</p>
+                </div>
               </div>
             </Link>
             <Link href="/admin/leave-inbox" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Inbox className="h-5 w-5 text-violet-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Leave Inbox</p>
-                  <p className="text-xs text-muted-foreground">Approve or reject all leave requests</p>
+                  <p className="text-sm font-semibold">Leave Requests</p>
+                  <p className="text-xs text-muted-foreground">Approve or reject time-off requests</p>
+                </div>
+              </div>
+            </Link>
+
+            {/* Business section */}
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">Business</p>
+            <Link href="/products" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Package2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Products & Stock</p>
+                  <p className="text-xs text-muted-foreground">Manage your product catalogue</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/admin/suppliers" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Truck className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Suppliers</p>
+                  <p className="text-xs text-muted-foreground">Manage your supplier list</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Company & Plan</p>
+                  <p className="text-xs text-muted-foreground">Company details & subscription</p>
                 </div>
               </div>
             </Link>

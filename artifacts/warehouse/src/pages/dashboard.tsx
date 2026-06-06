@@ -1,7 +1,7 @@
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Package, MapPin, AlertTriangle, Activity, DollarSign, TrendingUp,
+  Package, MapPin, AlertTriangle, Activity,
   FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
   Flag, AlertCircle, Inbox, FolderKanban,
 } from "lucide-react";
@@ -10,14 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/auth";
 
-interface StockValuation {
-  totalValue: number;
-  totalRevenue: number;
-  totalMargin: number;
-  totalProducts: number;
-  productsWithoutCost: number;
-  productsWithoutSalePrice: number;
-}
 
 interface AttendanceLiveRow {
   userId: number;
@@ -75,14 +67,6 @@ export default function Dashboard() {
   const isAdmin = user?.role === "admin";
 
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
-  const { data: valuation } = useQuery<StockValuation>({
-    queryKey: ["/api/stock/valuation"],
-    queryFn: async () => {
-      const res = await fetch("/api/stock/valuation", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-  });
   const { data: quoteCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/quotes/counts"],
     queryFn: async () => {
@@ -196,67 +180,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
-      </div>
-
-      <Link href="/valuation">
-        <Card className="bg-primary text-primary-foreground border-none hover:bg-primary/90 transition-colors cursor-pointer active:scale-95 duration-200">
-          <CardContent className="p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary-foreground/15 flex items-center justify-center">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-xs font-medium uppercase tracking-wider opacity-80">Stock Value</p>
-                <p className="text-2xl font-black font-mono leading-tight">
-                  {valuation ? `$${Number(valuation.totalValue).toFixed(2)}` : "—"}
-                </p>
-              </div>
-            </div>
-            {valuation && valuation.productsWithoutCost > 0 && (
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Missing cost</p>
-                <p className="text-sm font-bold flex items-center gap-1 justify-end">
-                  <AlertTriangle className="h-3 w-3" /> {valuation.productsWithoutCost}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </Link>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="bg-secondary text-secondary-foreground border-none">
-          <CardContent className="p-4 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              <p className="text-xs font-bold uppercase tracking-wider text-secondary-foreground/70">Potential Revenue</p>
-            </div>
-            <p className="text-xl font-black font-mono">
-              {valuation ? `$${Number(valuation.totalRevenue).toFixed(2)}` : "—"}
-            </p>
-            {valuation && valuation.productsWithoutSalePrice > 0 && (
-              <p className="text-[10px] text-secondary-foreground/70 flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" /> {valuation.productsWithoutSalePrice} missing price
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card className="bg-emerald-600 text-white border-none">
-          <CardContent className="p-4 flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              <p className="text-xs font-bold uppercase tracking-wider opacity-80">Potential Margin</p>
-            </div>
-            <p className="text-xl font-black font-mono">
-              {valuation ? `$${Number(valuation.totalMargin).toFixed(2)}` : "—"}
-            </p>
-            {valuation && valuation.totalRevenue > 0 && (
-              <p className="text-[10px] opacity-80">
-                {((valuation.totalMargin / valuation.totalRevenue) * 100).toFixed(1)}% gross
-              </p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {quoteCounts && (
