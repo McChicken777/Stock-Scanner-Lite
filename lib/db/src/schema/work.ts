@@ -223,6 +223,16 @@ export const stepDependenciesTable = pgTable("step_dependencies", {
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
 }, (t) => [{ unique: [t.blockerStepId, t.blockedStepId] }]);
 
+// Template-level step dependencies: defines which steps must precede others within a template.
+// When a project is created from a template these edges are automatically copied to
+// stepDependenciesTable for the newly created live steps (templateStepId mapping).
+export const templateStepDependenciesTable = pgTable("template_step_dependencies", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => workTemplatesTable.id, { onDelete: "cascade" }),
+  blockerStepId: integer("blocker_step_id").notNull().references(() => workStepsTable.id, { onDelete: "cascade" }),
+  blockedStepId: integer("blocked_step_id").notNull().references(() => workStepsTable.id, { onDelete: "cascade" }),
+}, (t) => [{ unique: [t.blockerStepId, t.blockedStepId] }]);
+
 export type WorkTemplate = typeof workTemplatesTable.$inferSelect;
 export type WorkStep = typeof workStepsTable.$inferSelect;
 /** @deprecated use WorkStep */
@@ -245,3 +255,4 @@ export type AiSnapshot = typeof aiSnapshotsTable.$inferSelect;
 export type ProductionZone = typeof productionZonesTable.$inferSelect;
 export type WipLocation = typeof wipLocationsTable.$inferSelect;
 export type StepDependency = typeof stepDependenciesTable.$inferSelect;
+export type TemplateStepDependency = typeof templateStepDependenciesTable.$inferSelect;

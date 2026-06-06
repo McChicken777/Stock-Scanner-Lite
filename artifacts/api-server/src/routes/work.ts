@@ -6,7 +6,7 @@ import {
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
-  suppliersTable, stepDependenciesTable, companiesTable,
+  suppliersTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -798,6 +798,86 @@ router.delete("/templates/:templateId/procedures/:procId", requireAdmin, async (
   } catch (err) {
     req.log.error({ err }, "Failed to delete procedure");
     res.status(500).json({ error: "Failed to delete procedure" });
+  }
+});
+
+// ── Template step dependencies ───────────────────────────────────────────────
+// These define the execution order within a template; copied to live step
+// dependencies whenever a project is created from this template.
+
+router.get("/templates/:id/step-dependencies", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    const deps = await db.select().from(templateStepDependenciesTable)
+      .where(eq(templateStepDependenciesTable.templateId, templateId));
+    res.json(deps);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list template step dependencies");
+    res.status(500).json({ error: "Failed to list template step dependencies" });
+  }
+});
+
+router.post("/templates/:id/step-dependencies", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+
+    const parsed = z.object({ blockerStepId: z.number().int(), blockedStepId: z.number().int() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { blockerStepId, blockedStepId } = parsed.data;
+    if (blockerStepId === blockedStepId) { res.status(400).json({ error: "A step cannot depend on itself" }); return; }
+
+    // Both steps must belong to this template
+    const [blocker] = await db.select({ id: workStepsTable.id }).from(workStepsTable)
+      .where(and(eq(workStepsTable.id, blockerStepId), eq(workStepsTable.templateId, templateId)));
+    const [blocked] = await db.select({ id: workStepsTable.id }).from(workStepsTable)
+      .where(and(eq(workStepsTable.id, blockedStepId), eq(workStepsTable.templateId, templateId)));
+    if (!blocker || !blocked) { res.status(404).json({ error: "One or both steps not found in this template" }); return; }
+
+    // Cycle detection on template deps
+    const allDeps = await db.select({ blocker: templateStepDependenciesTable.blockerStepId, blocked: templateStepDependenciesTable.blockedStepId })
+      .from(templateStepDependenciesTable).where(eq(templateStepDependenciesTable.templateId, templateId));
+    const fwdGraph = new Map<number, Set<number>>();
+    for (const { blocker: b, blocked: bd } of allDeps) {
+      if (!fwdGraph.has(b)) fwdGraph.set(b, new Set());
+      fwdGraph.get(b)!.add(bd);
+    }
+    const visited = new Set<number>();
+    const stack = [blockedStepId];
+    let hasCycle = false;
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (node === blockerStepId) { hasCycle = true; break; }
+      if (visited.has(node)) continue;
+      visited.add(node);
+      for (const next of (fwdGraph.get(node) ?? [])) stack.push(next);
+    }
+    if (hasCycle) { res.status(400).json({ error: "Adding this dependency would create a cycle" }); return; }
+
+    const [dep] = await db.insert(templateStepDependenciesTable).values({ templateId, blockerStepId, blockedStepId })
+      .onConflictDoNothing().returning();
+    res.status(201).json(dep ?? { templateId, blockerStepId, blockedStepId });
+  } catch (err) {
+    req.log.error({ err }, "Failed to add template step dependency");
+    res.status(500).json({ error: "Failed to add template step dependency" });
+  }
+});
+
+router.delete("/templates/:id/step-dependencies/:depId", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.id);
+    const depId = Number(req.params.depId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedTemplate(templateId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+    await db.delete(templateStepDependenciesTable)
+      .where(and(eq(templateStepDependenciesTable.id, depId), eq(templateStepDependenciesTable.templateId, templateId)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete template step dependency");
+    res.status(500).json({ error: "Failed to delete template step dependency" });
   }
 });
 
@@ -2024,7 +2104,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
         // Load BOM components with per-template steps from work_steps (templateComponentId)
         let bomComponents: {
           componentProductId: number; quantity: number; name: string;
-          procedures: { name: string; sortOrder: number; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
+          procedures: { id: number; name: string; sortOrder: number; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
           itemType: string;
         }[] = [];
         if (template.productId) {
@@ -2046,6 +2126,7 @@ router.post("/projects", requireAdmin, async (req, res) => {
               quantity: comp.quantity,
               name: compProduct.name,
               procedures: steps.map((s) => ({
+                id: s.id,
                 name: s.name,
                 sortOrder: s.sortOrder,
                 roleId: s.roleId ?? null,
@@ -2057,6 +2138,10 @@ router.post("/projects", requireAdmin, async (req, res) => {
           }
         }
 
+        // Load template-level step dependencies so they can be copied to live steps
+        const templateDeps = await db.select().from(templateStepDependenciesTable)
+          .where(eq(templateStepDependenciesTable.templateId, templateId));
+
         for (let i = 1; i <= quantity; i++) {
           const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
           const [item] = await db.insert(workProjectItemsTable).values({
@@ -2064,16 +2149,20 @@ router.post("/projects", requireAdmin, async (req, res) => {
           }).returning();
           sortOrder++;
 
+          // Maps templateStepId → newly inserted live step id (used for dependency copying)
+          const templateToLiveStepId = new Map<number, number>();
+
           // Copy top-level steps (templateComponentId IS NULL)
           for (const proc of templateProcs.filter((p) => p.templateComponentId === null)) {
-            await db.insert(workItemStepsTable).values({
+            const [liveStep] = await db.insert(workItemStepsTable).values({
               itemId: item.id, name: proc.name, sortOrder: proc.sortOrder,
               requiresInbound: proc.requiresInbound,
               roleId: proc.roleId ?? null,
               batchMode: proc.batchMode ?? "individual",
               durationEstimate: proc.durationEstimate ?? null,
               templateStepId: proc.id,
-            });
+            }).returning({ id: workItemStepsTable.id });
+            templateToLiveStepId.set(proc.id, liveStep.id);
           }
 
           // Create sub-items for each manufactured_part in BOM
@@ -2088,22 +2177,29 @@ router.post("/projects", requireAdmin, async (req, res) => {
               }).returning();
               sortOrder++;
               for (const proc of comp.procedures) {
-                // Look up template step id for this component procedure
-                const [tmplStep] = await db.select({ id: workStepsTable.id }).from(workStepsTable)
-                  .where(and(
-                    eq(workStepsTable.templateId, templateId),
-                    eq(workStepsTable.name, proc.name),
-                    eq(workStepsTable.sortOrder, proc.sortOrder),
-                  ));
-                await db.insert(workItemStepsTable).values({
+                const [liveStep] = await db.insert(workItemStepsTable).values({
                   itemId: subItem.id, name: proc.name, sortOrder: proc.sortOrder,
                   requiresInbound: false,
                   roleId: proc.roleId ?? null,
                   batchMode: proc.batchMode ?? "individual",
                   durationEstimate: proc.durationEstimate ?? null,
-                  templateStepId: tmplStep?.id ?? null,
-                });
+                  templateStepId: proc.id,
+                }).returning({ id: workItemStepsTable.id });
+                templateToLiveStepId.set(proc.id, liveStep.id);
               }
+            }
+          }
+
+          // Copy template step dependencies to live step dependencies for this item
+          for (const dep of templateDeps) {
+            const liveBlocker = templateToLiveStepId.get(dep.blockerStepId);
+            const liveBlocked = templateToLiveStepId.get(dep.blockedStepId);
+            if (liveBlocker && liveBlocked) {
+              await db.insert(stepDependenciesTable).values({
+                blockerStepId: liveBlocker,
+                blockedStepId: liveBlocked,
+                companyId,
+              }).onConflictDoNothing();
             }
           }
         }
