@@ -7,8 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Loader2, Package, ChevronDown, ChevronUp, ChevronRight,
   Wrench, ShoppingCart, X, ListPlus, GripVertical,
-  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, Check,
+  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, Check, FileText,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -866,6 +867,7 @@ export default function WorkTemplatesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [newTemplateName, setNewTemplateName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false);
@@ -1085,6 +1087,15 @@ export default function WorkTemplatesPage() {
             </DialogContent>
           </Dialog>
 
+          {/* Outline Import */}
+          <Button
+            size="sm"
+            className="font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => navigate("/work/template-outline")}
+          >
+            <FileText className="h-3.5 w-3.5" /> Outline Import
+          </Button>
+
           {/* New Template */}
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
@@ -1151,6 +1162,12 @@ export default function WorkTemplatesPage() {
             <p className="text-sm text-muted-foreground mt-1">Create a template or start from our starter pack.</p>
           </div>
           <div className="flex flex-col gap-2 max-w-xs mx-auto">
+            <Button
+              className="w-full font-bold gap-2 bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => navigate("/work/template-outline")}
+            >
+              <FileText className="h-4 w-4" /> Outline Import (Fast)
+            </Button>
             <Button
               className="w-full font-bold gap-2 bg-purple-600 hover:bg-purple-700"
               onClick={() => setAiGenerateOpen(true)}

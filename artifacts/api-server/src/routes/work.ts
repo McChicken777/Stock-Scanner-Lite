@@ -7,6 +7,7 @@ import {
   productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
   suppliersTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
+  stationTypesTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -420,6 +421,134 @@ router.post("/templates/confirm-generate", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to confirm template generation");
     res.status(500).json({ error: "Failed to save template" });
+  }
+});
+
+// ─── OUTLINE IMPORT ───────────────────────────────────────────────────────────
+// Accepts a structured outline payload and bulk-creates a template + BOM + steps in one shot.
+
+interface OutlineImportPart {
+  name: string;
+  quantity: number;
+  ops: string[];
+  stationTypeIds: number[];
+  children: OutlineImportPart[];
+}
+
+router.post("/templates/outline-import", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const partSchema: z.ZodType<any> = z.lazy(() => z.object({
+      name: z.string().min(1),
+      quantity: z.number().int().min(1).default(1),
+      stationTypeIds: z.array(z.number().int()),
+      ops: z.array(z.string()),
+      children: z.array(partSchema),
+    }));
+
+    const bodySchema = z.object({
+      templateName: z.string().min(1),
+      rootOps: z.array(z.string()).default([]),
+      rootStationTypeIds: z.array(z.number().int()).default([]),
+      children: z.array(partSchema),
+    });
+
+    const parsed = bodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid outline payload", details: parsed.error.issues });
+      return;
+    }
+
+    const { templateName, rootOps, rootStationTypeIds, children } = parsed.data;
+
+    // Collect and verify all station type IDs belong to this company
+    const allTypeIds = new Set<number>();
+    const collectTypeIds = (parts: OutlineImportPart[]) => {
+      for (const p of parts) {
+        for (const id of p.stationTypeIds) allTypeIds.add(id);
+        collectTypeIds(p.children);
+      }
+    };
+    rootStationTypeIds.forEach((id) => allTypeIds.add(id));
+    collectTypeIds(children);
+
+    if (allTypeIds.size > 0) {
+      const validTypes = await db.select({ id: stationTypesTable.id })
+        .from(stationTypesTable)
+        .where(and(eq(stationTypesTable.companyId, companyId), inArray(stationTypesTable.id, Array.from(allTypeIds))));
+      const validIds = new Set(validTypes.map((t) => t.id));
+      const invalid = Array.from(allTypeIds).filter((id) => !validIds.has(id));
+      if (invalid.length > 0) {
+        res.status(400).json({ error: `Invalid station type IDs: ${invalid.join(", ")}` });
+        return;
+      }
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [rootProduct] = await tx.insert(productsTable).values({
+        name: templateName, category: "Template", itemType: "final_product",
+        bufferStock: 0, targetStock: 0, companyId,
+      }).returning();
+
+      const [template] = await tx.insert(workTemplatesTable).values({
+        name: templateName, companyId, productId: rootProduct.id,
+      }).returning();
+
+      // Top-level template steps (root ops)
+      for (let i = 0; i < rootStationTypeIds.length; i++) {
+        await tx.insert(workStepsTable).values({
+          templateId: template.id, name: rootOps[i] ?? `Step ${i + 1}`,
+          sortOrder: i, stationTypeId: rootStationTypeIds[i],
+          batchMode: "individual", templateComponentId: null,
+        });
+      }
+
+      let partCount = 0;
+
+      async function insertParts(parts: OutlineImportPart[], parentProductId: number) {
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          partCount++;
+
+          const [product] = await tx.insert(productsTable).values({
+            name: part.name, category: "Component", itemType: "manufactured_part",
+            bufferStock: 0, targetStock: 0, companyId,
+          }).returning();
+
+          const [compEntry] = await tx.insert(productComponentsTable).values({
+            parentProductId, componentProductId: product.id,
+            quantity: part.quantity, sortOrder: i,
+          }).returning();
+
+          for (let j = 0; j < part.stationTypeIds.length; j++) {
+            await tx.insert(workStepsTable).values({
+              templateId: template.id, templateComponentId: compEntry.id,
+              name: part.ops[j] ?? `Step ${j + 1}`,
+              sortOrder: j, stationTypeId: part.stationTypeIds[j],
+              batchMode: "individual",
+            });
+          }
+
+          if (part.children.length > 0) {
+            await insertParts(part.children, product.id);
+          }
+        }
+      }
+
+      await insertParts(children, rootProduct.id);
+      return { template, partCount };
+    });
+
+    res.status(201).json({
+      templateId: result.template.id,
+      templateName: result.template.name,
+      partCount: result.partCount,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to outline-import template");
+    res.status(500).json({ error: "Failed to create template from outline" });
   }
 });
 
