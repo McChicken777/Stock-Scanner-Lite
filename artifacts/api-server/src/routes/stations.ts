@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db, stationTypesTable, workstationsTable, workItemStepsTable,
   workProjectItemsTable, workProjectsTable, workTimeLogsTable, usersTable,
+  rolesTable, userRolesTable,
 } from "@workspace/db";
 import { eq, and, asc, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -14,6 +15,8 @@ const router: IRouter = Router();
 router.get("/types", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
+
     const types = await db.select().from(stationTypesTable)
       .where(eq(stationTypesTable.companyId, companyId))
       .orderBy(asc(stationTypesTable.flowOrder));
@@ -48,10 +51,24 @@ router.get("/types", requireAuth, async (req, res) => {
       : [];
     const pendingCountMap = new Map(pendingCounts.map((r) => [r.stationTypeId, r.count]));
 
+    // Role names for display
+    const allRoles = await db.select({ id: rolesTable.id, name: rolesTable.name })
+      .from(rolesTable).where(eq(rolesTable.companyId, companyId));
+    const roleNameMap = new Map(allRoles.map((r) => [r.id, r.name]));
+
+    // Current user's assigned role IDs — used to flag "my stations"
+    const myRoleIds = new Set(
+      (await db.select({ roleId: userRolesTable.roleId })
+        .from(userRolesTable).where(eq(userRolesTable.userId, userId)))
+        .map((r) => r.roleId)
+    );
+
     const result = types.map((t) => ({
       ...t,
       workstations: workstations.filter((w) => w.stationTypeId === t.id),
       pendingCount: pendingCountMap.get(t.id) ?? 0,
+      roleName: t.roleId ? (roleNameMap.get(t.roleId) ?? null) : null,
+      isMyStation: t.roleId != null ? myRoleIds.has(t.roleId) : false,
     }));
     res.json(result);
   } catch (err) {
@@ -66,6 +83,7 @@ router.post("/types", requireAdmin, async (req, res) => {
     const parsed = z.object({
       name: z.string().min(1),
       color: z.string().default("#6366f1"),
+      roleId: z.number().int().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
 
@@ -76,9 +94,10 @@ router.post("/types", requireAdmin, async (req, res) => {
       companyId,
       name: parsed.data.name,
       color: parsed.data.color,
+      roleId: parsed.data.roleId ?? null,
       flowOrder: existing.length,
     }).returning();
-    res.status(201).json({ ...type, workstations: [] });
+    res.status(201).json({ ...type, workstations: [], roleName: null, isMyStation: false });
   } catch (err) {
     req.log.error({ err }, "Failed to create station type");
     res.status(500).json({ error: "Failed to create station type" });
@@ -110,6 +129,7 @@ router.put("/types/:id", requireAdmin, async (req, res) => {
     const parsed = z.object({
       name: z.string().min(1).optional(),
       color: z.string().optional(),
+      roleId: z.number().int().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
     const [type] = await db.update(stationTypesTable).set(parsed.data)
