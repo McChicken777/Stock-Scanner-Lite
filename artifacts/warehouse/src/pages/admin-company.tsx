@@ -93,6 +93,37 @@ const COUNTRY_TIMEZONES: Record<string, string> = {
   US: "America/New_York",
 };
 
+const TIMEZONES = [
+  { value: "UTC", label: "UTC" },
+  { value: "Europe/Ljubljana", label: "Ljubljana (UTC+1/+2)" },
+  { value: "Europe/Vienna", label: "Vienna (UTC+1/+2)" },
+  { value: "Europe/Zagreb", label: "Zagreb (UTC+1/+2)" },
+  { value: "Europe/Prague", label: "Prague (UTC+1/+2)" },
+  { value: "Europe/Warsaw", label: "Warsaw (UTC+1/+2)" },
+  { value: "Europe/Budapest", label: "Budapest (UTC+1/+2)" },
+  { value: "Europe/Rome", label: "Rome (UTC+1/+2)" },
+  { value: "Europe/Berlin", label: "Berlin (UTC+1/+2)" },
+  { value: "Europe/Paris", label: "Paris (UTC+1/+2)" },
+  { value: "Europe/Amsterdam", label: "Amsterdam (UTC+1/+2)" },
+  { value: "Europe/Madrid", label: "Madrid (UTC+1/+2)" },
+  { value: "Europe/Zurich", label: "Zurich (UTC+1/+2)" },
+  { value: "Europe/Stockholm", label: "Stockholm (UTC+1/+2)" },
+  { value: "Europe/Copenhagen", label: "Copenhagen (UTC+1/+2)" },
+  { value: "Europe/Oslo", label: "Oslo (UTC+1/+2)" },
+  { value: "Europe/Helsinki", label: "Helsinki (UTC+2/+3)" },
+  { value: "Europe/Lisbon", label: "Lisbon (UTC+0/+1)" },
+  { value: "Europe/London", label: "London (UTC+0/+1)" },
+  { value: "Asia/Tokyo", label: "Tokyo (UTC+9)" },
+  { value: "Australia/Sydney", label: "Sydney (UTC+10/+11)" },
+  { value: "America/New_York", label: "New York (UTC-5/-4)" },
+  { value: "America/Chicago", label: "Chicago (UTC-6/-5)" },
+  { value: "America/Denver", label: "Denver (UTC-7/-6)" },
+  { value: "America/Los_Angeles", label: "Los Angeles (UTC-8/-7)" },
+  { value: "America/Toronto", label: "Toronto (UTC-5/-4)" },
+  { value: "America/Sao_Paulo", label: "São Paulo (UTC-3)" },
+  { value: "America/Mexico_City", label: "Mexico City (UTC-6/-5)" },
+];
+
 async function fetchCompany(): Promise<Company> {
   const res = await fetch("/api/company", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load company");
@@ -350,32 +381,118 @@ export default function AdminCompanyPage() {
           )}
         </div>
 
-        {/* Work hours per day */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Standard Work Hours / Day</p>
-            <p className="text-xs text-muted-foreground mt-1">Used to calculate overtime in attendance reports</p>
+        {/* Work hours + Shifts (combined) */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-5">
+          {/* Standard work hours */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Standard Work Hours / Day</p>
+              <p className="text-xs text-muted-foreground mt-1">Used to calculate overtime in attendance reports</p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Input
+                type="number"
+                min="1" max="24" step="0.5"
+                value={workHours}
+                onChange={(e) => setWorkHours(e.target.value)}
+                className="h-10 flex-1 border-2"
+              />
+              <span className="text-sm text-muted-foreground font-bold">hours</span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const n = Number(workHours);
+                  if (Number.isFinite(n) && n > 0 && n <= 24) updateHoursMutation.mutate(n);
+                }}
+                disabled={updateHoursMutation.isPending || !workHours}
+                className="h-10"
+              >
+                {updateHoursMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
-          <div className="flex gap-2 items-center">
-            <Input
-              type="number"
-              min="1" max="24" step="0.5"
-              value={workHours}
-              onChange={(e) => setWorkHours(e.target.value)}
-              className="h-10 flex-1 border-2"
-            />
-            <span className="text-sm text-muted-foreground font-bold">hours</span>
-            <Button
-              size="sm"
-              onClick={() => {
-                const n = Number(workHours);
-                if (Number.isFinite(n) && n > 0 && n <= 24) updateHoursMutation.mutate(n);
-              }}
-              disabled={updateHoursMutation.isPending || !workHours}
-              className="h-10"
-            >
-              {updateHoursMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            </Button>
+
+          <div className="border-t border-border" />
+
+          {/* Shifts */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Shifts</p>
+            </div>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Define your shifts here, then assign each worker their shift in Manage Users. The system auto-closes forgotten clock-outs at the shift end time (+ 2 h grace).
+            </p>
+
+            {/* Add shift form */}
+            <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
+              <p className="text-xs font-bold text-muted-foreground">Add Shift</p>
+              <Input
+                placeholder="Shift name (e.g. Morning, Night)"
+                value={newShiftName}
+                onChange={(e) => setNewShiftName(e.target.value)}
+                className="h-9 text-sm border-2"
+              />
+              <div className="flex gap-2 items-center">
+                <div className="flex-1 space-y-1">
+                  <p className="text-[11px] text-muted-foreground font-semibold">Start</p>
+                  <input
+                    type="time"
+                    value={newShiftStart}
+                    onChange={(e) => setNewShiftStart(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <p className="text-[11px] text-muted-foreground font-semibold">End</p>
+                  <input
+                    type="time"
+                    value={newShiftEnd}
+                    onChange={(e) => setNewShiftEnd(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="h-9 w-9 p-0 self-end"
+                  disabled={!newShiftName.trim() || addShiftMutation.isPending}
+                  onClick={() => addShiftMutation.mutate({ name: newShiftName.trim(), startTime: newShiftStart, endTime: newShiftEnd })}
+                >
+                  {addShiftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              {newShiftStart && newShiftEnd && crossesMidnight(newShiftStart, newShiftEnd) && (
+                <p className="text-[11px] text-amber-600 font-medium">Night shift — ends the following day.</p>
+              )}
+            </div>
+
+            {/* Shift list */}
+            {shifts.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-2">No shifts configured yet.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {shifts.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-background text-sm">
+                    <div>
+                      <p className="font-semibold text-sm">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {s.startTime} → {s.endTime}
+                        {crossesMidnight(s.startTime, s.endTime) && (
+                          <span className="ml-1.5 text-amber-600 font-medium">(+1 day)</span>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => deleteShiftMutation.mutate(s.id)}
+                      disabled={deleteShiftMutation.isPending}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -437,22 +554,25 @@ export default function AdminCompanyPage() {
               </div>
             </div>
 
-            {/* Timezone — auto-filled from country, editable */}
+            {/* Timezone — select, auto-filled from country */}
             <div className="space-y-1.5">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" /> Timezone
               </p>
-              <div className="flex gap-2 items-center">
-                <Input
+              <div className="flex gap-2">
+                <select
                   value={selectedTimezone}
                   onChange={(e) => setSelectedTimezone(e.target.value)}
-                  placeholder="e.g. Europe/Ljubljana"
-                  className="h-9 flex-1 border-2 text-sm font-mono"
-                />
+                  className="flex-1 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-9"
+                  className="h-10"
                   disabled={updateSchedulingMutation.isPending}
                   onClick={() => updateSchedulingMutation.mutate({ timezone: selectedTimezone })}
                 >
@@ -460,8 +580,7 @@ export default function AdminCompanyPage() {
                 </Button>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Clock-in/out dates and overtime calculations use this timezone. Auto-filled when you pick a country.
-                Active: <span className="font-mono font-bold">{company.timezone || "UTC"}</span>
+                Used for clock-in dates and overtime calculations. Active: <span className="font-semibold">{company.timezone || "UTC"}</span>
               </p>
             </div>
           </div>
@@ -481,87 +600,6 @@ export default function AdminCompanyPage() {
               )}
               Import {importYear} Public Holidays for {COUNTRIES.find(c => c.code === selectedCountry)?.label}
             </Button>
-          )}
-        </div>
-
-        {/* Shifts */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Shifts</p>
-          </div>
-          <p className="text-xs text-muted-foreground -mt-2">
-            Define your company's shifts. Assign each worker their shift in Manage Users. If a worker forgets to clock out, the system auto-closes their shift at the shift end time + 2 hours grace.
-          </p>
-
-          {/* Add shift form */}
-          <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
-            <p className="text-xs font-bold text-muted-foreground">Add Shift</p>
-            <Input
-              placeholder="Shift name (e.g. Morning, Night)"
-              value={newShiftName}
-              onChange={(e) => setNewShiftName(e.target.value)}
-              className="h-9 text-sm border-2"
-            />
-            <div className="flex gap-2 items-center">
-              <div className="flex-1 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-semibold">Start</p>
-                <input
-                  type="time"
-                  value={newShiftStart}
-                  onChange={(e) => setNewShiftStart(e.target.value)}
-                  className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="flex-1 space-y-1">
-                <p className="text-[11px] text-muted-foreground font-semibold">End</p>
-                <input
-                  type="time"
-                  value={newShiftEnd}
-                  onChange={(e) => setNewShiftEnd(e.target.value)}
-                  className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <Button
-                size="sm"
-                className="h-9 w-9 p-0 self-end"
-                disabled={!newShiftName.trim() || addShiftMutation.isPending}
-                onClick={() => addShiftMutation.mutate({ name: newShiftName.trim(), startTime: newShiftStart, endTime: newShiftEnd })}
-              >
-                {addShiftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              </Button>
-            </div>
-            {newShiftStart && newShiftEnd && crossesMidnight(newShiftStart, newShiftEnd) && (
-              <p className="text-[11px] text-amber-600 font-medium">Night shift — ends the following day.</p>
-            )}
-          </div>
-
-          {/* Shift list */}
-          {shifts.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-3">No shifts configured yet.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {shifts.map((s) => (
-                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-background text-sm">
-                  <div>
-                    <p className="font-semibold text-sm">{s.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {s.startTime} → {s.endTime}
-                      {crossesMidnight(s.startTime, s.endTime) && (
-                        <span className="ml-1.5 text-amber-600 font-sans font-medium not-italic">(+1 day)</span>
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => deleteShiftMutation.mutate(s.id)}
-                    disabled={deleteShiftMutation.isPending}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
           )}
         </div>
 
