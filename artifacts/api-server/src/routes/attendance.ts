@@ -117,7 +117,7 @@ router.get("/today", requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
     const companyId = req.session.companyId!;
-    const today = todayStr();
+    const today = await todayStrForCompany(companyId);
     const [log] = await db.select().from(attendanceLogsTable)
       .where(and(
         eq(attendanceLogsTable.userId, userId),
@@ -247,7 +247,7 @@ router.post("/absence", requireAuth, async (req, res) => {
     const parsed = absenceSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const date = parsed.data.date ?? todayStr();
+    const date = parsed.data.date ?? await todayStrForCompany(companyId);
     const [existing] = await db.select().from(attendanceLogsTable)
       .where(and(
         eq(attendanceLogsTable.userId, userId),
@@ -293,7 +293,7 @@ router.get("/live", requireAuth, async (req, res) => {
       return;
     }
     const companyId = req.session.companyId!;
-    const today = todayStr();
+    const today = await todayStrForCompany(companyId);
 
     const users = await db.select({ id: usersTable.id, username: usersTable.username, role: usersTable.role })
       .from(usersTable).where(eq(usersTable.companyId, companyId)).orderBy(usersTable.username);
