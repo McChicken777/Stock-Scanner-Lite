@@ -14,7 +14,7 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [manualMode, setManualMode] = useState(false);
   const [manualId, setManualId] = useState("");
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (manualMode) return;

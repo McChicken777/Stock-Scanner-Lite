@@ -230,7 +230,7 @@ export function ProductLocationsDialog({
                 <LocationStockItem
                   key={loc.id}
                   locationId={loc.id}
-                  description={loc.description}
+                  description={loc.description ?? null}
                   productId={productId}
                   bufferStock={0}
                   onMove={(locId, qty) => {

@@ -9,7 +9,7 @@ import {
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useHealthCheck } from "@workspace/api-client-react";
+import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
 import { useAuth, useFeature } from "@/contexts/auth";
 import { TutorialProvider, useTutorial } from "@/contexts/tutorial";
 import { TutorialModal } from "@/components/tutorial-modal";
@@ -719,7 +719,7 @@ function TutorialHelpButton() {
 // ─── App Layout ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { data: health } = useHealthCheck({ query: { refetchInterval: 60000 } });
+  const { data: health } = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), refetchInterval: 60000 } });
   const [location] = useLocation();
   const { user } = useAuth();
   const isHealthy = health?.status === "ok";

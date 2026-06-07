@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useRoute } from "wouter";
 import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2 } from "lucide-react";
-import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey } from "@workspace/api-client-react";
+import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ function StockItem({
   const { toast } = useToast();
   
   // Ref for debouncing rapidly tapped buttons
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const handleUpdate = (newQty: number) => {
     // Optimistic UI update immediately
@@ -46,7 +46,7 @@ function StockItem({
     // Debounce the actual API call
     timeoutRef.current = setTimeout(() => {
       updateStock.mutate(
-        { data: { locationId, productId, quantity: newQty } },
+        { locationId, productId, data: { quantity: newQty } },
         {
           onSuccess: () => {
             // Revalidate to get the fresh data
@@ -155,7 +155,7 @@ function StockItem({
 function AddProductDialog({ locationId }: { locationId: string }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { data: products, isLoading } = useListProducts({ query: { enabled: open } });
+  const { data: products, isLoading } = useListProducts({ query: { queryKey: getListProductsQueryKey(), enabled: open } });
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -167,7 +167,7 @@ function AddProductDialog({ locationId }: { locationId: string }) {
 
   const handleAdd = (productId: number) => {
     updateStock.mutate(
-      { data: { locationId, productId, quantity: 1 } },
+      { locationId, productId, data: { quantity: 1 } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });

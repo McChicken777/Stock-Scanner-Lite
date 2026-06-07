@@ -30,7 +30,7 @@ export function TutorialModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) closeTutorial(); }}>
-      <DialogContent className="w-[92vw] max-w-sm rounded-2xl p-0 gap-0 overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="w-[92vw] max-w-sm rounded-2xl p-0 gap-0 overflow-hidden">
         {/* Header */}
         <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/50">
           <div className="flex items-center gap-2.5">
