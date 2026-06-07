@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye, Pencil, Check } from "lucide-react";
 
 interface UserEntry {
   id: number;
@@ -188,6 +188,68 @@ export default function AdminUsersPage() {
     onError: (err) => {
       toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
     },
+  });
+
+  const [newRoleName, setNewRoleName] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [editRoleName, setEditRoleName] = useState("");
+
+  const { data: allRoles = [] } = useQuery<Role[]>({
+    queryKey: ["/api/tasks/roles"],
+    queryFn: async () => {
+      const r = await fetch("/api/tasks/roles", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+  });
+
+  const createRoleMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const r = await fetch("/api/tasks/roles", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/roles"] });
+      setNewRoleName("");
+      toast({ title: "Role created" });
+    },
+    onError: () => toast({ title: "Failed to create role", variant: "destructive" }),
+  });
+
+  const renameRoleMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const r = await fetch(`/api/tasks/roles/${id}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) throw new Error("Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/roles"] });
+      setEditingRoleId(null);
+      toast({ title: "Role renamed" });
+    },
+    onError: () => toast({ title: "Failed to rename role", variant: "destructive" }),
+  });
+
+  const deleteRoleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/tasks/roles/${id}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks/roles"] });
+      toast({ title: "Role deleted" });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   const supervisorMutation = useMutation({
@@ -447,6 +509,74 @@ export default function AdminUsersPage() {
           ))}
         </div>
       )}
+
+      {/* Production Roles */}
+      <div className="pt-4 border-t space-y-3">
+        <div>
+          <p className="text-base font-bold flex items-center gap-2"><HardHat className="h-4 w-4 text-purple-600" /> Production Roles</p>
+          <p className="text-xs text-muted-foreground">Roles like Welder, CNC Operator — assign above to workers, attach to steps in Production Flow</p>
+        </div>
+
+        <div className="space-y-2">
+          {allRoles.map((role) =>
+            editingRoleId === role.id ? (
+              <div key={role.id} className="flex items-center gap-2 bg-card p-2.5 rounded-lg border border-primary/40">
+                <Input
+                  value={editRoleName}
+                  onChange={(e) => setEditRoleName(e.target.value)}
+                  className="h-8 flex-1 text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && editRoleName.trim()) renameRoleMutation.mutate({ id: role.id, name: editRoleName.trim() });
+                    if (e.key === "Escape") setEditingRoleId(null);
+                  }}
+                />
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600"
+                  onClick={() => editRoleName.trim() && renameRoleMutation.mutate({ id: role.id, name: editRoleName.trim() })}
+                  disabled={!editRoleName.trim() || renameRoleMutation.isPending}>
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground"
+                  onClick={() => setEditingRoleId(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div key={role.id} className="flex items-center justify-between bg-card p-2.5 rounded-lg border">
+                <span className="text-sm font-medium">{role.name}</span>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setEditingRoleId(role.id); setEditRoleName(role.name); }}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteRoleMutation.mutate(role.id)}
+                    disabled={deleteRoleMutation.isPending}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )
+          )}
+          {allRoles.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-3">No roles yet</p>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <Input
+            value={newRoleName}
+            onChange={(e) => setNewRoleName(e.target.value)}
+            placeholder="e.g. Welder, CNC Operator..."
+            className="h-10"
+            onKeyDown={(e) => { if (e.key === "Enter" && newRoleName.trim()) createRoleMutation.mutate(newRoleName.trim()); }}
+          />
+          <Button size="sm" onClick={() => createRoleMutation.mutate(newRoleName.trim())}
+            disabled={!newRoleName.trim() || createRoleMutation.isPending} className="gap-1 font-bold">
+            <Plus className="h-4 w-4" /> Add
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

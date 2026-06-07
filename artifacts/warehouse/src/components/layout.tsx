@@ -264,15 +264,6 @@ function AdminBottomNav() {
                 </div>
               </div>
             </Link>
-            <Link href="/admin/roles" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <HardHat className="h-5 w-5 text-purple-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Roles</p>
-                  <p className="text-xs text-muted-foreground">Who does which step</p>
-                </div>
-              </div>
-            </Link>
             {user?.plan === "pro" && (
               <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
                 <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
