@@ -1031,7 +1031,7 @@ export default function TemplateOutlinePage() {
                   <p className="text-sm font-medium text-muted-foreground">Start typing on the left</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Indent with Tab, ops after second Tab or 3+ spaces.
-                    {Object.keys(settings.defaultOpCodes).length > 0 && (
+                    {settings.defaultOpCodes.length > 0 && (
                       <> Defaults ({settings.defaultOpCodes.join(", ")}) shown faded.</>
                     )}
                   </p>

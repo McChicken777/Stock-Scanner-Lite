@@ -601,7 +601,31 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
 
     const cloneName = `${source.name} (copy)`;
 
-    // Clone the final_product
+    // compEntryIdMap: old product_components.id → new product_components.id
+    const compEntryIdMap = new Map<number, number>();
+
+    // Recursively clone products + component entries for all BOM levels
+    async function cloneComponents(oldParentProductId: number, newParentProductId: number) {
+      const children = await db.select().from(productComponentsTable)
+        .where(eq(productComponentsTable.parentProductId, oldParentProductId))
+        .orderBy(productComponentsTable.sortOrder);
+      for (const comp of children) {
+        const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+        if (!compProduct) continue;
+        const [newCompProduct] = await db.insert(productsTable).values({
+          name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
+          bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
+        }).returning();
+        const [newCompEntry] = await db.insert(productComponentsTable).values({
+          parentProductId: newParentProductId, componentProductId: newCompProduct.id,
+          quantity: comp.quantity, sortOrder: comp.sortOrder,
+        }).returning();
+        compEntryIdMap.set(comp.id, newCompEntry.id);
+        // Recurse for grandchildren
+        await cloneComponents(comp.componentProductId, newCompProduct.id);
+      }
+    }
+
     let newProductId: number | null = null;
     if (source.productId) {
       const [srcProduct] = await db.select().from(productsTable).where(eq(productsTable.id, source.productId));
@@ -611,27 +635,7 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
           bufferStock: srcProduct.bufferStock, targetStock: srcProduct.targetStock, companyId,
         }).returning();
         newProductId = newProduct.id;
-
-        // Clone BOM components
-        const components = await db.select().from(productComponentsTable)
-          .where(eq(productComponentsTable.parentProductId, source.productId))
-          .orderBy(productComponentsTable.sortOrder);
-
-        // Track old→new component ID mapping for copying work_steps
-        const compIdMap = new Map<number, number>(); // oldComponentId → newComponentId
-        for (const comp of components) {
-          const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
-          if (!compProduct) continue;
-          const [newComp] = await db.insert(productsTable).values({
-            name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
-            bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
-          }).returning();
-          const [newCompEntry] = await db.insert(productComponentsTable).values({
-            parentProductId: newProductId, componentProductId: newComp.id,
-            quantity: comp.quantity, sortOrder: comp.sortOrder,
-          }).returning();
-          compIdMap.set(comp.id, newCompEntry.id);
-        }
+        await cloneComponents(source.productId, newProductId);
       }
     }
 
@@ -639,34 +643,20 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
       name: cloneName, companyId, productId: newProductId,
     }).returning();
 
-    // Clone all work_steps (top-level and component-level)
+    // Clone all work_steps using the complete compEntryIdMap
     const srcSteps = await db.select().from(workStepsTable)
       .where(eq(workStepsTable.templateId, templateId))
       .orderBy(workStepsTable.sortOrder);
 
-    // Rebuild compIdMap in scope for step cloning
-    // Re-query the new template's components to map old→new component IDs
-    const newComponents = newProductId
-      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, newProductId))
-      : [];
-    const oldComponents = source.productId
-      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, source.productId))
-        .orderBy(productComponentsTable.sortOrder)
-      : [];
-    // Match by sortOrder (same order as original)
-    const cloneCompIdMap = new Map<number, number>();
-    oldComponents.forEach((oc, i) => {
-      if (newComponents[i]) cloneCompIdMap.set(oc.id, newComponents[i].id);
-    });
-
     for (const s of srcSteps) {
       const newTemplateComponentId = s.templateComponentId
-        ? (cloneCompIdMap.get(s.templateComponentId) ?? null)
+        ? (compEntryIdMap.get(s.templateComponentId) ?? null)
         : null;
       await db.insert(workStepsTable).values({
         templateId: newTemplate.id, name: s.name, sortOrder: s.sortOrder,
         requiresInbound: s.requiresInbound, roleId: s.roleId ?? null,
         batchMode: s.batchMode ?? "individual", durationEstimate: s.durationEstimate ?? null,
+        stationTypeId: s.stationTypeId ?? null,
         templateComponentId: newTemplateComponentId,
       });
     }
