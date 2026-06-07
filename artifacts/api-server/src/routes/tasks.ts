@@ -44,6 +44,48 @@ router.post("/roles", requireAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/roles/:id
+router.put("/roles/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const roleId = Number(req.params.id);
+    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
+    const [updated] = await db.update(rolesTable)
+      .set({ name: parsed.data.name })
+      .where(and(eq(rolesTable.id, roleId), eq(rolesTable.companyId, companyId)))
+      .returning();
+    if (!updated) { res.status(404).json({ error: "Role not found" }); return; }
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update role");
+    res.status(500).json({ error: "Failed to update role" });
+  }
+});
+
+// DELETE /api/roles/:id
+router.delete("/roles/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const roleId = Number(req.params.id);
+    // Check if role is in use by users or procedures/steps
+    const usedByUsers = await db.select({ id: userRolesTable.userId }).from(userRolesTable)
+      .where(eq(userRolesTable.roleId, roleId)).limit(1);
+    if (usedByUsers.length > 0) {
+      res.status(409).json({ error: "Role is assigned to workers — unassign it first" });
+      return;
+    }
+    const [deleted] = await db.delete(rolesTable)
+      .where(and(eq(rolesTable.id, roleId), eq(rolesTable.companyId, companyId)))
+      .returning();
+    if (!deleted) { res.status(404).json({ error: "Role not found" }); return; }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete role");
+    res.status(500).json({ error: "Failed to delete role" });
+  }
+});
+
 // GET /api/roles/for-user/:userId
 router.get("/roles/for-user/:userId", requireAdmin, async (req, res) => {
   try {
