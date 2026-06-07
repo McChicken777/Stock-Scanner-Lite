@@ -1,18 +1,17 @@
 import { Router, type IRouter } from "express";
 import { db, attendanceLogsTable, companiesTable, usersTable, companyHolidaysTable } from "@workspace/db";
 import { eq, and, gte, lte, asc, isNull, desc } from "drizzle-orm";
+
 import { z } from "zod";
 import PDFDocument from "pdfkit";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+async function todayStrForCompany(companyId: number): Promise<string> {
+  const [c] = await db.select({ timezone: companiesTable.timezone }).from(companiesTable).where(eq(companiesTable.id, companyId));
+  const tz = c?.timezone || "UTC";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
 }
 
 async function getCompanyThresholdSeconds(companyId: number): Promise<number> {
@@ -25,15 +24,16 @@ async function getEffectiveThresholdSeconds(companyId: number, dateStr: string):
   const [company] = await db.select({
     wh: companiesTable.workHoursPerDay,
     weekendOvertimeEnabled: companiesTable.weekendOvertimeEnabled,
+    timezone: companiesTable.timezone,
   }).from(companiesTable).where(eq(companiesTable.id, companyId));
 
   if (!company) return 480 * 60;
 
-  // Weekend check
+  // Weekend check — use company timezone so Sat/Sun are correct locally
   if (company.weekendOvertimeEnabled) {
-    const d = new Date(dateStr + "T00:00:00Z");
-    const dow = d.getUTCDay(); // 0=Sun, 6=Sat
-    if (dow === 0 || dow === 6) return 0;
+    const tz = company.timezone || "UTC";
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(new Date(dateStr + "T12:00:00Z"));
+    if (weekday === "Sat" || weekday === "Sun") return 0;
   }
 
   // Holiday check
@@ -135,7 +135,7 @@ router.post("/clock-in", requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
     const companyId = req.session.companyId!;
-    const today = todayStr();
+    const today = await todayStrForCompany(companyId);
 
     const [openShift] = await db.select().from(attendanceLogsTable)
       .where(and(

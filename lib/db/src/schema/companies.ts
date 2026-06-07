@@ -38,6 +38,7 @@ export const companiesTable = pgTable("companies", {
   workHoursPerDay: integer("work_hours_per_day").notNull().default(480),
   weekendOvertimeEnabled: boolean("weekend_overtime_enabled").notNull().default(true),
   country: text("country"),
+  timezone: text("timezone").notNull().default("UTC"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

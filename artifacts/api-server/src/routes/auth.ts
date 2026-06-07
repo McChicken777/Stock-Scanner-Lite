@@ -123,7 +123,7 @@ router.get("/users", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const users = await db
-      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, isSupervisor: usersTable.isSupervisor, createdAt: usersTable.createdAt })
+      .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, isSupervisor: usersTable.isSupervisor, shiftId: usersTable.shiftId, createdAt: usersTable.createdAt })
       .from(usersTable)
       .where(eq(usersTable.companyId, companyId))
       .orderBy(usersTable.username);
@@ -179,6 +179,25 @@ router.patch("/users/:userId/supervisor", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update supervisor flag");
     res.status(500).json({ error: "Failed to update supervisor flag" });
+  }
+});
+
+router.patch("/users/:userId/shift", requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ shiftId: z.number().nullable() }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "shiftId (number | null) required" }); return; }
+    const [user] = await db
+      .update(usersTable)
+      .set({ shiftId: parsed.data.shiftId })
+      .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)))
+      .returning({ id: usersTable.id, shiftId: usersTable.shiftId });
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    res.json(user);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update user shift");
+    res.status(500).json({ error: "Failed to update user shift" });
   }
 });
 

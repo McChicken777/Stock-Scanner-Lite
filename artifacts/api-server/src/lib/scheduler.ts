@@ -1,10 +1,12 @@
 import cron from "node-cron";
-import { and, eq, isNull, isNotNull, lt } from "drizzle-orm";
+import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import {
   db,
   attendanceLogsTable,
   companiesTable,
   companyHolidaysTable,
+  companyShiftsTable,
+  usersTable,
 } from "@workspace/db";
 import { logger } from "./logger";
 import { runAnalyticsJob, getProCompanyIds } from "./analyticsJob";
@@ -23,6 +25,7 @@ interface OpenLogRow {
 interface CompanySettings {
   workHoursPerDay: number;
   weekendOvertimeEnabled: boolean;
+  timezone: string;
 }
 
 async function getCompanySettings(companyId: number): Promise<CompanySettings> {
@@ -30,12 +33,14 @@ async function getCompanySettings(companyId: number): Promise<CompanySettings> {
     .select({
       wh: companiesTable.workHoursPerDay,
       weekendOvertimeEnabled: companiesTable.weekendOvertimeEnabled,
+      timezone: companiesTable.timezone,
     })
     .from(companiesTable)
     .where(eq(companiesTable.id, companyId));
   return {
     workHoursPerDay: c?.wh ?? 480,
     weekendOvertimeEnabled: c?.weekendOvertimeEnabled ?? true,
+    timezone: c?.timezone ?? "UTC",
   };
 }
 
@@ -45,9 +50,9 @@ async function effectiveThresholdSeconds(
   settings: CompanySettings,
 ): Promise<number> {
   if (settings.weekendOvertimeEnabled) {
-    const d = new Date(dateStr + "T00:00:00Z");
-    const dow = d.getUTCDay();
-    if (dow === 0 || dow === 6) return 0;
+    const tz = settings.timezone || "UTC";
+    const weekday = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(new Date(dateStr + "T12:00:00Z"));
+    if (weekday === "Sat" || weekday === "Sun") return 0;
   }
   const [holiday] = await db
     .select({ id: companyHolidaysTable.id })
@@ -62,6 +67,23 @@ async function effectiveThresholdSeconds(
   return settings.workHoursPerDay * 60;
 }
 
+/** Given a date string and HH:MM time, return the UTC Date for that local time in tz. */
+function shiftTimeToDate(dateStr: string, timeHHMM: string, tz: string, addDays = 0): Date {
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  // Build an ISO-like string that Intl can resolve in the target timezone
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const day = d + addDays;
+  const localStr = `${y}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00`;
+  // Use Temporal-style trick: find what UTC time equals localStr in tz
+  const probe = new Date(localStr + "Z"); // parse as UTC first
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false, year: "numeric", month: "2-digit", day: "2-digit" });
+  const parts = formatter.formatToParts(probe);
+  const pv = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const probeLocal = `${pv("year")}-${pv("month")}-${pv("day")}T${pv("hour")}:${pv("minute")}:00`;
+  const diffMs = new Date(localStr).getTime() - new Date(probeLocal).getTime();
+  return new Date(probe.getTime() + diffMs);
+}
+
 /**
  * Close any open clock-in older than (work_hours_per_day + GRACE_HOURS).
  * The clockOut is stamped at clockIn + work_hours_per_day so the recorded
@@ -71,8 +93,8 @@ export async function runAttendanceAutoClose(): Promise<{ closed: number }> {
   const now = new Date();
   const settingsCache = new Map<number, CompanySettings>();
 
-  // Fetch all currently open work shifts.
-  const openLogs = (await db
+  // Fetch all currently open work shifts, joining user shift assignment.
+  const openLogs = await db
     .select({
       id: attendanceLogsTable.id,
       userId: attendanceLogsTable.userId,
@@ -80,42 +102,51 @@ export async function runAttendanceAutoClose(): Promise<{ closed: number }> {
       date: attendanceLogsTable.date,
       clockIn: attendanceLogsTable.clockIn,
       workSeconds: attendanceLogsTable.workSeconds,
+      shiftStartTime: companyShiftsTable.startTime,
+      shiftEndTime: companyShiftsTable.endTime,
     })
     .from(attendanceLogsTable)
+    .leftJoin(usersTable, eq(attendanceLogsTable.userId, usersTable.id))
+    .leftJoin(companyShiftsTable, eq(usersTable.shiftId, companyShiftsTable.id))
     .where(
       and(
         eq(attendanceLogsTable.type, "work"),
         isNotNull(attendanceLogsTable.clockIn),
         isNull(attendanceLogsTable.clockOut),
       ),
-    )) as OpenLogRow[];
+    );
 
   let closed = 0;
   for (const log of openLogs) {
+    if (!log.clockIn) continue;
     let settings = settingsCache.get(log.companyId);
     if (!settings) {
       settings = await getCompanySettings(log.companyId);
       settingsCache.set(log.companyId, settings);
     }
-    const scheduledSec = settings.workHoursPerDay * 60;
-    const graceSec = GRACE_HOURS * 3600;
-    const ageSec = Math.floor(
-      (now.getTime() - log.clockIn.getTime()) / 1000,
-    );
-    if (ageSec <= scheduledSec + graceSec) continue;
 
-    // Stamp clock-out at clockIn + scheduled day.
-    const clockOut = new Date(log.clockIn.getTime() + scheduledSec * 1000);
-    const sessionSec = Math.max(
-      0,
-      Math.round((clockOut.getTime() - log.clockIn.getTime()) / 1000),
-    );
+    let clockOut: Date;
+    let graceSec = GRACE_HOURS * 3600;
+
+    if (log.shiftEndTime && log.shiftStartTime) {
+      // Worker has an assigned shift — close at shift end time.
+      const crossesMidnight = log.shiftEndTime < log.shiftStartTime;
+      const addDays = crossesMidnight ? 1 : 0;
+      const shiftEnd = shiftTimeToDate(log.date, log.shiftEndTime, settings.timezone, addDays);
+      const msSinceShiftEnd = now.getTime() - shiftEnd.getTime();
+      if (msSinceShiftEnd <= graceSec * 1000) continue; // not past grace yet
+      clockOut = shiftEnd;
+    } else {
+      // No shift assigned — fall back to clockIn + scheduled work day.
+      const scheduledSec = settings.workHoursPerDay * 60;
+      const ageSec = Math.floor((now.getTime() - log.clockIn.getTime()) / 1000);
+      if (ageSec <= scheduledSec + graceSec) continue;
+      clockOut = new Date(log.clockIn.getTime() + scheduledSec * 1000);
+    }
+
+    const sessionSec = Math.max(0, Math.round((clockOut.getTime() - log.clockIn.getTime()) / 1000));
     const totalWork = (log.workSeconds ?? 0) + sessionSec;
-    const threshold = await effectiveThresholdSeconds(
-      log.companyId,
-      log.date,
-      settings,
-    );
+    const threshold = await effectiveThresholdSeconds(log.companyId, log.date, settings);
     const overtime = Math.max(0, totalWork - threshold);
 
     await db
@@ -136,13 +167,7 @@ export async function runAttendanceAutoClose(): Promise<{ closed: number }> {
 
     closed += 1;
     logger.info(
-      {
-        attendanceLogId: log.id,
-        userId: log.userId,
-        companyId: log.companyId,
-        date: log.date,
-        workSeconds: totalWork,
-      },
+      { attendanceLogId: log.id, userId: log.userId, companyId: log.companyId, date: log.date, workSeconds: totalWork },
       "Auto-closed forgotten attendance shift",
     );
   }
