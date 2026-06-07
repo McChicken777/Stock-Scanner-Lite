@@ -2,7 +2,8 @@ export type TutorialKey =
   | "jobs" | "tasks" | "templates" | "stations" | "materials"
   | "products" | "locations" | "suppliers" | "purchasing" | "reorder"
   | "customers" | "quotes" | "users" | "attendance" | "leave"
-  | "report" | "supervisor" | "company" | "analytics";
+  | "report" | "supervisor" | "company" | "analytics"
+  | "inbound" | "paintqueue";
 
 export interface TutorialStep {
   heading: string;
@@ -464,6 +465,59 @@ export const TUTORIALS: Record<TutorialKey, Tutorial> = {
     ],
   },
 
+  inbound: {
+    title: "Inbound Deliveries",
+    subtitle: "Track incoming materials from arrival to the shop floor",
+    steps: [
+      {
+        heading: "What inbound tracks",
+        body: "Every delivery of external materials — parts ordered from suppliers, customer-supplied items, or anything coming in for a specific project — gets an inbound record. It follows the item from 'expected' all the way to 'in production'.",
+      },
+      {
+        heading: "Four statuses",
+        body: "Expected → Arrived → Stored → In Production. Create the record when you know something is coming. Mark it Arrived when it shows up at the door. Route it to a location once it's put away. It moves to In Production automatically when the linked step begins.",
+        tip: "Deliveries stuck as 'Expected' for 2+ days show up in the Supervisor View's Bottlenecks tab so nothing gets forgotten.",
+      },
+      {
+        heading: "Creating a record",
+        body: "Tap the + button, optionally link it to an active project, and add any notes (e.g. supplier reference, PO number). The record appears in the list as Expected.",
+      },
+      {
+        heading: "Marking arrived",
+        body: "When the delivery comes in, tap Arrived on the record. Any worker can do this — they don't need admin access.",
+      },
+      {
+        heading: "Routing (admin)",
+        body: "Once arrived, admins tap Route to assign a warehouse location (where it's being stored) and optionally a procedure step it's linked to. This moves the status to Stored.",
+        tip: "Tap the print icon to generate a label for the pallet or box — useful for keeping track of what's what in the receiving bay.",
+      },
+    ],
+  },
+
+  paintqueue: {
+    title: "Paint Shop",
+    subtitle: "Paint queue — your jobs sorted by colour and deadline",
+    steps: [
+      {
+        heading: "What you see here",
+        body: "The Paint Shop shows all production steps assigned to the paint station. Each card shows the RAL colour code, the part name, project name, deadline urgency, and current status.",
+      },
+      {
+        heading: "RAL colour codes",
+        body: "The colour code (e.g. RAL 9005 for Jet Black, RAL 5010 for Gentian Blue) is set by the admin when creating the job. It appears on the card so you know exactly what colour to mix before you start.",
+        tip: "Parts with the same RAL code can often be batched together in one paint run — look for matching codes before setting up the gun.",
+      },
+      {
+        heading: "Starting a part",
+        body: "Tap Start on a card to mark it as in progress. The system logs your start time. If you're painting multiple parts with the same colour, start them all before picking up the gun.",
+      },
+      {
+        heading: "Marking complete",
+        body: "Tap Complete when the part is painted and dry enough to move. You'll be asked to log where the part is going next — a location, zone, or with another worker.",
+      },
+    ],
+  },
+
   analytics: {
     title: "AI Analytics",
     subtitle: "Production insights powered by your real job data",
@@ -513,5 +567,7 @@ export function getTutorialKey(path: string): TutorialKey | null {
   if (path === "/supervisor") return "supervisor";
   if (path === "/admin/company") return "company";
   if (path === "/analytics") return "analytics";
+  if (path === "/work/inbound") return "inbound";
+  if (path === "/work/paint-queue") return "paintqueue";
   return null;
 }
