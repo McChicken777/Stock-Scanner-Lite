@@ -382,4 +382,72 @@ router.put("/queue/assign/:stepId", requireAuth, async (req, res) => {
   }
 });
 
+// GET /stations/board — live station overview for the production board
+router.get("/board", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    const types = await db.select().from(stationTypesTable)
+      .where(eq(stationTypesTable.companyId, companyId))
+      .orderBy(asc(stationTypesTable.flowOrder));
+
+    if (types.length === 0) { res.json([]); return; }
+    const typeIds = types.map((t) => t.id);
+
+    // Steps at each station that belong to active projects
+    const stepsAtStation = await db
+      .select({
+        stationTypeId: workItemStepsTable.stationTypeId,
+        stepId: workItemStepsTable.id,
+        status: workItemStepsTable.status,
+        projectName: workProjectsTable.name,
+      })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        inArray(workItemStepsTable.stationTypeId, typeIds),
+        inArray(workItemStepsTable.status, ["not_started", "in_progress"]),
+      ));
+
+    // Active workers per step (open time logs)
+    const activeStepIds = stepsAtStation.filter((s) => s.status === "in_progress").map((s) => s.stepId);
+    const openLogs = activeStepIds.length
+      ? await db.select({ stepId: workTimeLogsTable.stepId, username: usersTable.username })
+          .from(workTimeLogsTable)
+          .innerJoin(usersTable, eq(workTimeLogsTable.userId, usersTable.id))
+          .where(and(inArray(workTimeLogsTable.stepId, activeStepIds), isNull(workTimeLogsTable.endTime)))
+      : [];
+
+    const logsByStep = new Map<number, string[]>();
+    openLogs.forEach(({ stepId, username }) => {
+      if (stepId == null) return;
+      if (!logsByStep.has(stepId)) logsByStep.set(stepId, []);
+      logsByStep.get(stepId)!.push(username);
+    });
+
+    const result = types.map((t) => {
+      const mine = stepsAtStation.filter((s) => s.stationTypeId === t.id);
+      const active = mine.filter((s) => s.status === "in_progress");
+      const pending = mine.filter((s) => s.status === "not_started");
+      const workers = [...new Set(active.flatMap((s) => logsByStep.get(s.stepId) ?? []))];
+      const projectNames = [...new Set(active.map((s) => s.projectName))];
+      return {
+        id: t.id, name: t.name, color: t.color,
+        activeSteps: active.length,
+        pendingSteps: pending.length,
+        activeWorkers: workers,
+        projectNames,
+      };
+    });
+
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load board overview");
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 export default router;
