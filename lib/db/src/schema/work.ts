@@ -23,6 +23,7 @@ export const stationTypesTable = pgTable("station_types", {
   name: text("name").notNull(),
   color: text("color").notNull().default("#6366f1"),
   flowOrder: integer("flow_order").notNull().default(0),
+  roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

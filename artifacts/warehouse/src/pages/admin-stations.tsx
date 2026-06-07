@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, Loader2, GripVertical, ChevronDown, ChevronUp,
-  Settings2, Monitor, X, Check, Pencil, ChevronRight,
+  Settings2, Monitor, X, Check, Pencil, ChevronRight, HardHat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,15 @@ interface StationType {
   name: string;
   color: string;
   flowOrder: number;
+  roleId: number | null;
+  roleName: string | null;
   pendingCount: number;
   workstations: Workstation[];
+}
+
+interface Role {
+  id: number;
+  name: string;
 }
 
 const PRESET_COLORS = [
@@ -53,9 +60,15 @@ export default function AdminStationsPage() {
     queryFn: () => apiFetch("/api/stations/types"),
   });
 
+  const { data: roles = [] } = useQuery<Role[]>({
+    queryKey: ["/api/tasks/roles"],
+    queryFn: () => apiFetch("/api/tasks/roles"),
+  });
+
   // New station type form
   const [newTypeName, setNewTypeName] = useState("");
   const [newTypeColor, setNewTypeColor] = useState("#6366f1");
+  const [newTypeRoleId, setNewTypeRoleId] = useState<string>("");
   const [addingType, setAddingType] = useState(false);
 
   // Expanded station types
@@ -67,6 +80,7 @@ export default function AdminStationsPage() {
   const [editingTypeId, setEditingTypeId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
+  const [editRoleId, setEditRoleId] = useState<string>("");
 
   // New workstation form per type
   const [addingWsFor, setAddingWsFor] = useState<number | null>(null);
@@ -77,17 +91,21 @@ export default function AdminStationsPage() {
   const dragIdx = useRef<number | null>(null);
 
   const createTypeMutation = useMutation({
-    mutationFn: (data: { name: string; color: string }) =>
+    mutationFn: (data: { name: string; color: string; roleId: number | null }) =>
       apiFetch("/api/stations/types", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
-    onSuccess: () => { invalidate(); setAddingType(false); setNewTypeName(""); setNewTypeColor("#6366f1"); toast({ title: "Station type added" }); },
+    onSuccess: () => {
+      invalidate();
+      setAddingType(false); setNewTypeName(""); setNewTypeColor("#6366f1"); setNewTypeRoleId("");
+      toast({ title: "Station type added" });
+    },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const updateTypeMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { name?: string; color?: string } }) =>
+    mutationFn: ({ id, data }: { id: number; data: { name?: string; color?: string; roleId?: number | null } }) =>
       apiFetch(`/api/stations/types/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -142,6 +160,20 @@ export default function AdminStationsPage() {
     }).then(invalidate).catch((e: Error) => toast({ title: e.message, variant: "destructive" }));
   }
 
+  function startEdit(type: StationType) {
+    setEditingTypeId(type.id);
+    setEditName(type.name);
+    setEditColor(type.color);
+    setEditRoleId(type.roleId != null ? String(type.roleId) : "");
+  }
+
+  function saveEdit(id: number) {
+    updateTypeMutation.mutate({
+      id,
+      data: { name: editName, color: editColor, roleId: editRoleId ? Number(editRoleId) : null },
+    });
+  }
+
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="pt-2">
@@ -153,7 +185,7 @@ export default function AdminStationsPage() {
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
         <p className="font-bold">How it works</p>
-        <p>Add your station types in the order they happen in your production (e.g. Cutting → CNC → Tapping → Welding). Then add the physical machines under each type. When setting up job templates, each step can be tagged to a station so workers see exactly what&apos;s waiting for them at their machine.</p>
+        <p>Add stations in production order (Cutting → CNC → Welding). Link each station to a worker role — workers with that role will automatically see this station&apos;s queue. Add the physical machines under each station type.</p>
       </div>
 
       {isLoading ? (
@@ -177,38 +209,59 @@ export default function AdminStationsPage() {
                 <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: type.color }} />
 
                 {editingTypeId === type.id ? (
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="h-7 text-sm border-2 flex-1"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") updateTypeMutation.mutate({ id: type.id, data: { name: editName, color: editColor } });
-                        if (e.key === "Escape") setEditingTypeId(null);
-                      }}
-                    />
-                    <div className="flex gap-1 flex-shrink-0">
-                      {PRESET_COLORS.map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => setEditColor(c)}
-                          className="w-4 h-4 rounded-full border-2 flex-shrink-0"
-                          style={{ backgroundColor: c, borderColor: editColor === c ? "#000" : "transparent" }}
-                        />
-                      ))}
+                  <div className="flex flex-col gap-2 flex-1 min-w-0">
+                    {/* Row 1: name + colors */}
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-7 text-sm border-2 flex-1"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveEdit(type.id);
+                          if (e.key === "Escape") setEditingTypeId(null);
+                        }}
+                      />
+                      <div className="flex gap-1 flex-shrink-0">
+                        {PRESET_COLORS.map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => setEditColor(c)}
+                            className="w-4 h-4 rounded-full border-2 flex-shrink-0"
+                            style={{ backgroundColor: c, borderColor: editColor === c ? "#000" : "transparent" }}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <button onClick={() => updateTypeMutation.mutate({ id: type.id, data: { name: editName, color: editColor } })}
-                      className="text-green-600 hover:text-green-700">
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => setEditingTypeId(null)} className="text-muted-foreground hover:text-foreground">
-                      <X className="h-4 w-4" />
-                    </button>
+                    {/* Row 2: role picker + save/cancel */}
+                    <div className="flex items-center gap-2">
+                      <HardHat className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <select
+                        value={editRoleId}
+                        onChange={(e) => setEditRoleId(e.target.value)}
+                        className="flex-1 h-7 px-2 rounded border border-input bg-background text-xs"
+                      >
+                        <option value="">No role linked</option>
+                        {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                      <button onClick={() => saveEdit(type.id)} className="text-green-600 hover:text-green-700">
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => setEditingTypeId(null)} className="text-muted-foreground hover:text-foreground">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <>
-                    <span className="font-bold text-sm flex-1">{type.name}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold text-sm">{type.name}</span>
+                      {type.roleName && (
+                        <span className="ml-2 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-1.5 py-0.5 inline-flex items-center gap-0.5">
+                          <HardHat className="h-2.5 w-2.5" />{type.roleName}
+                        </span>
+                      )}
+                    </div>
                     {type.pendingCount > 0 ? (
                       <span className="text-[10px] font-bold rounded-full px-2 py-0.5 text-white flex-shrink-0" style={{ backgroundColor: type.color }}>
                         {type.pendingCount}
@@ -223,8 +276,7 @@ export default function AdminStationsPage() {
                         Queue <ChevronRight className="h-3 w-3" />
                       </button>
                     </Link>
-                    <button onClick={() => { setEditingTypeId(type.id); setEditName(type.name); setEditColor(type.color); }}
-                      className="text-muted-foreground hover:text-foreground p-1">
+                    <button onClick={() => startEdit(type)} className="text-muted-foreground hover:text-foreground p-1">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button onClick={() => deleteTypeMutation.mutate(type.id)}
@@ -319,10 +371,23 @@ export default function AdminStationsPage() {
                 className="h-9 border-2"
                 autoFocus
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newTypeName.trim()) createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor });
+                  if (e.key === "Enter" && newTypeName.trim())
+                    createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor, roleId: newTypeRoleId ? Number(newTypeRoleId) : null });
                   if (e.key === "Escape") { setAddingType(false); setNewTypeName(""); }
                 }}
               />
+              {/* Role picker */}
+              <div className="flex items-center gap-2">
+                <HardHat className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <select
+                  value={newTypeRoleId}
+                  onChange={(e) => setNewTypeRoleId(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-lg border-2 border-input bg-background text-sm"
+                >
+                  <option value="">No role linked (visible to all)</option>
+                  {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
               <div className="flex gap-2 flex-wrap">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -336,11 +401,11 @@ export default function AdminStationsPage() {
               <div className="flex gap-2">
                 <Button size="sm" className="h-9 font-bold"
                   disabled={!newTypeName.trim() || createTypeMutation.isPending}
-                  onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor })}>
+                  onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor, roleId: newTypeRoleId ? Number(newTypeRoleId) : null })}>
                   {createTypeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9"
-                  onClick={() => { setAddingType(false); setNewTypeName(""); }}>Cancel</Button>
+                  onClick={() => { setAddingType(false); setNewTypeName(""); setNewTypeRoleId(""); }}>Cancel</Button>
               </div>
             </div>
           ) : (

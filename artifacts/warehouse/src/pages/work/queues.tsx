@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, Layers, Settings2 } from "lucide-react";
@@ -10,6 +11,9 @@ interface StationType {
   color: string;
   flowOrder: number;
   pendingCount: number;
+  roleId: number | null;
+  roleName: string | null;
+  isMyStation: boolean;
   workstations: { id: number; name: string; isActive: boolean }[];
 }
 
@@ -22,11 +26,19 @@ async function fetchTypes(): Promise<StationType[]> {
 export default function QueuesPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const [showAll, setShowAll] = useState(false);
 
   const { data: types = [], isLoading } = useQuery<StationType[]>({
     queryKey: ["/api/stations/types"],
     queryFn: fetchTypes,
   });
+
+  // Workers default to their own stations; admins always see all
+  const hasMyStations = !isAdmin && types.some((t) => t.isMyStation);
+  const visibleTypes = isAdmin || showAll || !hasMyStations
+    ? types
+    : types.filter((t) => t.isMyStation);
+  const hiddenCount = types.length - visibleTypes.length;
 
   return (
     <div className="p-4 space-y-4 pb-24">
@@ -60,7 +72,7 @@ export default function QueuesPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {types.map((type, idx) => {
+          {visibleTypes.map((type, idx) => {
             const activeCount = type.workstations.filter((w) => w.isActive).length;
             return (
               <Link key={type.id} href={`/work/queue/${type.id}`}>
@@ -91,6 +103,15 @@ export default function QueuesPage() {
               </Link>
             );
           })}
+
+          {!isAdmin && hasMyStations && (
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground py-2"
+            >
+              {showAll ? "Show my stations only" : `Show all stations${hiddenCount > 0 ? ` (${hiddenCount} more)` : ""}`}
+            </button>
+          )}
         </div>
       )}
     </div>
