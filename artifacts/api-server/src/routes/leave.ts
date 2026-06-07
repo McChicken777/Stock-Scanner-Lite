@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leaveRequestsTable, attendanceLogsTable, usersTable } from "@workspace/db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth";
 
@@ -232,6 +232,48 @@ router.patch("/:id", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update leave request");
     res.status(500).json({ error: "Failed to update leave request" });
+  }
+});
+
+// GET /api/leave/worker-notifications — unread decision count for current worker
+router.get("/worker-notifications", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    const decided = await db
+      .select({ id: leaveRequestsTable.id })
+      .from(leaveRequestsTable)
+      .where(and(
+        eq(leaveRequestsTable.userId, userId),
+        eq(leaveRequestsTable.companyId, companyId),
+        ne(leaveRequestsTable.status, "pending"),
+        isNull(leaveRequestsTable.workerAcknowledgedAt),
+      ));
+    res.json({ leaveDecisions: decided.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get worker notifications");
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
+// POST /api/leave/worker-notifications/ack — mark all decisions as seen
+router.post("/worker-notifications/ack", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+    await db
+      .update(leaveRequestsTable)
+      .set({ workerAcknowledgedAt: new Date() })
+      .where(and(
+        eq(leaveRequestsTable.userId, userId),
+        eq(leaveRequestsTable.companyId, companyId),
+        ne(leaveRequestsTable.status, "pending"),
+        isNull(leaveRequestsTable.workerAcknowledgedAt),
+      ));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to ack worker notifications");
+    res.status(500).json({ error: "Failed" });
   }
 });
 

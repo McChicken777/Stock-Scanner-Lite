@@ -349,6 +349,13 @@ export default function AttendancePage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/attendance/auto-close-notice"] }),
   });
 
+  // Ack leave decisions when worker opens the page
+  useEffect(() => {
+    api("/api/leave/worker-notifications/ack", { method: "POST" }).then(() => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/worker-notifications"] });
+    }).catch(() => {});
+  }, []);
+
   const { data: today, isLoading } = useQuery<TodayLog | null>({
     queryKey: ["/api/attendance/today"],
     queryFn: () => api("/api/attendance/today"),

@@ -479,6 +479,8 @@ function WorkOrdersBottomNav() {
 
 // ─── Worker Bottom Nav ────────────────────────────────────────────────────────
 
+interface WorkerNotifications { total: number; autoClosed: number; leaveDecisions: number; }
+
 function WorkerBottomNav() {
   const [location] = useLocation();
 
@@ -488,11 +490,24 @@ function WorkerBottomNav() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: workerNotifs } = useQuery<WorkerNotifications>({
+    queryKey: ["/api/admin/worker-notifications"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/worker-notifications", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const attendanceBadge = workerNotifs?.total ?? 0;
+
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
-    { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/attendance", icon: CalendarCheck, label: "Attendance" },
-    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop" }] : []),
+    { href: "/tasks", icon: CheckSquare, label: "My Tasks", badge: 0 },
+    { href: "/work/inbound", icon: PackageCheck, label: "Inbound", badge: 0 },
+    { href: "/attendance", icon: CalendarCheck, label: "Attendance", badge: attendanceBadge },
+    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop", badge: 0 }] : []),
   ];
 
   return (
@@ -506,7 +521,14 @@ function WorkerBottomNav() {
                 "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
                 isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
               )}>
-                <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
+                <div className="relative">
+                  <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
+                  {item.badge > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] px-0.5 flex items-center justify-center leading-none">
+                      {item.badge > 99 ? "99+" : item.badge}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
               </div>
             </Link>
