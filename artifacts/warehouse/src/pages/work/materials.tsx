@@ -41,11 +41,31 @@ async function apiFetch(url: string, opts?: RequestInit) {
 function downloadTemplate() {
   const rows = [
     "name,category,unit,buffer_stock,target_stock",
-    "40mm Steel Rod,Raw Metal,mm,0,0",
-    "M8 Hex Bolt,Fasteners,pcs,100,500",
-    "3mm Mild Steel Sheet,Sheet Metal,mm,0,0",
+    "# ── Available categories ─────────────────────────────────────────────────────",
+    "# Fasteners | Hydraulics | Electrical | Welding Supplies | CNC Parts",
+    "# Raw Materials | Pneumatics | Bearings & Seals | Hardware | Consumables | Other",
+    "# ─────────────────────────────────────────────────────────────────────────────",
+    "M8 x 20mm Hex Bolt,Fasteners,pcs,200,1000",
+    "M10 x 30mm Hex Bolt,Fasteners,pcs,100,500",
+    "40mm Steel Rod,Raw Materials,mm,0,0",
+    "3mm Mild Steel Sheet,Raw Materials,pcs,5,20",
+    "Hydraulic Cylinder 50mm,Hydraulics,pcs,2,10",
+    "10mm Hydraulic Hose,Hydraulics,m,5,30",
+    "24V Solenoid Valve,Electrical,pcs,3,15",
+    "Control Panel Switch,Electrical,pcs,10,50",
+    "MIG Welding Wire 1mm,Welding Supplies,kg,10,50",
+    "Grinding Disc 125mm,Welding Supplies,pcs,20,100",
+    "CNC Insert CCMT 09,CNC Parts,pcs,50,200",
+    "End Mill 8mm,CNC Parts,pcs,10,50",
+    "5mm x 6mm Pneumatic Tube,Pneumatics,m,10,50",
+    "Festo Solenoid Valve,Pneumatics,pcs,5,20",
+    "6205 Ball Bearing,Bearings & Seals,pcs,10,50",
+    "30x47x7 Oil Seal,Bearings & Seals,pcs,10,50",
+    "M6 T-Slot Nut,Hardware,pcs,50,200",
+    "Safety Glasses,Consumables,pcs,20,50",
   ];
-  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+  const csv = rows.filter((r) => !r.startsWith("#")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

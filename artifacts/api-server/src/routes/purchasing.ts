@@ -86,6 +86,7 @@ router.post("/batch", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const parsed = z.object({
       supplierId: z.number().int().nullable().optional(),
+      expectedDate: z.string().nullable().optional(),
       notes: z.string().optional(),
       items: z.array(z.object({
         productId: z.number().int(),
@@ -95,10 +96,11 @@ router.post("/batch", requireAdmin, async (req, res) => {
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-    const { supplierId, notes, items } = parsed.data;
+    const { supplierId, expectedDate, notes, items } = parsed.data;
 
     const [po] = await db.insert(purchaseOrdersTable).values({
       supplierId: supplierId ?? null,
+      expectedDate: expectedDate ? new Date(expectedDate) : null,
       notes: notes ?? null,
       companyId,
       status: "draft",

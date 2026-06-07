@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, serial, pgEnum, varchar, numeric } f
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 import { suppliersTable } from "./suppliers";
+import { relations } from "drizzle-orm";
 
 export const purchaseOrderStatusEnum = pgEnum("purchase_order_status", [
   "draft", "ordered", "partially_arrived", "arrived", "cancelled",
@@ -51,7 +52,23 @@ export const stockReservationsTable = pgTable("stock_reservations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const supplierProductsTable = pgTable("supplier_products", {
+  id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id").notNull().references(() => suppliersTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => productsTable.id, { onDelete: "cascade" }),
+  supplierSku: text("supplier_sku"),
+  unitPrice: numeric("unit_price", { precision: 12, scale: 2, mode: "number" }),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const supplierProductsRelations = relations(supplierProductsTable, ({ one }) => ({
+  supplier: one(suppliersTable, { fields: [supplierProductsTable.supplierId], references: [suppliersTable.id] }),
+  product: one(productsTable, { fields: [supplierProductsTable.productId], references: [productsTable.id] }),
+}));
+
 export type PurchaseOrder = typeof purchaseOrdersTable.$inferSelect;
 export type PurchaseOrderItem = typeof purchaseOrderItemsTable.$inferSelect;
 export type ShortageFlag = typeof shortageFlagsTable.$inferSelect;
 export type StockReservation = typeof stockReservationsTable.$inferSelect;
+export type SupplierProduct = typeof supplierProductsTable.$inferSelect;
