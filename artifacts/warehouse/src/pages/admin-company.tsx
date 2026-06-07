@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -15,6 +15,7 @@ interface Company {
   workHoursPerDay: number;
   weekendOvertimeEnabled: boolean;
   country: string | null;
+  timezone: string;
   features: {
     inventory: boolean;
     alerts: boolean;
@@ -29,6 +30,13 @@ interface Holiday {
   id: number;
   date: string;
   label: string;
+}
+
+interface CompanyShift {
+  id: number;
+  name: string;
+  startTime: string;
+  endTime: string;
 }
 
 const COUNTRIES = [
@@ -58,6 +66,33 @@ const COUNTRIES = [
   { code: "US", label: "United States" },
 ];
 
+const COUNTRY_TIMEZONES: Record<string, string> = {
+  AU: "Australia/Sydney",
+  AT: "Europe/Vienna",
+  BR: "America/Sao_Paulo",
+  CA: "America/Toronto",
+  HR: "Europe/Zagreb",
+  CZ: "Europe/Prague",
+  DK: "Europe/Copenhagen",
+  FI: "Europe/Helsinki",
+  FR: "Europe/Paris",
+  DE: "Europe/Berlin",
+  HU: "Europe/Budapest",
+  IT: "Europe/Rome",
+  JP: "Asia/Tokyo",
+  MX: "America/Mexico_City",
+  NL: "Europe/Amsterdam",
+  NO: "Europe/Oslo",
+  PL: "Europe/Warsaw",
+  PT: "Europe/Lisbon",
+  SI: "Europe/Ljubljana",
+  ES: "Europe/Madrid",
+  SE: "Europe/Stockholm",
+  CH: "Europe/Zurich",
+  GB: "Europe/London",
+  US: "America/New_York",
+};
+
 async function fetchCompany(): Promise<Company> {
   const res = await fetch("/api/company", { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load company");
@@ -70,9 +105,19 @@ async function fetchHolidays(): Promise<Holiday[]> {
   return res.json();
 }
 
+async function fetchShifts(): Promise<CompanyShift[]> {
+  const res = await fetch("/api/settings/shifts", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to load shifts");
+  return res.json();
+}
+
 function fmtDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function crossesMidnight(start: string, end: string): boolean {
+  return end < start;
 }
 
 export default function AdminCompanyPage() {
@@ -85,7 +130,11 @@ export default function AdminCompanyPage() {
   const [newHolidayDate, setNewHolidayDate] = useState("");
   const [newHolidayLabel, setNewHolidayLabel] = useState("");
   const [selectedCountry, setSelectedCountry] = useState("");
+  const [selectedTimezone, setSelectedTimezone] = useState("UTC");
   const [importYear] = useState(new Date().getFullYear());
+  const [newShiftName, setNewShiftName] = useState("");
+  const [newShiftStart, setNewShiftStart] = useState("07:00");
+  const [newShiftEnd, setNewShiftEnd] = useState("15:00");
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/company"],
@@ -97,11 +146,24 @@ export default function AdminCompanyPage() {
     queryFn: fetchHolidays,
   });
 
+  const { data: shifts = [] } = useQuery<CompanyShift[]>({
+    queryKey: ["/api/settings/shifts"],
+    queryFn: fetchShifts,
+  });
+
   useEffect(() => {
     if (company && !editingName) setCompanyName(company.name);
     if (company) setWorkHours(String((company.workHoursPerDay ?? 480) / 60));
     if (company?.country) setSelectedCountry(company.country);
-  }, [company?.name, company?.workHoursPerDay, company?.country]);
+    if (company?.timezone) setSelectedTimezone(company.timezone);
+  }, [company?.name, company?.workHoursPerDay, company?.country, company?.timezone]);
+
+  // Auto-fill timezone when country changes
+  useEffect(() => {
+    if (selectedCountry && COUNTRY_TIMEZONES[selectedCountry]) {
+      setSelectedTimezone(COUNTRY_TIMEZONES[selectedCountry]);
+    }
+  }, [selectedCountry]);
 
   const updateHoursMutation = useMutation({
     mutationFn: async (hours: number) => {
@@ -139,7 +201,7 @@ export default function AdminCompanyPage() {
   });
 
   const updateSchedulingMutation = useMutation({
-    mutationFn: async (data: { weekendOvertimeEnabled?: boolean; country?: string | null }) => {
+    mutationFn: async (data: { weekendOvertimeEnabled?: boolean; country?: string | null; timezone?: string }) => {
       const res = await fetch("/api/settings/company/scheduling", {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -202,6 +264,34 @@ export default function AdminCompanyPage() {
       toast({ title: `Imported ${data.inserted} public holidays for ${importYear}` });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const addShiftMutation = useMutation({
+    mutationFn: async (data: { name: string; startTime: string; endTime: string }) => {
+      const res = await fetch("/api/settings/shifts", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/shifts"] });
+      setNewShiftName(""); setNewShiftStart("07:00"); setNewShiftEnd("15:00");
+      toast({ title: "Shift added" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const deleteShiftMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/settings/shifts/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/settings/shifts"] }),
+    onError: () => toast({ title: "Failed to delete shift", variant: "destructive" }),
   });
 
   if (user?.role !== "admin") {
@@ -317,32 +407,62 @@ export default function AdminCompanyPage() {
             </button>
           </div>
 
-          {/* Country selector */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Country (for public holidays import)</p>
+          {/* Country + Timezone */}
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Country</p>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={selectedCountry}
+                  onChange={(e) => setSelectedCountry(e.target.value)}
+                  className="flex-1 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">No country selected</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10"
+                  disabled={updateSchedulingMutation.isPending}
+                  onClick={() => updateSchedulingMutation.mutate({ country: selectedCountry || null, timezone: selectedTimezone })}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <select
-                value={selectedCountry}
-                onChange={(e) => setSelectedCountry(e.target.value)}
-                className="flex-1 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">No country selected</option>
-                {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>{c.label}</option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10"
-                disabled={updateSchedulingMutation.isPending}
-                onClick={() => updateSchedulingMutation.mutate({ country: selectedCountry || null })}
-              >
-                <Check className="h-4 w-4" />
-              </Button>
+
+            {/* Timezone — auto-filled from country, editable */}
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> Timezone
+              </p>
+              <div className="flex gap-2 items-center">
+                <Input
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  placeholder="e.g. Europe/Ljubljana"
+                  className="h-9 flex-1 border-2 text-sm font-mono"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9"
+                  disabled={updateSchedulingMutation.isPending}
+                  onClick={() => updateSchedulingMutation.mutate({ timezone: selectedTimezone })}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Clock-in/out dates and overtime calculations use this timezone. Auto-filled when you pick a country.
+                Active: <span className="font-mono font-bold">{company.timezone || "UTC"}</span>
+              </p>
             </div>
           </div>
 
@@ -361,6 +481,87 @@ export default function AdminCompanyPage() {
               )}
               Import {importYear} Public Holidays for {COUNTRIES.find(c => c.code === selectedCountry)?.label}
             </Button>
+          )}
+        </div>
+
+        {/* Shifts */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Shifts</p>
+          </div>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Define your company's shifts. Assign each worker their shift in Manage Users. If a worker forgets to clock out, the system auto-closes their shift at the shift end time + 2 hours grace.
+          </p>
+
+          {/* Add shift form */}
+          <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
+            <p className="text-xs font-bold text-muted-foreground">Add Shift</p>
+            <Input
+              placeholder="Shift name (e.g. Morning, Night)"
+              value={newShiftName}
+              onChange={(e) => setNewShiftName(e.target.value)}
+              className="h-9 text-sm border-2"
+            />
+            <div className="flex gap-2 items-center">
+              <div className="flex-1 space-y-1">
+                <p className="text-[11px] text-muted-foreground font-semibold">Start</p>
+                <input
+                  type="time"
+                  value={newShiftStart}
+                  onChange={(e) => setNewShiftStart(e.target.value)}
+                  className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-[11px] text-muted-foreground font-semibold">End</p>
+                <input
+                  type="time"
+                  value={newShiftEnd}
+                  onChange={(e) => setNewShiftEnd(e.target.value)}
+                  className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="h-9 w-9 p-0 self-end"
+                disabled={!newShiftName.trim() || addShiftMutation.isPending}
+                onClick={() => addShiftMutation.mutate({ name: newShiftName.trim(), startTime: newShiftStart, endTime: newShiftEnd })}
+              >
+                {addShiftMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              </Button>
+            </div>
+            {newShiftStart && newShiftEnd && crossesMidnight(newShiftStart, newShiftEnd) && (
+              <p className="text-[11px] text-amber-600 font-medium">Night shift — ends the following day.</p>
+            )}
+          </div>
+
+          {/* Shift list */}
+          {shifts.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-3">No shifts configured yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {shifts.map((s) => (
+                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-background text-sm">
+                  <div>
+                    <p className="font-semibold text-sm">{s.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {s.startTime} → {s.endTime}
+                      {crossesMidnight(s.startTime, s.endTime) && (
+                        <span className="ml-1.5 text-amber-600 font-sans font-medium not-italic">(+1 day)</span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => deleteShiftMutation.mutate(s.id)}
+                    disabled={deleteShiftMutation.isPending}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

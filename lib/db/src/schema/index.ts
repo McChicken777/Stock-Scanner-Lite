@@ -1,4 +1,5 @@
 export * from "./companies";
+export * from "./shifts";
 export * from "./users";
 export * from "./locations";
 export * from "./products";

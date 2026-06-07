@@ -20,14 +20,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye, Pencil, Check } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye, Pencil, Check, Clock } from "lucide-react";
 
 interface UserEntry {
   id: number;
   username: string;
   role: "admin" | "worker";
   isSupervisor: boolean;
+  shiftId: number | null;
   createdAt: string;
+}
+
+interface CompanyShift {
+  id: number;
+  name: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface Role {
@@ -102,6 +110,17 @@ async function assignUserRole(userId: number, roleId: number, priority: "primary
   return res.json();
 }
 
+async function assignUserShift(userId: number, shiftId: number | null) {
+  const res = await fetch(`/api/auth/users/${userId}/shift`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shiftId }),
+  });
+  if (!res.ok) throw new Error("Failed to update shift");
+  return res.json();
+}
+
 async function unassignUserRole(userId: number, roleId: number) {
   const res = await fetch("/api/tasks/roles/unassign", {
     method: "DELETE",
@@ -128,6 +147,25 @@ export default function AdminUsersPage() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/auth/users"],
     queryFn: fetchUsers,
+  });
+
+  const { data: companyShifts = [] } = useQuery<CompanyShift[]>({
+    queryKey: ["/api/settings/shifts"],
+    queryFn: async () => {
+      const r = await fetch("/api/settings/shifts", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+  });
+
+  const shiftMutation = useMutation({
+    mutationFn: ({ userId, shiftId }: { userId: number; shiftId: number | null }) =>
+      assignUserShift(userId, shiftId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/users"] });
+      toast({ title: "Shift updated" });
+    },
+    onError: () => toast({ title: "Failed to update shift", variant: "destructive" }),
   });
 
   const { data: userRoles = null, isLoading: rolesLoading } = useQuery({
@@ -388,6 +426,23 @@ export default function AdminUsersPage() {
                     <Eye className="h-3.5 w-3.5" />
                     {u.isSupervisor ? "Supervisor" : "Supervisor"}
                   </button>
+                )}
+                {u.role === "worker" && companyShifts.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                    <select
+                      value={u.shiftId ?? ""}
+                      onChange={(e) => shiftMutation.mutate({ userId: u.id, shiftId: e.target.value ? Number(e.target.value) : null })}
+                      disabled={shiftMutation.isPending}
+                      title="Assign shift"
+                      className="h-7 px-1.5 rounded-md border border-input bg-background text-[11px] font-medium focus:outline-none focus:ring-1 focus:ring-primary/40 max-w-[90px]"
+                    >
+                      <option value="">No shift</option>
+                      {companyShifts.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
                 {u.role === "worker" && (
                   <Dialog open={rolesOpen && selectedUserId === u.id} onOpenChange={(open) => {

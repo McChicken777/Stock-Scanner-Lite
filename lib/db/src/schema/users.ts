@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, serial, pgEnum, boolean } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { companiesTable } from "./companies";
+import { companyShiftsTable } from "./shifts";
 
 export const roleEnum = pgEnum("user_role", ["owner", "admin", "worker"]);
 
@@ -12,6 +13,7 @@ export const usersTable = pgTable("users", {
   role: roleEnum("role").notNull().default("worker"),
   isSupervisor: boolean("is_supervisor").notNull().default(false),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "set null" }),
+  shiftId: integer("shift_id").references(() => companyShiftsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

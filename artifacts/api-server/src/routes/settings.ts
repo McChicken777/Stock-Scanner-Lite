@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, companyHolidaysTable, companiesTable } from "@workspace/db";
+import { db, companyHolidaysTable, companiesTable, companyShiftsTable } from "@workspace/db";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -437,6 +437,7 @@ router.get("/company", requireAuth, async (req, res) => {
 const schedulingSchema = z.object({
   weekendOvertimeEnabled: z.boolean().optional(),
   country: z.string().max(10).nullable().optional(),
+  timezone: z.string().max(60).optional(),
 });
 
 router.put("/company/scheduling", requireAdmin, async (req, res) => {
@@ -448,6 +449,7 @@ router.put("/company/scheduling", requireAdmin, async (req, res) => {
     const updates: Record<string, unknown> = {};
     if (parsed.data.weekendOvertimeEnabled !== undefined) updates.weekendOvertimeEnabled = parsed.data.weekendOvertimeEnabled;
     if (parsed.data.country !== undefined) updates.country = parsed.data.country;
+    if (parsed.data.timezone !== undefined) updates.timezone = parsed.data.timezone;
 
     const [updated] = await db.update(companiesTable).set(updates as never)
       .where(eq(companiesTable.id, companyId)).returning();
@@ -455,6 +457,59 @@ router.put("/company/scheduling", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update scheduling settings");
     res.status(500).json({ error: "Failed to update scheduling settings" });
+  }
+});
+
+// ─── Shifts ───────────────────────────────────────────────────────────────────
+
+router.get("/shifts", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const shifts = await db.select().from(companyShiftsTable)
+      .where(eq(companyShiftsTable.companyId, companyId))
+      .orderBy(companyShiftsTable.startTime);
+    res.json(shifts);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list shifts");
+    res.status(500).json({ error: "Failed to list shifts" });
+  }
+});
+
+const shiftSchema = z.object({
+  name: z.string().min(1).max(100),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
+});
+
+router.post("/shifts", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = shiftSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const [created] = await db.insert(companyShiftsTable).values({
+      companyId,
+      name: parsed.data.name,
+      startTime: parsed.data.startTime,
+      endTime: parsed.data.endTime,
+    }).returning();
+    res.status(201).json(created);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create shift");
+    res.status(500).json({ error: "Failed to create shift" });
+  }
+});
+
+router.delete("/shifts/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const id = Number(req.params.id);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    await db.delete(companyShiftsTable)
+      .where(and(eq(companyShiftsTable.id, id), eq(companyShiftsTable.companyId, companyId)));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete shift");
+    res.status(500).json({ error: "Failed to delete shift" });
   }
 });
 
