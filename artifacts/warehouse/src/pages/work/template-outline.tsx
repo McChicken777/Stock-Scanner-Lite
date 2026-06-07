@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { useToast } from "@/hooks/use-toast";
@@ -556,6 +556,7 @@ const KEYBOARD_HINTS = [
   { key: "-op in ops", desc: "Exclude default op (e.g. -lak)" },
   { key: "@profile in ops", desc: "Expand a saved profile" },
   { key: "Parent -op", desc: "Children inherit the exclusion" },
+  { key: "Click suggestion", desc: "Insert autocomplete code" },
 ];
 
 // ─── Main Editor Page ─────────────────────────────────────────────────────────
@@ -728,6 +729,89 @@ export default function TemplateOutlinePage() {
     setText(e.target.value);
   }, []);
 
+  // ── Autocomplete ──────────────────────────────────────────────────────────
+  const [acSuggestions, setAcSuggestions] = useState<{ code: string; label: string }[]>([]);
+
+  const computeSuggestions = useCallback((ta: HTMLTextAreaElement, currentSettings: OutlineSettings) => {
+    const { selectionStart } = ta;
+    const val = ta.value;
+    const lines = val.split("\n");
+    let lineStart = 0;
+    let curLine = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const lineEnd = lineStart + lines[i].length;
+      if (selectionStart <= lineEnd || i === lines.length - 1) { curLine = i; break; }
+      lineStart += lines[i].length + 1;
+    }
+    const currentLineText = lines[curLine] ?? "";
+    const lineStartPos = lines.slice(0, curLine).reduce((a, l) => a + l.length + 1, 0);
+    const cursorPosInLine = selectionStart - lineStartPos;
+    const trimmed = currentLineText.trimStart();
+    const tabInContent = trimmed.indexOf("\t");
+
+    // Only show suggestions if cursor is in the ops area
+    const isInOpsArea = tabInContent !== -1 && cursorPosInLine > (currentLineText.length - trimmed.length) + tabInContent;
+    if (!isInOpsArea) { setAcSuggestions([]); return; }
+
+    // Extract the partial word at cursor
+    const opsStart = lineStartPos + (currentLineText.length - trimmed.length) + tabInContent + 1;
+    const textUpToCursor = val.slice(opsStart, selectionStart);
+    const parts = textUpToCursor.split(/\s+/);
+    const partialWord = parts[parts.length - 1].toLowerCase();
+
+    if (!partialWord || partialWord === "=") { setAcSuggestions([]); return; }
+
+    const isProfileQuery = partialWord.startsWith("@");
+    const isExclusionQuery = partialWord.startsWith("-");
+    const searchWord = isProfileQuery ? partialWord.slice(1) : isExclusionQuery ? partialWord.slice(1) : partialWord;
+
+    const suggestions: { code: string; label: string }[] = [];
+
+    if (!isProfileQuery) {
+      for (const [code, info] of Object.entries(currentSettings.opCodes)) {
+        if (code.startsWith(searchWord)) {
+          const displayCode = isExclusionQuery ? `-${code}` : code;
+          suggestions.push({ code: displayCode, label: `${displayCode} (${info.stationTypeName})` });
+        }
+      }
+    }
+
+    if (!isExclusionQuery) {
+      for (const [profileKey] of Object.entries(currentSettings.profiles)) {
+        const key = profileKey.startsWith("@") ? profileKey : `@${profileKey}`;
+        const searchKey = key.slice(1);
+        if (searchKey.startsWith(searchWord) || partialWord.startsWith("@")) {
+          suggestions.push({ code: key, label: key });
+        }
+      }
+    }
+
+    setAcSuggestions(suggestions.slice(0, 8));
+  }, []);
+
+  const handleSelectionChange = useCallback(() => {
+    if (taRef.current) computeSuggestions(taRef.current, settings);
+  }, [computeSuggestions, settings]);
+
+  const insertSuggestion = useCallback((code: string) => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const { selectionStart } = ta;
+    const val = ta.value;
+
+    // Find start of the partial word at cursor
+    let wordStart = selectionStart;
+    while (wordStart > 0 && !/\s/.test(val[wordStart - 1])) wordStart--;
+
+    const newVal = val.slice(0, wordStart) + code + " " + val.slice(selectionStart);
+    ta.value = newVal;
+    const newPos = wordStart + code.length + 1;
+    ta.setSelectionRange(newPos, newPos);
+    setText(newVal);
+    ta.focus();
+    setAcSuggestions([]);
+  }, []);
+
   const loadExample = () => {
     const codes = Object.keys(settings.opCodes);
     const [c1 = "op1", c2 = "op2", c3 = "op3"] = codes;
@@ -880,6 +964,9 @@ export default function TemplateOutlinePage() {
             value={text}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onSelect={handleSelectionChange}
+            onKeyUp={handleSelectionChange}
+            onClick={handleSelectionChange}
             spellCheck={false}
             className="flex-1 resize-none font-mono text-sm p-3 bg-background outline-none border-none focus:ring-0 leading-6"
             placeholder={`Roll Cage
@@ -892,6 +979,22 @@ export default function TemplateOutlinePage() {
     Rod ×4\tcnc`}
             style={{ tabSize: 4 }}
           />
+
+          {/* Autocomplete suggestion bar */}
+          {acSuggestions.length > 0 && (
+            <div className="border-t bg-blue-50 px-3 py-1.5 flex items-center gap-1.5 flex-wrap flex-shrink-0">
+              <span className="text-xs text-muted-foreground">→</span>
+              {acSuggestions.map((s) => (
+                <button
+                  key={s.code}
+                  onMouseDown={(e) => { e.preventDefault(); insertSuggestion(s.code); }}
+                  className="text-xs font-mono bg-white border border-blue-200 hover:bg-blue-100 text-blue-800 rounded px-2 py-0.5 transition-colors"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Inline warning list at bottom of editor */}
           {hasUnknownOps && (
