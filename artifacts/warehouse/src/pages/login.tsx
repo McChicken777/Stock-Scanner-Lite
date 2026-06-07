@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +8,7 @@ import { Loader2, Warehouse, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const [, setLocation] = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -18,6 +20,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       await login(username, password);
+      setLocation("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

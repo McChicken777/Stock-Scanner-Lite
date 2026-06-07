@@ -169,7 +169,11 @@ function AdminBottomNav() {
 
   const { data: attention } = useQuery<AttentionCounts>({
     queryKey: ["/api/admin/attention"],
-    queryFn: () => fetch("/api/admin/attention", { credentials: "include" }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch("/api/admin/attention", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
     staleTime: 60_000,
     refetchInterval: 60_000,
   });
