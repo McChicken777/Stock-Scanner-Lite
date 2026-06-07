@@ -468,8 +468,8 @@ function WorkerBottomNav() {
 
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "My Tasks" },
-    { href: "/work/queues", icon: Layers, label: "Queues" },
     { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
+    { href: "/attendance", icon: CalendarCheck, label: "Attendance" },
     ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop" }] : []),
   ];
 
