@@ -196,7 +196,6 @@ function AdminDesktopSidebar() {
         <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} />
         <SideNavItem href="/customers" icon={Store} label="Customers" active={isCustomersActive} />
         <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />
-        <SideNavItem href="/supervisor" icon={Eye} label="Supervisor View" active={location.startsWith("/supervisor")} />
 
         <SidebarSection label="Work" />
         <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates")} />
