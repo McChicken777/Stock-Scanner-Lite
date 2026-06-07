@@ -151,10 +151,28 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
 
 // ─── Admin Bottom Nav ─────────────────────────────────────────────────────────
 
+interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; }
+
+function AttentionBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="flex-shrink-0 ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function AdminBottomNav() {
   const [location] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { logout, user } = useAuth();
+
+  const { data: attention } = useQuery<AttentionCounts>({
+    queryKey: ["/api/admin/attention"],
+    queryFn: () => fetch("/api/admin/attention", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
 
   const isJobsActive =
     location.startsWith("/work/projects") ||
@@ -193,10 +211,17 @@ function AdminBottomNav() {
 
           <button className="flex-1" onClick={() => setSettingsOpen(true)}>
             <div className={cn(
-              "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
+              "flex flex-col items-center justify-center h-full space-y-1 transition-colors relative",
               settingsOpen ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
             )}>
-              <Settings className="h-6 w-6" strokeWidth={settingsOpen ? 2.5 : 2} />
+              <div className="relative">
+                <Settings className="h-6 w-6" strokeWidth={settingsOpen ? 2.5 : 2} />
+                {(attention?.total ?? 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] px-0.5 flex items-center justify-center leading-none">
+                    {(attention!.total) > 99 ? "99+" : attention!.total}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-medium tracking-wide uppercase">Settings</span>
             </div>
           </button>
@@ -239,15 +264,6 @@ function AdminBottomNav() {
                 </div>
               </div>
             </Link>
-            <Link href="/admin/roles" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <HardHat className="h-5 w-5 text-purple-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Roles</p>
-                  <p className="text-xs text-muted-foreground">Who does which step</p>
-                </div>
-              </div>
-            </Link>
             {user?.plan === "pro" && (
               <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
                 <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
@@ -283,10 +299,11 @@ function AdminBottomNav() {
             <Link href="/admin/leave-inbox" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Inbox className="h-5 w-5 text-violet-600 shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-semibold">Leave Requests</p>
                   <p className="text-xs text-muted-foreground">Approve or reject time-off requests</p>
                 </div>
+                <AttentionBadge count={attention?.leaveRequests ?? 0} />
               </div>
             </Link>
 
@@ -295,10 +312,11 @@ function AdminBottomNav() {
             <Link href="/products" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Package2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-semibold">Products & Stock</p>
                   <p className="text-xs text-muted-foreground">Manage your product catalogue</p>
                 </div>
+                <AttentionBadge count={attention?.lowStock ?? 0} />
               </div>
             </Link>
             <Link href="/admin/suppliers" onClick={() => setSettingsOpen(false)}>
