@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leaveRequestsTable, productsTable, stockTable } from "@workspace/db";
-import { eq, and, sql, lt } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -14,32 +14,39 @@ router.get("/attention", requireAuth, async (req, res) => {
     }
     const companyId = req.session.companyId!;
 
-    // Pending leave requests
-    const [{ leaveRequests }] = await db
-      .select({ leaveRequests: sql<number>`COUNT(*)::int` })
+    // Count pending leave requests
+    const pendingLeave = await db
+      .select({ id: leaveRequestsTable.id })
       .from(leaveRequestsTable)
-      .where(and(eq(leaveRequestsTable.companyId, companyId), eq(leaveRequestsTable.status, "pending")));
+      .where(and(
+        eq(leaveRequestsTable.companyId, companyId),
+        eq(leaveRequestsTable.status, "pending"),
+      ));
+    const leaveRequests = pendingLeave.length;
 
-    // Low stock: products where sum(stock) < bufferStock
-    const stockTotals = await db
+    // Count low-stock products (totalStock < bufferStock)
+    const stockRows = await db
       .select({
         productId: stockTable.productId,
-        total: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`.as("total"),
+        total: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::int`.as("total"),
       })
       .from(stockTable)
       .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
       .where(eq(productsTable.companyId, companyId))
       .groupBy(stockTable.productId);
 
-    const stockMap = new Map(stockTotals.map((r) => [r.productId, r.total]));
-    const products = await db.select({ id: productsTable.id, bufferStock: productsTable.bufferStock })
-      .from(productsTable).where(eq(productsTable.companyId, companyId));
+    const stockMap = new Map(stockRows.map((r) => [r.productId, r.total]));
 
-    const lowStock = products.filter((p) => (stockMap.get(p.id) ?? 0) < p.bufferStock).length;
+    const allProducts = await db
+      .select({ id: productsTable.id, bufferStock: productsTable.bufferStock })
+      .from(productsTable)
+      .where(eq(productsTable.companyId, companyId));
 
-    const total = leaveRequests + lowStock;
-    res.json({ total, leaveRequests, lowStock });
-  } catch (err) {
+    const lowStock = allProducts.filter((p) => p.bufferStock > 0 && (stockMap.get(p.id) ?? 0) < p.bufferStock).length;
+
+    res.json({ total: leaveRequests + lowStock, leaveRequests, lowStock });
+  } catch (err: any) {
+    console.error("attention endpoint error:", err?.message ?? err);
     res.status(500).json({ error: "Failed to get attention counts" });
   }
 });
