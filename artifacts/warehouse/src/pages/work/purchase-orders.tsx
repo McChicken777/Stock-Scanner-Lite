@@ -66,6 +66,16 @@ interface Supplier {
   email: string | null;
 }
 
+interface SupplierProductLink {
+  id: number;
+  productId: number;
+  supplierSku: string | null;
+  unitPrice: number | null;
+  productName: string;
+  productCategory: string;
+  productItemType: string;
+}
+
 interface Location {
   id: string;
   description: string | null;
@@ -554,6 +564,8 @@ export default function PurchaseOrdersPage() {
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newExpectedDate, setNewExpectedDate] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [itemQtys, setItemQtys] = useState<Record<number, number>>({});
+  const [itemPrices, setItemPrices] = useState<Record<number, string>>({});
 
   const { data: pos = [], isLoading } = useQuery<PurchaseOrder[]>({
     queryKey: ["/api/purchase-orders"],
@@ -564,6 +576,22 @@ export default function PurchaseOrdersPage() {
     queryKey: ["/api/suppliers"],
     queryFn: () => apiFetch("/api/suppliers"),
   });
+
+  const { data: supplierProducts = [], isLoading: loadingSupplierProducts } = useQuery<SupplierProductLink[]>({
+    queryKey: [`/api/suppliers/${newSupplierId}/products`],
+    queryFn: () => apiFetch(`/api/suppliers/${newSupplierId}/products`),
+    enabled: !!newSupplierId && showCreate,
+  });
+
+  // Group supplier products by category for display
+  const productsByCategory = supplierProducts.reduce<Record<string, SupplierProductLink[]>>((acc, p) => {
+    const cat = p.productCategory || "Other";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(p);
+    return acc;
+  }, {});
+
+  const selectedItems = supplierProducts.filter((p) => (itemQtys[p.productId] ?? 0) > 0);
 
   const { data: products = [] } = useQuery<{ id: number; name: string; supplierId: number | null }[]>({
     queryKey: ["/api/products"],
@@ -587,7 +615,6 @@ export default function PurchaseOrdersPage() {
         body: JSON.stringify(data),
       }),
     onSuccess: async (po: PurchaseOrder) => {
-      // If navigated here from the reorder queue, auto-add the flagged product as a line item
       if (prefillProductId) {
         try {
           await apiFetch(`/api/purchase-orders/${po.id}/items`, {
@@ -600,10 +627,48 @@ export default function PurchaseOrdersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: "Purchase order created" });
       setShowCreate(false);
+      setItemQtys({}); setItemPrices({});
       setLocation(`/work/purchase-orders/${po.id}`);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
+
+  const batchCreateMutation = useMutation({
+    mutationFn: (data: object) =>
+      apiFetch("/api/purchase-orders/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (po: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      toast({ title: `PO created with ${po.items?.length ?? 0} item${(po.items?.length ?? 0) !== 1 ? "s" : ""}` });
+      setShowCreate(false);
+      setItemQtys({}); setItemPrices({});
+      setLocation(`/work/purchase-orders/${po.id}`);
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const handleCreatePO = () => {
+    const supplierId = newSupplierId ? Number(newSupplierId) : null;
+    const expectedDate = newExpectedDate || null;
+    const notes = newNotes || null;
+    if (selectedItems.length > 0) {
+      batchCreateMutation.mutate({
+        supplierId,
+        expectedDate,
+        notes,
+        items: selectedItems.map((p) => ({
+          productId: p.productId,
+          quantityOrdered: itemQtys[p.productId],
+          unitPrice: itemPrices[p.productId] ? Number(itemPrices[p.productId]) : (p.unitPrice ?? null),
+        })),
+      });
+    } else {
+      createMutation.mutate({ supplierId, expectedDate, notes });
+    }
+  };
 
   if (!isAdmin) {
     return (
@@ -648,6 +713,7 @@ export default function PurchaseOrdersPage() {
         {showCreate && (
           <div className="border-2 border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3">
             <p className="font-bold text-sm">New Purchase Order</p>
+
             {prefillProduct && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
                 <Package2 className="h-4 w-4 text-amber-600 flex-shrink-0" />
@@ -656,14 +722,79 @@ export default function PurchaseOrdersPage() {
                 </span>
               </div>
             )}
+
+            {/* Step 1 — Supplier */}
             <select
               value={newSupplierId}
-              onChange={(e) => setNewSupplierId(e.target.value)}
+              onChange={(e) => { setNewSupplierId(e.target.value); setItemQtys({}); setItemPrices({}); }}
               className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm"
             >
-              <option value="">No supplier (add later)</option>
+              <option value="">No supplier (or add later)</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+
+            {/* Step 2 — Item picker (only when supplier has linked products) */}
+            {newSupplierId && (
+              loadingSupplierProducts ? (
+                <div className="text-xs text-muted-foreground py-1">Loading products…</div>
+              ) : supplierProducts.length === 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                  No products linked to this supplier yet. You can link them in{" "}
+                  <span className="font-bold">Settings → Suppliers</span>, or add items to the PO after creating it.
+                </div>
+              ) : (
+                <div className="border-2 border-border rounded-xl overflow-hidden">
+                  <div className="bg-muted/60 px-3 py-1.5 flex items-center justify-between">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select items to order</p>
+                    {selectedItems.length > 0 && (
+                      <span className="text-[10px] font-bold text-primary">{selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected</span>
+                    )}
+                  </div>
+                  <div className="divide-y">
+                    {Object.entries(productsByCategory).map(([cat, items]) => (
+                      <div key={cat}>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 py-1.5 bg-muted/30">{cat}</p>
+                        {items.map((p) => {
+                          const qty = itemQtys[p.productId] ?? 0;
+                          return (
+                            <div key={p.productId} className={`flex items-center gap-2 px-3 py-2 ${qty > 0 ? "bg-primary/5" : ""}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold truncate">{p.productName}</p>
+                                {p.supplierSku && <p className="text-[10px] text-muted-foreground font-mono">SKU: {p.supplierSku}</p>}
+                              </div>
+                              {qty > 0 && (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  placeholder="Price"
+                                  value={itemPrices[p.productId] ?? (p.unitPrice != null ? String(p.unitPrice) : "")}
+                                  onChange={(e) => setItemPrices((prev) => ({ ...prev, [p.productId]: e.target.value }))}
+                                  className="w-20 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
+                                />
+                              )}
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button
+                                  onClick={() => setItemQtys((prev) => ({ ...prev, [p.productId]: Math.max(0, (prev[p.productId] ?? 0) - 1) }))}
+                                  className="w-7 h-7 rounded border border-input bg-background text-sm font-bold hover:bg-muted flex items-center justify-center"
+                                >−</button>
+                                <span className={`w-8 text-center text-sm font-mono ${qty > 0 ? "font-bold text-primary" : "text-muted-foreground"}`}>{qty}</span>
+                                <button
+                                  onClick={() => setItemQtys((prev) => ({ ...prev, [p.productId]: (prev[p.productId] ?? 0) + 1 }))}
+                                  className="w-7 h-7 rounded border border-input bg-background text-sm font-bold hover:bg-muted flex items-center justify-center"
+                                >+</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* Step 3 — Date + notes */}
             <div className="space-y-1">
               <label className="text-xs font-semibold text-muted-foreground">Expected Delivery (optional)</label>
               <input
@@ -680,18 +811,23 @@ export default function PurchaseOrdersPage() {
               onChange={(e) => setNewNotes(e.target.value)}
               className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm"
             />
+
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 h-10" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button
+                variant="outline"
+                className="flex-1 h-10"
+                onClick={() => { setShowCreate(false); setItemQtys({}); setItemPrices({}); }}
+              >
+                Cancel
+              </Button>
               <Button
                 className="flex-1 h-10 font-bold"
-                disabled={createMutation.isPending}
-                onClick={() => createMutation.mutate({
-                  supplierId: newSupplierId ? Number(newSupplierId) : null,
-                  expectedDate: newExpectedDate || null,
-                  notes: newNotes || null,
-                })}
+                disabled={createMutation.isPending || batchCreateMutation.isPending}
+                onClick={handleCreatePO}
               >
-                Create PO
+                {selectedItems.length > 0
+                  ? `Create PO (${selectedItems.length} item${selectedItems.length !== 1 ? "s" : ""})`
+                  : "Create PO"}
               </Button>
             </div>
           </div>

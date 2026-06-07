@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, suppliersTable } from "@workspace/db";
+import { db, suppliersTable, supplierProductsTable, productsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
@@ -118,6 +118,103 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to delete supplier");
     res.status(500).json({ error: "Failed to delete supplier" });
+  }
+});
+
+// ─── LIST PRODUCTS LINKED TO SUPPLIER ─────────────────────────────────────────
+
+router.get("/:id/products", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id, 10);
+
+    const supplier = await db.query.suppliersTable.findFirst({
+      where: and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)),
+    });
+    if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+    const links = await db.select({
+      id: supplierProductsTable.id,
+      productId: supplierProductsTable.productId,
+      supplierSku: supplierProductsTable.supplierSku,
+      unitPrice: supplierProductsTable.unitPrice,
+      productName: productsTable.name,
+      productCategory: productsTable.category,
+      productItemType: productsTable.itemType,
+    })
+      .from(supplierProductsTable)
+      .innerJoin(productsTable, eq(supplierProductsTable.productId, productsTable.id))
+      .where(and(
+        eq(supplierProductsTable.supplierId, supplierId),
+        eq(supplierProductsTable.companyId, companyId),
+      ));
+
+    res.json(links);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list supplier products");
+    res.status(500).json({ error: "Failed to list supplier products" });
+  }
+});
+
+// ─── LINK PRODUCT TO SUPPLIER ──────────────────────────────────────────────────
+
+router.post("/:id/products", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id, 10);
+
+    const parsed = z.object({
+      productId: z.number().int(),
+      supplierSku: z.string().optional().or(z.literal("")),
+      unitPrice: z.number().min(0).nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const supplier = await db.query.suppliersTable.findFirst({
+      where: and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)),
+    });
+    if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+    const [link] = await db.insert(supplierProductsTable).values({
+      supplierId,
+      productId: parsed.data.productId,
+      supplierSku: parsed.data.supplierSku || null,
+      unitPrice: parsed.data.unitPrice ?? null,
+      companyId,
+    }).onConflictDoUpdate({
+      target: [supplierProductsTable.supplierId, supplierProductsTable.productId],
+      set: {
+        supplierSku: parsed.data.supplierSku || null,
+        unitPrice: parsed.data.unitPrice ?? null,
+      },
+    }).returning();
+
+    res.status(201).json(link);
+  } catch (err) {
+    req.log.error({ err }, "Failed to link product to supplier");
+    res.status(500).json({ error: "Failed to link product to supplier" });
+  }
+});
+
+// ─── UNLINK PRODUCT FROM SUPPLIER ─────────────────────────────────────────────
+
+router.delete("/:id/products/:productId", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id, 10);
+    const productId = parseInt(req.params.productId, 10);
+
+    await db.delete(supplierProductsTable).where(
+      and(
+        eq(supplierProductsTable.supplierId, supplierId),
+        eq(supplierProductsTable.productId, productId),
+        eq(supplierProductsTable.companyId, companyId),
+      )
+    );
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to unlink supplier product");
+    res.status(500).json({ error: "Failed to unlink supplier product" });
   }
 });
 

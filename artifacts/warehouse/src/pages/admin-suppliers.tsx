@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2 } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
@@ -15,41 +15,201 @@ interface Supplier {
   companyId: number;
 }
 
-async function fetchSuppliers(): Promise<Supplier[]> {
-  const res = await fetch("/api/suppliers", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed");
+interface SupplierProductLink {
+  id: number;
+  productId: number;
+  supplierSku: string | null;
+  unitPrice: number | null;
+  productName: string;
+  productCategory: string;
+  productItemType: string;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  category: string;
+  itemType: string;
+}
+
+async function apiFetch(url: string, opts?: RequestInit) {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
   return res.json();
 }
 
-async function createSupplier(data: any): Promise<Supplier> {
-  const res = await fetch("/api/suppliers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed");
-  return res.json();
+async function apiFetchVoid(url: string, opts?: RequestInit) {
+  const res = await fetch(url, { credentials: "include", ...opts });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
 }
 
-async function updateSupplier(id: number, data: any): Promise<Supplier> {
-  const res = await fetch(`/api/suppliers/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    credentials: "include",
+// ─── Supplier Products Panel ───────────────────────────────────────────────────
+
+function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [showAdd, setShowAdd] = useState(false);
+  const [addProductId, setAddProductId] = useState("");
+  const [addSku, setAddSku] = useState("");
+  const [addPrice, setAddPrice] = useState("");
+
+  const { data: links = [], isLoading } = useQuery<SupplierProductLink[]>({
+    queryKey: [`/api/suppliers/${supplierId}/products`],
+    queryFn: () => apiFetch(`/api/suppliers/${supplierId}/products`),
   });
-  if (!res.ok) throw new Error("Failed");
-  return res.json();
+
+  const { data: allProducts = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: () => apiFetch("/api/products"),
+    enabled: showAdd,
+  });
+
+  const linkedProductIds = new Set(links.map((l) => l.productId));
+  const purchasedProducts = allProducts.filter(
+    (p) => (p.itemType === "purchased_part" || p.itemType === "purchase") && !linkedProductIds.has(p.id)
+  );
+
+  const linkMutation = useMutation({
+    mutationFn: (data: object) => apiFetch(`/api/suppliers/${supplierId}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
+      toast({ title: "Product linked" });
+      setShowAdd(false);
+      setAddProductId(""); setAddSku(""); setAddPrice("");
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const unlinkMutation = useMutation({
+    mutationFn: (productId: number) => apiFetchVoid(`/api/suppliers/${supplierId}/products/${productId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
+      toast({ title: "Product removed from supplier" });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  // Group by category
+  const byCategory = links.reduce<Record<string, SupplierProductLink[]>>((acc, l) => {
+    const cat = l.productCategory || "Other";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(l);
+    return acc;
+  }, {});
+
+  return (
+    <div className="border-t pt-2 mt-1 space-y-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+        <Package2 className="h-3 w-3" /> Products supplied ({links.length})
+      </p>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading...</p>
+      ) : links.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No products linked yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {Object.entries(byCategory).map(([cat, items]) => (
+            <div key={cat} className="space-y-0.5">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{cat}</p>
+              {items.map((link) => (
+                <div key={link.id} className="flex items-center justify-between pl-2 py-0.5 rounded hover:bg-muted/40">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium truncate block">{link.productName}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {[
+                        link.supplierSku ? `SKU: ${link.supplierSku}` : null,
+                        link.unitPrice != null ? `$${Number(link.unitPrice).toFixed(2)}` : null,
+                      ].filter(Boolean).join(" · ")}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => unlinkMutation.mutate(link.productId)}
+                    disabled={unlinkMutation.isPending}
+                    className="p-1 hover:bg-red-100 rounded text-red-500 flex-shrink-0"
+                    title="Remove"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAdd ? (
+        <div className="space-y-1.5 border border-dashed border-primary/40 rounded-lg p-2">
+          <select
+            value={addProductId}
+            onChange={(e) => setAddProductId(e.target.value)}
+            className="w-full h-8 px-2 rounded border border-input bg-background text-xs"
+          >
+            <option value="">Select product…</option>
+            {purchasedProducts.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}{p.category ? ` (${p.category})` : ""}</option>
+            ))}
+          </select>
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              placeholder="Supplier SKU (optional)"
+              value={addSku}
+              onChange={(e) => setAddSku(e.target.value)}
+              className="flex-1 h-8 px-2 rounded border border-input bg-background text-xs"
+            />
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Unit price"
+              value={addPrice}
+              onChange={(e) => setAddPrice(e.target.value)}
+              className="w-24 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
+            />
+          </div>
+          <div className="flex gap-1.5">
+            <Button
+              size="sm"
+              className="h-7 text-xs font-bold flex-1"
+              disabled={!addProductId || linkMutation.isPending}
+              onClick={() => linkMutation.mutate({
+                productId: Number(addProductId),
+                supplierSku: addSku || undefined,
+                unitPrice: addPrice ? Number(addPrice) : null,
+              })}
+            >
+              Link Product
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs font-bold w-full"
+          onClick={() => setShowAdd(true)}
+        >
+          <Plus className="h-3 w-3 mr-1" /> Add Product
+        </Button>
+      )}
+    </div>
+  );
 }
 
-async function deleteSupplier(id: number): Promise<void> {
-  const res = await fetch(`/api/suppliers/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed");
-}
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminSuppliersPage() {
   const { toast } = useToast();
@@ -57,47 +217,50 @@ export default function AdminSuppliersPage() {
   const [editing, setEditing] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [expandedSupplierId, setExpandedSupplierId] = useState<number | null>(null);
 
-  const suppliersQuery = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
+  const suppliersQuery = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers"],
+    queryFn: () => apiFetch("/api/suppliers"),
   });
 
   const createMutation = useMutation({
-    mutationFn: createSupplier,
+    mutationFn: (data: object) => apiFetch("/api/suppliers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setFormData({ name: "", email: "", phone: "", notes: "" });
       setShowForm(false);
       toast({ description: "Supplier created" });
     },
-    onError: () => {
-      toast({ description: "Failed to create supplier", variant: "destructive" });
-    },
+    onError: () => toast({ description: "Failed to create supplier", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: any) => updateSupplier(id, data),
+    mutationFn: ({ id, data }: { id: number; data: object }) => apiFetch(`/api/suppliers/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setEditing(null);
       setFormData({ name: "", email: "", phone: "", notes: "" });
       toast({ description: "Supplier updated" });
     },
-    onError: () => {
-      toast({ description: "Failed to update supplier", variant: "destructive" });
-    },
+    onError: () => toast({ description: "Failed to update supplier", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteSupplier,
+    mutationFn: (id: number) => apiFetchVoid(`/api/suppliers/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       toast({ description: "Supplier deleted" });
     },
-    onError: () => {
-      toast({ description: "Failed to delete supplier", variant: "destructive" });
-    },
+    onError: () => toast({ description: "Failed to delete supplier", variant: "destructive" }),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -106,7 +269,6 @@ export default function AdminSuppliersPage() {
       toast({ description: "Supplier name is required", variant: "destructive" });
       return;
     }
-
     if (editing) {
       updateMutation.mutate({ id: editing, data: formData });
     } else {
@@ -116,12 +278,7 @@ export default function AdminSuppliersPage() {
 
   const startEdit = (supplier: Supplier) => {
     setEditing(supplier.id);
-    setFormData({
-      name: supplier.name,
-      email: supplier.email || "",
-      phone: supplier.phone || "",
-      notes: supplier.notes || "",
-    });
+    setFormData({ name: supplier.name, email: supplier.email || "", phone: supplier.phone || "", notes: supplier.notes || "" });
     setShowForm(true);
   };
 
@@ -176,21 +333,10 @@ export default function AdminSuppliersPage() {
             disabled={createMutation.isPending || updateMutation.isPending}
           />
           <div className="flex gap-2">
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
+            <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
               {editing ? "Update" : "Create"}
             </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
-              variant="outline"
-            >
+            <Button type="button" onClick={() => { setShowForm(false); setEditing(null); }} variant="outline">
               Cancel
             </Button>
           </div>
@@ -203,43 +349,52 @@ export default function AdminSuppliersPage() {
         </div>
       ) : suppliersQuery.data && suppliersQuery.data.length > 0 ? (
         <div className="space-y-2">
-          {suppliersQuery.data.map((supplier) => (
-            <div key={supplier.id} className="bg-white border-2 border-border rounded-lg p-3 space-y-2">
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm">{supplier.name}</p>
-                  {supplier.email && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                      <Mail className="h-3 w-3" /> {supplier.email}
-                    </div>
-                  )}
-                  {supplier.phone && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Phone className="h-3 w-3" /> {supplier.phone}
-                    </div>
-                  )}
-                  {supplier.notes && (
-                    <p className="text-xs text-muted-foreground mt-1">{supplier.notes}</p>
-                  )}
+          {suppliersQuery.data.map((supplier) => {
+            const expanded = expandedSupplierId === supplier.id;
+            return (
+              <div key={supplier.id} className="bg-white border-2 border-border rounded-lg p-3 space-y-2">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{supplier.name}</p>
+                    {supplier.email && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        <Mail className="h-3 w-3" /> {supplier.email}
+                      </div>
+                    )}
+                    {supplier.phone && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Phone className="h-3 w-3" /> {supplier.phone}
+                      </div>
+                    )}
+                    {supplier.notes && (
+                      <p className="text-xs text-muted-foreground mt-1">{supplier.notes}</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => setExpandedSupplierId(expanded ? null : supplier.id)}
+                      className="p-2 hover:bg-purple-50 rounded text-purple-600"
+                      title="View / manage supplied products"
+                    >
+                      {expanded ? <ChevronUp className="h-4 w-4" /> : <Package2 className="h-4 w-4" />}
+                    </button>
+                    <button onClick={() => startEdit(supplier)} className="p-2 hover:bg-blue-100 rounded text-blue-600">
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteMutation.mutate(supplier.id)}
+                      disabled={deleteMutation.isPending}
+                      className="p-2 hover:bg-red-100 rounded text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => startEdit(supplier)}
-                    className="p-2 hover:bg-blue-100 rounded text-blue-600"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => deleteMutation.mutate(supplier.id)}
-                    disabled={deleteMutation.isPending}
-                    className="p-2 hover:bg-red-100 rounded text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+
+                {expanded && <SupplierProductsPanel supplierId={supplier.id} />}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="text-center py-8 text-muted-foreground">
