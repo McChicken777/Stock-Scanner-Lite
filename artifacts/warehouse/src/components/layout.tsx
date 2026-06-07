@@ -33,15 +33,6 @@ function UserMenu() {
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
-  const isAdminOrOwnerOrSupervisor = isAdmin || user.role === "owner" || user.isSupervisor;
-
-  const { data: painterData } = useQuery<{ isPainter: boolean }>({
-    queryKey: ["/api/work/painter-access"],
-    queryFn: () => fetch("/api/work/painter-access", { credentials: "include" }).then((r) => r.json()),
-    enabled: !isAdminOrOwnerOrSupervisor,
-    staleTime: 5 * 60 * 1000,
-  });
-  const showPaintShop = isAdminOrOwnerOrSupervisor || painterData?.isPainter === true;
 
   return (
     <DropdownMenu>
@@ -64,7 +55,6 @@ function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {/* Owner */}
         {user.role === "owner" && (
           <Link href="/owner">
             <DropdownMenuItem className="cursor-pointer font-semibold text-yellow-600 focus:text-yellow-600">
@@ -73,25 +63,7 @@ function UserMenu() {
           </Link>
         )}
 
-        {/* Supervisor View (admin + supervisors) */}
-        {(isAdmin || user.isSupervisor) && (
-          <Link href="/supervisor">
-            <DropdownMenuItem className="cursor-pointer font-semibold text-indigo-600 focus:text-indigo-600">
-              <Eye className="mr-2 h-4 w-4" /> Supervisor View
-            </DropdownMenuItem>
-          </Link>
-        )}
-
-        {/* Paint Shop — admin, owner, supervisor, or any user with a painter role */}
-        {showPaintShop && (
-          <Link href="/work/paint-queue">
-            <DropdownMenuItem className="cursor-pointer font-semibold text-orange-600 focus:text-orange-600">
-              <Palette className="mr-2 h-4 w-4" /> Paint Shop
-            </DropdownMenuItem>
-          </Link>
-        )}
-
-        {/* Attendance — workers & supervisors (admins have it in bottom nav) */}
+        {/* Attendance — workers only (admins have it in sidebar/bottom nav) */}
         {!isAdmin && user.role !== "owner" && (
           <Link href="/attendance">
             <DropdownMenuItem className="cursor-pointer font-semibold text-emerald-600 focus:text-emerald-600">
@@ -149,9 +121,199 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
   );
 }
 
-// ─── Admin Bottom Nav ─────────────────────────────────────────────────────────
+// ─── Shared sidebar nav item ───────────────────────────────────────────────────
+
+function SideNavItem({
+  href, icon: Icon, label, active, badge = 0,
+}: {
+  href: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string; active: boolean; badge?: number;
+}) {
+  return (
+    <Link href={href}>
+      <div className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer",
+        active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+      )}>
+        <Icon className="h-[18px] w-[18px] flex-shrink-0" strokeWidth={active ? 2.5 : 2} />
+        <span className="flex-1 truncate">{label}</span>
+        {badge > 0 && (
+          <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none flex-shrink-0">
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function SidebarSection({ label }: { label: string }) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 pt-4 pb-1">
+      {label}
+    </p>
+  );
+}
+
+// ─── Admin Desktop Sidebar ────────────────────────────────────────────────────
 
 interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; }
+
+function AdminDesktopSidebar() {
+  const [location] = useLocation();
+  const { logout, user } = useAuth();
+
+  const { data: attention } = useQuery<AttentionCounts>({
+    queryKey: ["/api/admin/attention"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/attention", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  const isJobsActive = location.startsWith("/work/projects") || location.startsWith("/tasks") || location.startsWith("/work/inbound") || location.startsWith("/work/templates");
+  const isCustomersActive = location.startsWith("/customers") || location.startsWith("/quotes") || location.startsWith("/orders");
+  const isPurchasingActive = location.startsWith("/work/reorder") || location.startsWith("/work/purchase-orders");
+
+  return (
+    <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 bg-background border-r border-border">
+      {/* Brand */}
+      <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
+        <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+          <ScanLine className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="font-bold text-base">Stock Scanner</span>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+        <SidebarSection label="Main" />
+        <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} />
+        <SideNavItem href="/customers" icon={Store} label="Customers" active={isCustomersActive} />
+        <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />
+        <SideNavItem href="/supervisor" icon={Eye} label="Supervisor View" active={location.startsWith("/supervisor")} />
+
+        <SidebarSection label="Work" />
+        <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates")} />
+        <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials")} />
+        <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />
+        {user?.plan === "pro" && (
+          <SideNavItem href="/analytics" icon={BarChart2} label="AI Analytics" active={location.startsWith("/analytics")} />
+        )}
+
+        <SidebarSection label="People" />
+        <SideNavItem href="/admin/users" icon={Users} label="Manage Users" active={location.startsWith("/admin/users")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location === "/attendance" || location.startsWith("/attendance-report")} />
+        <SideNavItem href="/admin/leave-inbox" icon={Inbox} label="Leave Requests" active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />
+
+        <SidebarSection label="Business" />
+        <SideNavItem href="/products" icon={Package2} label="Products & Stock" active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
+        <SideNavItem href="/admin/suppliers" icon={Truck} label="Suppliers" active={location.startsWith("/admin/suppliers")} />
+        <SideNavItem href="/admin/company" icon={Building2} label="Company & Plan" active={location.startsWith("/admin/company")} />
+      </nav>
+
+      {/* Sign out */}
+      <div className="flex-shrink-0 border-t border-border p-2">
+        <button
+          onClick={logout}
+          className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
+          Sign Out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Supervisor Desktop Sidebar ───────────────────────────────────────────────
+
+function SupervisorDesktopSidebar() {
+  const [location] = useLocation();
+  const { logout } = useAuth();
+
+  return (
+    <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 bg-background border-r border-border">
+      <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
+        <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+          <ScanLine className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="font-bold text-base">Stock Scanner</span>
+      </div>
+      <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+        <SidebarSection label="Navigation" />
+        <SideNavItem href="/tasks" icon={CheckSquare} label="Tasks" active={location.startsWith("/tasks")} />
+        <SideNavItem href="/work/projects" icon={FolderKanban} label="Projects" active={location.startsWith("/work/projects")} />
+        <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />
+        <SideNavItem href="/supervisor" icon={Eye} label="Supervisor View" active={location.startsWith("/supervisor")} />
+      </nav>
+      <div className="flex-shrink-0 border-t border-border p-2">
+        <button onClick={logout} className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors">
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> Sign Out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Worker Desktop Sidebar ───────────────────────────────────────────────────
+
+interface WorkerNotifications { total: number; autoClosed: number; leaveDecisions: number; }
+
+function WorkerDesktopSidebar() {
+  const [location] = useLocation();
+  const { logout } = useAuth();
+
+  const { data: painterData } = useQuery<{ isPainter: boolean }>({
+    queryKey: ["/api/work/painter-access"],
+    queryFn: () => fetch("/api/work/painter-access", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: workerNotifs } = useQuery<WorkerNotifications>({
+    queryKey: ["/api/admin/worker-notifications"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/worker-notifications", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+
+  return (
+    <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 bg-background border-r border-border">
+      <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
+        <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
+          <ScanLine className="h-4 w-4 text-primary-foreground" />
+        </div>
+        <span className="font-bold text-base">Stock Scanner</span>
+      </div>
+      <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+        <SidebarSection label="Navigation" />
+        <SideNavItem href="/tasks" icon={CheckSquare} label="My Tasks" active={location.startsWith("/tasks")} />
+        <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
+        {painterData?.isPainter && (
+          <SideNavItem href="/work/paint-queue" icon={Palette} label="Paint Shop" active={location.startsWith("/work/paint-queue")} />
+        )}
+      </nav>
+      <div className="flex-shrink-0 border-t border-border p-2">
+        <button onClick={logout} className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors">
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> Sign Out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Admin Bottom Nav ─────────────────────────────────────────────────────────
 
 function AttentionBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -199,7 +361,7 @@ function AdminBottomNav() {
 
   return (
     <>
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
         <div className="flex h-16 w-full max-w-md mx-auto">
           {tabs.map((tab) => (
             <Link key={tab.key} href={tab.href} className="flex-1">
@@ -372,7 +534,7 @@ function SupervisorBottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto">
         {navItems.map((item) => {
           const isActive = item.href === "/work/projects"
@@ -408,7 +570,7 @@ function InventoryBottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto relative">
         <Link href="/scan" className="absolute left-1/2 -top-6 -translate-x-1/2 group">
           <div className={cn(
@@ -441,7 +603,7 @@ function InventoryBottomNav() {
   );
 }
 
-// ─── Work Orders Bottom Nav (non-admin supervisors, non-work-section fallback) ─
+// ─── Work Orders Bottom Nav ───────────────────────────────────────────────────
 
 function WorkOrdersBottomNav() {
   const [location] = useLocation();
@@ -454,7 +616,7 @@ function WorkOrdersBottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto">
         {navItems.map((item) => {
           const realActive = item.href === "/work/projects"
@@ -478,8 +640,6 @@ function WorkOrdersBottomNav() {
 }
 
 // ─── Worker Bottom Nav ────────────────────────────────────────────────────────
-
-interface WorkerNotifications { total: number; autoClosed: number; leaveDecisions: number; }
 
 function WorkerBottomNav() {
   const [location] = useLocation();
@@ -511,7 +671,7 @@ function WorkerBottomNav() {
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
       <div className="flex h-16 w-full max-w-md mx-auto">
         {navItems.map((item) => {
           const isActive = location.startsWith(item.href);
@@ -551,8 +711,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isSupervisor = user?.role === "worker" && !!user?.isSupervisor;
   const isWorker = user?.role === "worker" && !user?.isSupervisor;
 
-  // Section switcher only used by supervisors browsing both inventory + work
   const isWorkSection = location.startsWith("/work") || location.startsWith("/tasks") || location.startsWith("/attendance") || location.startsWith("/orders") || location.startsWith("/supervisor");
+  const hasSidebar = !isOwner && (isAdmin || isSupervisor || isWorker);
 
   function BottomNav() {
     if (isOwner) return null;
@@ -563,7 +723,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return <InventoryBottomNav />;
   }
 
-  // Header left side — brand/context indicator
   function HeaderLeft() {
     if (isOwner) {
       return (
@@ -575,9 +734,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
     if (isAdmin) {
       return (
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-primary/10 border border-primary/20 text-[11px] font-bold uppercase tracking-wider text-primary">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Admin
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center lg:hidden">
+            <ScanLine className="h-3.5 w-3.5 text-primary-foreground" />
+          </div>
+          <span className="font-bold text-sm">Stock Scanner</span>
         </div>
       );
     }
@@ -597,32 +758,43 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       );
     }
-    // Fallback: section switcher for any other role combo
     return <SectionSwitcher isWorkSection={isWorkSection} />;
   }
 
   return (
-    <div className={cn("min-h-[100dvh] bg-background", !isOwner && "pb-16")}>
-      <main className="w-full max-w-md mx-auto bg-background min-h-[100dvh] border-x border-border/50 relative">
-        {/* Top bar */}
-        <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border/40">
-          <div className="flex items-center justify-between px-3 py-2 gap-2">
-            <HeaderLeft />
-            <div className="flex items-center gap-1.5">
-              <UserMenu />
-              <div className={cn(
-                "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider",
-                isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"
-              )}>
-                <div className={cn("h-1.5 w-1.5 rounded-full", isHealthy ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                {isHealthy ? "On" : "Off"}
+    <div className="min-h-[100dvh] bg-background">
+      {/* Desktop sidebars — hidden on mobile via lg:flex inside each component */}
+      {isAdmin && <AdminDesktopSidebar />}
+      {isSupervisor && <SupervisorDesktopSidebar />}
+      {isWorker && <WorkerDesktopSidebar />}
+
+      {/* Main content area */}
+      <div className={cn(
+        "min-h-[100dvh]",
+        hasSidebar && "lg:ml-64",
+        !isOwner && "pb-16 lg:pb-0",
+      )}>
+        <main className="w-full max-w-md mx-auto lg:max-w-none bg-background border-x border-border/50 lg:border-x-0 relative">
+          {/* Top bar */}
+          <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border/40">
+            <div className="flex items-center justify-between px-3 py-2 gap-2">
+              <HeaderLeft />
+              <div className="flex items-center gap-1.5">
+                <UserMenu />
+                <div className={cn(
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider",
+                  isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"
+                )}>
+                  <div className={cn("h-1.5 w-1.5 rounded-full", isHealthy ? "bg-green-500 animate-pulse" : "bg-red-500")} />
+                  {isHealthy ? "On" : "Off"}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {children}
-      </main>
+          {children}
+        </main>
+      </div>
 
       <BottomNav />
     </div>
