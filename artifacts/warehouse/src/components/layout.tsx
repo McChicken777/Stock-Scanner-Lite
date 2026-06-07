@@ -6,11 +6,13 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen, Layers,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck } from "@workspace/api-client-react";
 import { useAuth, useFeature } from "@/contexts/auth";
+import { TutorialProvider, useTutorial } from "@/contexts/tutorial";
+import { TutorialModal } from "@/components/tutorial-modal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -698,6 +700,22 @@ function WorkerBottomNav() {
   );
 }
 
+// ─── Tutorial help button ─────────────────────────────────────────────────────
+
+function TutorialHelpButton() {
+  const { hasTutorial, openTutorial } = useTutorial();
+  if (!hasTutorial) return null;
+  return (
+    <button
+      onClick={() => openTutorial()}
+      title="Page guide"
+      className="flex items-center justify-center h-7 w-7 rounded-full border border-border bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+    >
+      <HelpCircle className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
 // ─── App Layout ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -761,6 +779,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <TutorialProvider>
+    <TutorialModal />
     <div className="min-h-[100dvh] bg-background">
       {/* Desktop sidebars — hidden on mobile via lg:flex inside each component */}
       {isAdmin && <AdminDesktopSidebar />}
@@ -779,6 +799,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between px-3 py-2 gap-2">
               <HeaderLeft />
               <div className="flex items-center gap-1.5">
+                <TutorialHelpButton />
                 <UserMenu />
                 <div className={cn(
                   "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider",
@@ -797,5 +818,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       <BottomNav />
     </div>
+    </TutorialProvider>
   );
 }
