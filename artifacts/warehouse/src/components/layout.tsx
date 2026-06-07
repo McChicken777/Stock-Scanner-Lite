@@ -233,12 +233,12 @@ function AdminBottomNav() {
       </div>
 
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-8">
-          <SheetHeader className="pb-2">
+        <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-0 max-h-[85dvh] flex flex-col">
+          <SheetHeader className="pb-2 flex-shrink-0">
             <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Settings</SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-1 mt-2">
+          <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
             {/* Work section */}
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work</p>
             <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
