@@ -3,10 +3,9 @@ import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Users, Wrench, BookTemplate, Calendar, Globe, Plus, Trash2, Download } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -31,15 +30,6 @@ interface Holiday {
   date: string;
   label: string;
 }
-
-const FEATURE_LABELS: Record<string, { label: string; description: string }> = {
-  inventory: { label: "Inventory Management", description: "Stock tracking, QR scanning, locations" },
-  alerts: { label: "Low Stock Alerts", description: "Email notifications when stock is low" },
-  work_orders: { label: "Work Orders", description: "Production tracking and work order management" },
-  progress_tracking: { label: "Progress Tracking", description: "Visual progress bars per item and project" },
-  deadline_alerts: { label: "Deadline Alerts", description: "Urgency indicators for approaching deadlines" },
-  time_tracking: { label: "Time Tracking", description: "Start/stop timers per procedure" },
-};
 
 const COUNTRIES = [
   { code: "AU", label: "Australia" },
@@ -86,7 +76,7 @@ function fmtDate(dateStr: string): string {
 }
 
 export default function AdminCompanyPage() {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState("");
@@ -130,24 +120,6 @@ export default function AdminCompanyPage() {
     onError: () => toast({ title: "Failed to update work hours", variant: "destructive" }),
   });
 
-  const updatePlanMutation = useMutation({
-    mutationFn: async (plan: "basic" | "pro") => {
-      const res = await fetch("/api/company", {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-      if (!res.ok) throw new Error("Failed to update plan");
-      return res.json();
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-      await refreshUser();
-      toast({ title: "Plan updated!" });
-    },
-    onError: () => toast({ title: "Failed to update plan", variant: "destructive" }),
-  });
-
   const updateNameMutation = useMutation({
     mutationFn: async (name: string) => {
       const res = await fetch("/api/company", {
@@ -164,23 +136,6 @@ export default function AdminCompanyPage() {
       toast({ title: "Company name updated!" });
     },
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
-  });
-
-  const toggleFeatureMutation = useMutation({
-    mutationFn: async ({ feature, enabled }: { feature: string; enabled: boolean }) => {
-      const res = await fetch("/api/company/features", {
-        method: "PUT", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [feature]: enabled }),
-      });
-      if (!res.ok) throw new Error("Failed to update feature");
-      return res.json();
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/company"] });
-      await refreshUser();
-    },
-    onError: () => toast({ title: "Failed to toggle feature", variant: "destructive" }),
   });
 
   const updateSchedulingMutation = useMutation({
@@ -303,34 +258,6 @@ export default function AdminCompanyPage() {
               </Button>
             </div>
           )}
-        </div>
-
-        {/* Quick Links for Task Management */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Task Management</p>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/admin/roles" className="block">
-              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-blue-400 hover:bg-blue-50/50 transition-all text-left">
-                <Users className="h-5 w-5 text-blue-600 mb-1" />
-                <p className="font-bold text-sm">Roles</p>
-                <p className="text-xs text-muted-foreground">Create production roles</p>
-              </button>
-            </Link>
-            <Link href="/admin/procedures" className="block">
-              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-purple-400 hover:bg-purple-50/50 transition-all text-left">
-                <Wrench className="h-5 w-5 text-purple-600 mb-1" />
-                <p className="font-bold text-sm">Procedures</p>
-                <p className="text-xs text-muted-foreground">Reusable steps for quick jobs</p>
-              </button>
-            </Link>
-            <Link href="/work/templates" className="block col-span-2">
-              <button className="w-full p-4 rounded-lg border-2 border-border hover:border-emerald-400 hover:bg-emerald-50/50 transition-all text-left">
-                <BookTemplate className="h-5 w-5 text-emerald-600 mb-1" />
-                <p className="font-bold text-sm">Item Templates</p>
-                <p className="text-xs text-muted-foreground">Define products with steps & sub-parts. Generate with AI or start from a starter pack.</p>
-              </button>
-            </Link>
-          </div>
         </div>
 
         {/* Work hours per day */}
@@ -497,70 +424,29 @@ export default function AdminCompanyPage() {
           )}
         </div>
 
-        {/* Plan */}
+        {/* Plan — read-only for admins */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Plan</p>
-          <div className="grid grid-cols-2 gap-3">
-            {(["basic", "pro"] as const).map((plan) => (
-              <button
-                key={plan}
-                onClick={() => updatePlanMutation.mutate(plan)}
-                disabled={updatePlanMutation.isPending}
-                className={cn(
-                  "p-4 rounded-xl border-2 text-left transition-all",
-                  company.plan === plan
-                    ? plan === "pro" ? "border-primary bg-primary/5" : "border-orange-400 bg-orange-50"
-                    : "border-border bg-muted/20 hover:border-muted-foreground/50"
-                )}
-              >
-                <p className={cn("font-black text-lg uppercase", company.plan === plan && plan === "pro" ? "text-primary" : "")}>
-                  {plan}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {plan === "basic" ? "Core features only" : "All features enabled"}
-                </p>
-                {company.plan === plan && (
-                  <span className="text-xs font-bold text-green-600">✓ Current plan</span>
-                )}
-              </button>
-            ))}
+          <div className={cn(
+            "flex items-center justify-between p-4 rounded-xl border-2",
+            company.plan === "pro" ? "border-primary bg-primary/5" : "border-orange-400 bg-orange-50"
+          )}>
+            <div>
+              <p className={cn("font-black text-xl uppercase", company.plan === "pro" ? "text-primary" : "text-orange-600")}>
+                {company.plan}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {company.plan === "pro" ? "All features enabled" : "Core features only"}
+              </p>
+            </div>
+            <span className="text-xs font-bold text-green-600 bg-green-100 border border-green-200 rounded-full px-2.5 py-1">
+              Active
+            </span>
           </div>
-        </div>
-
-        {/* Features */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-1">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Feature Overrides</p>
-          <p className="text-xs text-muted-foreground mb-4">Toggle individual features regardless of plan. Changes apply instantly.</p>
-          {Object.entries(FEATURE_LABELS).map(([key, { label, description }]) => {
-            const enabled = company.features[key as keyof typeof company.features];
-            return (
-              <div
-                key={key}
-                className={cn(
-                  "flex items-center justify-between p-3 rounded-lg border transition-all",
-                  enabled ? "border-green-200 bg-green-50/50" : "border-border bg-muted/20"
-                )}
-              >
-                <div className="flex-1 min-w-0 pr-4">
-                  <p className="font-semibold text-sm">{label}</p>
-                  <p className="text-xs text-muted-foreground">{description}</p>
-                </div>
-                <button
-                  onClick={() => toggleFeatureMutation.mutate({ feature: key, enabled: !enabled })}
-                  disabled={toggleFeatureMutation.isPending}
-                  className={cn(
-                    "relative w-12 h-6 rounded-full transition-colors flex-shrink-0",
-                    enabled ? "bg-green-500" : "bg-muted-foreground/30"
-                  )}
-                >
-                  <span className={cn(
-                    "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
-                    enabled ? "translate-x-6" : "translate-x-0"
-                  )} />
-                </button>
-              </div>
-            );
-          })}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2.5">
+            <Crown className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />
+            <span>Plan changes are managed by the account owner.</span>
+          </div>
         </div>
       </div>
     </div>
