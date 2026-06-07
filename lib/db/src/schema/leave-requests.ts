@@ -14,6 +14,7 @@ export const leaveRequestsTable = pgTable("leave_requests", {
   endDate: date("end_date").notNull(),
   status: leaveStatusEnum("status").notNull().default("pending"),
   managerNote: text("manager_note"),
+  workerAcknowledgedAt: timestamp("worker_acknowledged_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (t) => ({

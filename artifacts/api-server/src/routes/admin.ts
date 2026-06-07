@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, leaveRequestsTable, productsTable, stockTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable } from "@workspace/db";
+import { eq, and, sql, isNull, ne } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -48,6 +48,43 @@ router.get("/attention", requireAuth, async (req, res) => {
   } catch (err: any) {
     console.error("attention endpoint error:", err?.message ?? err);
     res.status(500).json({ error: "Failed to get attention counts" });
+  }
+});
+
+// GET /api/admin/worker-notifications — unread notifications for current worker
+router.get("/worker-notifications", requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const companyId = req.session.companyId!;
+
+    // Unacknowledged auto-closed shifts
+    const autoClosedRows = await db
+      .select({ id: attendanceLogsTable.id })
+      .from(attendanceLogsTable)
+      .where(and(
+        eq(attendanceLogsTable.userId, userId),
+        eq(attendanceLogsTable.companyId, companyId),
+        eq(attendanceLogsTable.autoClosed, true),
+        isNull(attendanceLogsTable.autoCloseAcknowledgedAt),
+      ));
+    const autoClosed = autoClosedRows.length;
+
+    // Leave requests with a manager decision not yet seen by worker
+    const decidedLeave = await db
+      .select({ id: leaveRequestsTable.id })
+      .from(leaveRequestsTable)
+      .where(and(
+        eq(leaveRequestsTable.userId, userId),
+        eq(leaveRequestsTable.companyId, companyId),
+        ne(leaveRequestsTable.status, "pending"),
+        isNull(leaveRequestsTable.workerAcknowledgedAt),
+      ));
+    const leaveDecisions = decidedLeave.length;
+
+    res.json({ total: autoClosed + leaveDecisions, autoClosed, leaveDecisions });
+  } catch (err: any) {
+    console.error("worker-notifications error:", err?.message ?? err);
+    res.status(500).json({ error: "Failed" });
   }
 });
 
