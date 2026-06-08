@@ -118,11 +118,6 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
           Sick leave is approved immediately and attendance is recorded for the selected days.
         </p>
       )}
-      {type === "vacation" && (
-        <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2">
-          Vacation requests need manager approval. Once approved, days are recorded as vacation.
-        </p>
-      )}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">From</label>

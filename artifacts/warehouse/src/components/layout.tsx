@@ -161,7 +161,7 @@ function SidebarSection({ label }: { label: string }) {
 
 // ─── Admin Desktop Sidebar ────────────────────────────────────────────────────
 
-interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; }
+interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; overdueJobs: number; }
 
 function AdminDesktopSidebar() {
   const [location] = useLocation();
@@ -195,7 +195,7 @@ function AdminDesktopSidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         <SidebarSection label="Main" />
-        <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} />
+        <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} badge={attention?.overdueJobs ?? 0} />
         <SideNavItem href="/customers" icon={Store} label="Customers" active={isCustomersActive} />
         <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />
 
@@ -675,13 +675,25 @@ function WorkerBottomNav() {
     refetchInterval: 60_000,
   });
 
+  const { data: queueCount } = useQuery<{ pending: number }>({
+    queryKey: ["/api/stations/my-pending-count"],
+    queryFn: async () => {
+      const r = await fetch("/api/stations/my-pending-count", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed");
+      return r.json();
+    },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
   const attendanceBadge = workerNotifs?.total ?? 0;
+  const queueBadge = queueCount?.pending ?? 0;
 
   const navItems = [
     { href: "/tasks", icon: CheckSquare, label: "My Tasks", badge: 0 },
-    { href: "/work/inbound", icon: PackageCheck, label: "Inbound", badge: 0 },
+    { href: "/work/queues", icon: Layers, label: "Queues", badge: queueBadge },
     { href: "/attendance", icon: CalendarCheck, label: "Attendance", badge: attendanceBadge },
-    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint Shop", badge: 0 }] : []),
+    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint", badge: 0 }] : []),
   ];
 
   return (

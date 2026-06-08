@@ -802,6 +802,7 @@ export default function WorkProjectsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ["/api/work/projects"],
@@ -843,6 +844,14 @@ export default function WorkProjectsPage() {
         )}
       </div>
 
+      <input
+        type="search"
+        placeholder="Search jobs…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="w-full h-10 px-3 rounded-xl border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+      />
+
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}
@@ -853,7 +862,8 @@ export default function WorkProjectsPage() {
 
           {/* Summary chips */}
           {(() => {
-            const active = projects.filter((p) => p.status === "in_progress");
+            const filtered = search.trim() ? projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) : projects;
+            const active = filtered.filter((p) => p.status === "in_progress");
             const overdue = active.filter((p) => isPast(new Date(p.deadline)));
             const blocked = active.filter((p) => p.blockedCount > 0);
             return (
@@ -867,12 +877,13 @@ export default function WorkProjectsPage() {
 
           {/* Jobs grouped by urgency */}
           {(() => {
-            const active = projects.filter((p) => p.status === "in_progress").sort(sortByUrgency);
+            const filtered = search.trim() ? projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) : projects;
+            const active = filtered.filter((p) => p.status === "in_progress").sort(sortByUrgency);
             const overdue = active.filter((p) => isPast(new Date(p.deadline)));
             const today = active.filter((p) => { const d = differenceInDays(new Date(p.deadline), new Date()); return !isPast(new Date(p.deadline)) && d <= 1; });
             const soon = active.filter((p) => { const d = differenceInDays(new Date(p.deadline), new Date()); return d > 1 && d < 7; });
             const normal = active.filter((p) => differenceInDays(new Date(p.deadline), new Date()) >= 7);
-            const done = projects.filter((p) => p.status === "completed");
+            const done = filtered.filter((p) => p.status === "completed");
             return (
               <div className="space-y-4">
                 <JobGroup

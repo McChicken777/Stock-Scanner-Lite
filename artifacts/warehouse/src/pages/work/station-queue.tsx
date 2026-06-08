@@ -104,6 +104,47 @@ function StepRow({
     ? Math.max(0, Math.floor((now - new Date(step.startTime).getTime()) / 1000))
     : 0;
 
+  if (claimedByMe) {
+    return (
+      <div className="px-4 py-3 bg-green-50 border-l-4 border-green-500 space-y-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold leading-tight">{step.stepName}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {step.startTime && (
+                <span className="flex items-center gap-1 text-[11px] font-bold text-green-700 animate-pulse">
+                  <Timer className="h-3 w-3" /> {formatSeconds(elapsedSeconds)}
+                </span>
+              )}
+              <span className="flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+                <User className="h-3 w-3" /> You
+              </span>
+            </div>
+          </div>
+          {activeWorkstations.length > 0 && (
+            <select
+              value={step.workstationId ?? ""}
+              onChange={(e) => onAssign(e.target.value ? Number(e.target.value) : null)}
+              className="text-xs rounded-lg border border-border bg-background px-2 py-1.5 max-w-[100px] flex-shrink-0"
+            >
+              <option value="">— machine</option>
+              {activeWorkstations.map((ws) => (
+                <option key={ws.id} value={ws.id}>{ws.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <Button
+          className="w-full h-12 font-bold text-base gap-2 bg-green-600 hover:bg-green-700"
+          disabled={isCompleting}
+          onClick={() => onComplete(step.stepId)}
+        >
+          {isCompleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle2 className="h-5 w-5" /> Done</>}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex items-center gap-3 px-4 py-3 ${isInProgress ? "bg-blue-50/60 border-l-4 border-blue-400" : ""}`}>
       <div className="flex-1 min-w-0">
@@ -115,11 +156,6 @@ function StepRow({
           {isInProgress && step.startTime && (
             <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 animate-pulse">
               <Timer className="h-3 w-3" /> {formatSeconds(elapsedSeconds)}
-            </span>
-          )}
-          {claimedByMe && (
-            <span className="flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-100 rounded-full px-2 py-0.5">
-              <User className="h-3 w-3" /> You
             </span>
           )}
           {claimedByOther && (
@@ -155,7 +191,7 @@ function StepRow({
         </Button>
       )}
 
-      {/* Done: show for in_progress steps; admin can also complete any in_progress step */}
+      {/* Done button for admin or other workers' in-progress steps */}
       {isInProgress && (
         <Button
           size="sm"
