@@ -16,7 +16,7 @@ const createSupplierSchema = z.object({
 // GET /api/suppliers - List suppliers
 router.get("/", requireAuth, async (req, res) => {
   try {
-    const { companyId } = req.session;
+    const companyId = req.session.companyId!;
 
     const suppliers = await db.query.suppliersTable.findMany({
       where: eq(suppliersTable.companyId, companyId),
@@ -32,7 +32,7 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/suppliers - Create supplier
 router.post("/", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
+    const companyId = req.session.companyId!;
     const data = createSupplierSchema.parse(req.body);
 
     const [supplier] = await db.insert(suppliersTable).values({
@@ -57,13 +57,13 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 // PUT /api/suppliers/:id - Update supplier
 router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
     const data = createSupplierSchema.parse(req.body);
 
     const supplier = await db.query.suppliersTable.findFirst({
       where: and(
-        eq(suppliersTable.id, parseInt(id)),
+        eq(suppliersTable.id, id),
         eq(suppliersTable.companyId, companyId)
       ),
     });
@@ -80,7 +80,7 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
         phone: data.phone || null,
         notes: data.notes || null,
       })
-      .where(eq(suppliersTable.id, parseInt(id)))
+      .where(and(eq(suppliersTable.id, id), eq(suppliersTable.companyId, companyId)))
       .returning();
 
     res.json(updated);
@@ -97,12 +97,12 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
 // DELETE /api/suppliers/:id - Delete supplier
 router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
 
     const supplier = await db.query.suppliersTable.findFirst({
       where: and(
-        eq(suppliersTable.id, parseInt(id)),
+        eq(suppliersTable.id, id),
         eq(suppliersTable.companyId, companyId)
       ),
     });
@@ -112,7 +112,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
       return;
     }
 
-    await db.delete(suppliersTable).where(and(eq(suppliersTable.id, parseInt(id)), eq(suppliersTable.companyId, companyId!)));
+    await db.delete(suppliersTable).where(and(eq(suppliersTable.id, id), eq(suppliersTable.companyId, companyId)));
 
     res.json({ success: true });
   } catch (err) {
@@ -126,7 +126,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
 router.get("/:id/products", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const supplierId = parseInt(req.params.id, 10);
+    const supplierId = parseInt(req.params.id as string, 10);
 
     const supplier = await db.query.suppliersTable.findFirst({
       where: and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)),
@@ -161,7 +161,7 @@ router.get("/:id/products", requireAuth, async (req, res) => {
 router.post("/:id/products", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const supplierId = parseInt(req.params.id, 10);
+    const supplierId = parseInt(req.params.id as string, 10);
 
     const parsed = z.object({
       productId: z.number().int(),
@@ -201,8 +201,8 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
 router.delete("/:id/products/:productId", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const supplierId = parseInt(req.params.id, 10);
-    const productId = parseInt(req.params.productId, 10);
+    const supplierId = parseInt(req.params.id as string, 10);
+    const productId = parseInt(req.params.productId as string, 10);
 
     await db.delete(supplierProductsTable).where(
       and(

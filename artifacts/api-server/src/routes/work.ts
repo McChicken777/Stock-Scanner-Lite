@@ -2106,6 +2106,7 @@ router.get("/projects", requireAuth, async (req, res) => {
         return {
           ...project,
           itemCount: items.length,
+          itemNames: [...new Set(items.map((i) => i.name.replace(/ #\d+$/, "").replace(/ › .*$/, "")))],
           totalProcedures,
           completedProcedures,
           inProgressCount,
