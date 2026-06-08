@@ -4,7 +4,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, ScanLine, Package2, History, ShieldCheck,
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
-  CheckSquare, Truck, Eye, MapPin, Clock,
+  CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList,
 } from "lucide-react";
@@ -61,15 +61,6 @@ function UserMenu() {
           <Link href="/owner">
             <DropdownMenuItem className="cursor-pointer font-semibold text-yellow-600 focus:text-yellow-600">
               <Crown className="mr-2 h-4 w-4 text-yellow-500" /> Owner Panel
-            </DropdownMenuItem>
-          </Link>
-        )}
-
-        {/* Attendance — workers only (admins have it in sidebar/bottom nav) */}
-        {!isAdmin && user.role !== "owner" && (
-          <Link href="/attendance">
-            <DropdownMenuItem className="cursor-pointer font-semibold text-emerald-600 focus:text-emerald-600">
-              <Clock className="mr-2 h-4 w-4" /> Attendance
             </DropdownMenuItem>
           </Link>
         )}

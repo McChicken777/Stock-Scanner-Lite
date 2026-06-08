@@ -249,6 +249,7 @@ router.get("/my-pending-count", requireAuth, async (req, res) => {
         eq(workProjectsTable.status, "in_progress"),
         eq(workItemStepsTable.status, "not_started"),
         inArray(workItemStepsTable.stationTypeId, typeIds),
+        sql`NOT EXISTS (SELECT 1 FROM work_item_steps AS prev WHERE prev.item_id = work_item_steps.item_id AND prev.sort_order < work_item_steps.sort_order AND prev.status != 'completed')`,
       ));
 
     res.json({ pending: rows.length });

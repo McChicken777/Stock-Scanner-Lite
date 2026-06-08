@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable } from "@workspace/db";
-import { eq, and, sql, isNull, ne, lt } from "drizzle-orm";
+import { eq, and, sql, isNull, ne } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -24,32 +24,23 @@ router.get("/attention", requireAuth, async (req, res) => {
       ));
     const leaveRequests = pendingLeave.length;
 
-    // Count low-stock products (totalStock < bufferStock)
-    const stockRows = await db
-      .select({
-        productId: stockTable.productId,
-        total: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::int`.as("total"),
-      })
-      .from(stockTable)
-      .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
-      .where(eq(productsTable.companyId, companyId))
-      .groupBy(stockTable.productId);
-
-    const stockMap = new Map(stockRows.map((r) => [r.productId, r.total]));
-
-    const allProducts = await db
-      .select({ id: productsTable.id, bufferStock: productsTable.bufferStock })
+    // Count low-stock products (totalStock < bufferStock) — single SQL query with HAVING
+    const lowStockProducts = await db
+      .select({ id: productsTable.id })
       .from(productsTable)
-      .where(eq(productsTable.companyId, companyId));
+      .leftJoin(stockTable, eq(stockTable.productId, productsTable.id))
+      .where(and(eq(productsTable.companyId, companyId), sql`${productsTable.bufferStock} > 0`))
+      .groupBy(productsTable.id, productsTable.bufferStock)
+      .having(sql`COALESCE(SUM(${stockTable.quantity}), 0) < ${productsTable.bufferStock}`);
+    const lowStock = lowStockProducts.length;
 
-    const lowStock = allProducts.filter((p) => p.bufferStock > 0 && (stockMap.get(p.id) ?? 0) < p.bufferStock).length;
-
+    // Count overdue jobs — compare date part only so same-day deadlines don't immediately fire
     const overdueRows = await db.select({ id: workProjectsTable.id })
       .from(workProjectsTable)
       .where(and(
         eq(workProjectsTable.companyId, companyId),
         eq(workProjectsTable.status, "in_progress"),
-        lt(workProjectsTable.deadline, new Date()),
+        sql`${workProjectsTable.deadline}::date < CURRENT_DATE`,
       ));
     const overdueJobs = overdueRows.length;
 

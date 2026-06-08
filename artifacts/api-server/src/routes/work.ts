@@ -2106,6 +2106,7 @@ router.get("/projects", requireAuth, async (req, res) => {
         return {
           ...project,
           itemCount: items.length,
+          itemNames: [...new Set(items.map((i) => i.name.replace(/ #\d+$/, "").replace(/ › .*$/, "")))],
           totalProcedures,
           completedProcedures,
           inProgressCount,
@@ -4469,6 +4470,7 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
       .select({
         id: workItemStepsTable.id,
         status: workItemStepsTable.status,
+        roleId: workItemStepsTable.roleId,
         projectId: workProjectsTable.id,
         projectStatus: workProjectsTable.status,
         consumesProductId: workItemStepsTable.consumesProductId,
@@ -4481,6 +4483,17 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
 
     if (!row) { res.status(404).json({ error: "Step not found" }); return; }
     if (row.status === "completed") { res.json({ ok: true }); return; } // idempotent
+
+    // Role check: regular workers can only complete steps their role is assigned to
+    const isPrivileged = req.session.role === "admin" || req.session.role === "owner" || req.session.isSupervisor;
+    if (!isPrivileged && row.roleId !== null) {
+      const userRoles = await db.select({ roleId: userRolesTable.roleId })
+        .from(userRolesTable).where(eq(userRolesTable.userId, userId));
+      if (!userRoles.some((r) => r.roleId === row.roleId)) {
+        res.status(403).json({ error: "You don't have the required role for this step" });
+        return;
+      }
+    }
 
     // Close any open time log for this step
     await db.update(workTimeLogsTable)
