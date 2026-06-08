@@ -4471,6 +4471,8 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
         status: workItemStepsTable.status,
         projectId: workProjectsTable.id,
         projectStatus: workProjectsTable.status,
+        consumesProductId: workItemStepsTable.consumesProductId,
+        consumesQuantity: workItemStepsTable.consumesQuantity,
       })
       .from(workItemStepsTable)
       .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
@@ -4488,6 +4490,26 @@ router.post("/steps/:stepId/complete", requireAuth, async (req, res) => {
     await db.update(workItemStepsTable)
       .set({ status: "completed" })
       .where(eq(workItemStepsTable.id, stepId));
+
+    // Deduct stock if this step consumes a material
+    if (row.consumesProductId && Number(row.consumesQuantity) > 0) {
+      const locationIds = (await db.select({ id: locationsTable.id })
+        .from(locationsTable).where(eq(locationsTable.companyId, companyId)))
+        .map((l) => l.id);
+      if (locationIds.length > 0) {
+        const [stockRow] = await db
+          .select({ locationId: stockTable.locationId, quantity: stockTable.quantity })
+          .from(stockTable)
+          .where(and(eq(stockTable.productId, row.consumesProductId), inArray(stockTable.locationId, locationIds)))
+          .orderBy(desc(stockTable.quantity))
+          .limit(1);
+        if (stockRow) {
+          await db.update(stockTable)
+            .set({ quantity: Math.max(0, Number(stockRow.quantity) - Number(row.consumesQuantity)) })
+            .where(and(eq(stockTable.locationId, stockRow.locationId), eq(stockTable.productId, row.consumesProductId)));
+        }
+      }
+    }
 
     // Auto-complete project: if all steps in the project are now completed, close it
     if (row.projectStatus !== "completed") {

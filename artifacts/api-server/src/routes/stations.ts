@@ -223,6 +223,41 @@ router.delete("/workstations/:id", requireAdmin, async (req, res) => {
   }
 });
 
+// GET /api/stations/my-pending-count — total not_started steps in the current user's station queues
+router.get("/my-pending-count", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
+
+    const userRoles = await db.select({ roleId: userRolesTable.roleId })
+      .from(userRolesTable).where(eq(userRolesTable.userId, userId));
+    const roleIds = userRoles.map((r) => r.roleId);
+    if (roleIds.length === 0) { res.json({ pending: 0 }); return; }
+
+    const myStationTypes = await db.select({ id: stationTypesTable.id })
+      .from(stationTypesTable)
+      .where(and(eq(stationTypesTable.companyId, companyId), inArray(stationTypesTable.roleId, roleIds)));
+    const typeIds = myStationTypes.map((t) => t.id);
+    if (typeIds.length === 0) { res.json({ pending: 0 }); return; }
+
+    const rows = await db.select({ id: workItemStepsTable.id })
+      .from(workItemStepsTable)
+      .innerJoin(workProjectItemsTable, eq(workItemStepsTable.itemId, workProjectItemsTable.id))
+      .innerJoin(workProjectsTable, eq(workProjectItemsTable.projectId, workProjectsTable.id))
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        eq(workItemStepsTable.status, "not_started"),
+        inArray(workItemStepsTable.stationTypeId, typeIds),
+      ));
+
+    res.json({ pending: rows.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get pending count");
+    res.status(500).json({ error: "Failed" });
+  }
+});
+
 // ─── Station Queue ─────────────────────────────────────────────────────────────
 // Returns all not_started steps for a station type, grouped by project → item
 

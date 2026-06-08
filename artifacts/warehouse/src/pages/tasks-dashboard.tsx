@@ -632,13 +632,13 @@ function MyStepsTab() {
         )}
         {variant === "inProgress" && (
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => setWipStepId(step.id)}
-              className="flex-1 bg-green-600 hover:bg-green-700 font-bold">
-              <CheckCircle2 className="h-4 w-4 mr-1.5" /> Mark Complete
+            <Button onClick={() => setWipStepId(step.id)}
+              className="flex-1 h-12 text-base bg-green-600 hover:bg-green-700 font-bold gap-2">
+              <CheckCircle2 className="h-5 w-5" /> Mark Complete
             </Button>
-            <Button size="sm" variant="outline" className="h-8 w-8 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
+            <Button variant="outline" className="h-12 w-12 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
               onClick={() => setShortageStepId(step.id)}>
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className="h-5 w-5" />
             </Button>
           </div>
         )}

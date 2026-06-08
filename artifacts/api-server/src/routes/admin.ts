@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable } from "@workspace/db";
-import { eq, and, sql, isNull, ne } from "drizzle-orm";
+import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable } from "@workspace/db";
+import { eq, and, sql, isNull, ne, lt } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -44,7 +44,16 @@ router.get("/attention", requireAuth, async (req, res) => {
 
     const lowStock = allProducts.filter((p) => p.bufferStock > 0 && (stockMap.get(p.id) ?? 0) < p.bufferStock).length;
 
-    res.json({ total: leaveRequests + lowStock, leaveRequests, lowStock });
+    const overdueRows = await db.select({ id: workProjectsTable.id })
+      .from(workProjectsTable)
+      .where(and(
+        eq(workProjectsTable.companyId, companyId),
+        eq(workProjectsTable.status, "in_progress"),
+        lt(workProjectsTable.deadline, new Date()),
+      ));
+    const overdueJobs = overdueRows.length;
+
+    res.json({ total: leaveRequests + lowStock + overdueJobs, leaveRequests, lowStock, overdueJobs });
   } catch (err: any) {
     console.error("attention endpoint error:", err?.message ?? err);
     res.status(500).json({ error: "Failed to get attention counts" });
