@@ -7,13 +7,12 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Loader2, Package, ChevronDown, ChevronUp, ChevronRight,
   Wrench, ShoppingCart, X, ListPlus, GripVertical,
-  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, Check, FileText,
+  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, FileText,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { AiTipsPanel } from "@/components/ai-tips-panel";
 
 interface Role { id: number; name: string; }
@@ -870,15 +869,7 @@ export default function WorkTemplatesPage() {
   const [, navigate] = useLocation();
   const [newTemplateName, setNewTemplateName] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [aiGenerateOpen, setAiGenerateOpen] = useState(false);
-  const [aiDescription, setAiDescription] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  type AiPreview = {
-    name: string;
-    parts: { name: string; itemType: string; procedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[] }[];
-    topProcedures: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
-  };
-  const [aiPreview, setAiPreview] = useState<AiPreview | null>(null);
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["/api/work/templates"],
@@ -941,34 +932,6 @@ export default function WorkTemplatesPage() {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const aiGenerate = useMutation({
-    mutationFn: (description: string) => apiFetch("/api/work/templates/generate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description, existingRoles: roles }),
-    }),
-    onSuccess: (data: { preview: AiPreview }) => {
-      setAiPreview(data.preview);
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
-
-  const confirmGenerate = useMutation({
-    mutationFn: (payload: AiPreview) => apiFetch("/api/work/templates/confirm-generate", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }),
-    onSuccess: (data: { template: Template }) => {
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      setAiGenerateOpen(false);
-      setAiPreview(null);
-      setAiDescription("");
-      setExpandedId(data.template.id);
-      toast({ title: "Template saved!" });
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
-
   const seedStarterPack = useMutation({
     mutationFn: () => apiFetch("/api/work/templates/seed-starter-pack", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -999,94 +962,6 @@ export default function WorkTemplatesPage() {
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Admin Only</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* AI Generate */}
-          <Dialog open={aiGenerateOpen} onOpenChange={(o) => { setAiGenerateOpen(o); if (!o) setAiPreview(null); }}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1 bg-purple-600 hover:bg-purple-700 text-white font-bold">
-                <Sparkles className="h-3.5 w-3.5" /> Create with AI
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="w-[90vw] max-w-md rounded-xl">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-purple-600" /> Generate Template with AI
-                </DialogTitle>
-              </DialogHeader>
-
-              {!aiPreview ? (
-                /* Step 1: describe */
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold">Describe what you're making</label>
-                    <Textarea
-                      value={aiDescription}
-                      onChange={(e) => setAiDescription(e.target.value)}
-                      placeholder="e.g. A welded steel gate with CNC-machined latch brackets, powder coated finish…"
-                      className="border-2 min-h-[100px] text-sm"
-                      rows={4}
-                    />
-                  </div>
-                  <AiTipsPanel context="template" defaultOpen />
-                  <p className="text-xs text-muted-foreground">
-                    AI will generate a template with sub-parts and production steps for review before saving.
-                  </p>
-                  <Button
-                    className="w-full h-11 font-bold bg-purple-600 hover:bg-purple-700"
-                    disabled={!aiDescription.trim() || aiGenerate.isPending}
-                    onClick={() => aiGenerate.mutate(aiDescription.trim())}
-                  >
-                    {aiGenerate.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…</> : <><Sparkles className="mr-2 h-4 w-4" /> Generate Preview</>}
-                  </Button>
-                </div>
-              ) : (
-                /* Step 2: review preview before saving */
-                <div className="space-y-3">
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2 max-h-72 overflow-y-auto">
-                    <p className="font-bold text-sm">{aiPreview.name}</p>
-                    {aiPreview.topProcedures.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">Top-level steps</p>
-                        <ul className="space-y-0.5">
-                          {aiPreview.topProcedures.map((p, i) => (
-                            <li key={i} className="text-xs text-foreground flex items-center gap-1.5">
-                              <span className="text-muted-foreground font-mono">{i + 1}.</span> {p.name}
-                              {p.roleId && <span className="text-purple-600 text-[10px]">({roles.find(r => r.id === p.roleId)?.name})</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {aiPreview.parts.map((part, pi) => (
-                      <div key={pi}>
-                        <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">{part.name}</p>
-                        <ul className="space-y-0.5 pl-2">
-                          {part.procedures.map((p, i) => (
-                            <li key={i} className="text-xs text-foreground flex items-center gap-1.5">
-                              <span className="text-muted-foreground font-mono">{i + 1}.</span> {p.name}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Review the steps above. Click Save to create the template, or go back to try a different description.</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="flex-1" onClick={() => setAiPreview(null)} disabled={confirmGenerate.isPending}>
-                      ← Edit description
-                    </Button>
-                    <Button
-                      className="flex-1 font-bold bg-purple-600 hover:bg-purple-700"
-                      disabled={confirmGenerate.isPending}
-                      onClick={() => confirmGenerate.mutate(aiPreview)}
-                    >
-                      {confirmGenerate.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving…</> : <><Check className="mr-2 h-4 w-4" /> Save Template</>}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </DialogContent>
-          </Dialog>
-
           {/* Outline Import */}
           <Button
             size="sm"
@@ -1169,12 +1044,6 @@ export default function WorkTemplatesPage() {
               <FileText className="h-4 w-4" /> Outline Import (Fast)
             </Button>
             <Button
-              className="w-full font-bold gap-2 bg-purple-600 hover:bg-purple-700"
-              onClick={() => setAiGenerateOpen(true)}
-            >
-              <Sparkles className="h-4 w-4" /> Create with AI
-            </Button>
-            <Button
               className="w-full font-bold gap-2 bg-green-600 hover:bg-green-700"
               onClick={() => seedStarterPack.mutate()}
               disabled={seedStarterPack.isPending}
@@ -1189,11 +1058,6 @@ export default function WorkTemplatesPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-            <p className="font-semibold mb-0.5">How templates work</p>
-            <p className="text-xs">Each template defines the production steps for a final product. Assign roles to steps for worker routing. Sub-parts are created as separate work items when you start a work order.</p>
-          </div>
-
           <div className="space-y-3">
             {templates.map((template) => {
               const isExpanded = expandedId === template.id;

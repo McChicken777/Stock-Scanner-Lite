@@ -183,11 +183,6 @@ export default function AdminStationsPage() {
         </p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 space-y-1">
-        <p className="font-bold">How it works</p>
-        <p>Add stations in production order (Cutting → CNC → Welding). Link each station to a worker role — workers with that role will automatically see this station&apos;s queue. Add the physical machines under each station type.</p>
-      </div>
-
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted/30 rounded-xl animate-pulse" />)}
