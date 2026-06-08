@@ -203,7 +203,7 @@ router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => 
 
     await db.update(orderItemsTable)
       .set({ quantity })
-      .where(eq(orderItemsTable.id, parseInt(itemId)));
+      .where(and(eq(orderItemsTable.id, parseInt(itemId)), eq(orderItemsTable.companyId, companyId!)));
 
     res.json({ success: true });
   } catch (err) {
@@ -231,7 +231,7 @@ router.delete("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) 
       return;
     }
 
-    await db.delete(orderItemsTable).where(eq(orderItemsTable.id, parseInt(itemId)));
+    await db.delete(orderItemsTable).where(and(eq(orderItemsTable.id, parseInt(itemId)), eq(orderItemsTable.companyId, companyId!)));
 
     res.json({ success: true });
   } catch (err) {
@@ -260,7 +260,7 @@ router.put("/:id/mark-sent", requireAuth, requireAdmin, async (req, res) => {
 
     await db.update(ordersTable)
       .set({ status: "sent" })
-      .where(eq(ordersTable.id, parseInt(id)));
+      .where(and(eq(ordersTable.id, parseInt(id)), eq(ordersTable.companyId, companyId!)));
 
     res.json({ success: true });
   } catch (err) {
