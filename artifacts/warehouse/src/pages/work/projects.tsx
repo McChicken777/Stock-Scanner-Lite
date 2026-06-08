@@ -862,7 +862,7 @@ export default function WorkProjectsPage() {
 
           {/* Summary chips */}
           {(() => {
-            const filtered = search.trim() ? projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) : projects;
+            const q = search.trim().toLowerCase(); const filtered = q ? projects.filter((p) => p.name.toLowerCase().includes(q) || p.activeWorkers.some((w) => w.toLowerCase().includes(q))) : projects;
             const active = filtered.filter((p) => p.status === "in_progress");
             const overdue = active.filter((p) => isPast(new Date(p.deadline)));
             const blocked = active.filter((p) => p.blockedCount > 0);
@@ -877,7 +877,7 @@ export default function WorkProjectsPage() {
 
           {/* Jobs grouped by urgency */}
           {(() => {
-            const filtered = search.trim() ? projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) : projects;
+            const q = search.trim().toLowerCase(); const filtered = q ? projects.filter((p) => p.name.toLowerCase().includes(q) || p.activeWorkers.some((w) => w.toLowerCase().includes(q))) : projects;
             const active = filtered.filter((p) => p.status === "in_progress").sort(sortByUrgency);
             const overdue = active.filter((p) => isPast(new Date(p.deadline)));
             const today = active.filter((p) => { const d = differenceInDays(new Date(p.deadline), new Date()); return !isPast(new Date(p.deadline)) && d <= 1; });
