@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 interface Material {
   id: number;
-  name: number;
+  name: string;
   category: string;
   totalStock: number;
   bufferStock: number;
