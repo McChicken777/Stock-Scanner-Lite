@@ -515,16 +515,18 @@ router.delete("/shifts/:id", requireAdmin, async (req, res) => {
 
 // ─── Outline Editor Settings ─────────────────────────────────────────────────
 
+const EMPTY_OUTLINE_SETTINGS = { opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {} };
+
 router.get("/outline", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const [company] = await db.select({ outlineSettings: companiesTable.outlineSettings })
       .from(companiesTable).where(eq(companiesTable.id, companyId));
-    if (!company) { res.status(404).json({ error: "Company not found" }); return; }
-    res.json(company.outlineSettings ?? { opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {} });
-  } catch (err) {
-    req.log.error({ err }, "Failed to get outline settings");
-    res.status(500).json({ error: "Failed to get outline settings" });
+    if (!company) { res.json(EMPTY_OUTLINE_SETTINGS); return; }
+    res.json(company.outlineSettings ?? EMPTY_OUTLINE_SETTINGS);
+  } catch {
+    // Column may not exist yet if migration hasn't run — return empty defaults gracefully
+    res.json(EMPTY_OUTLINE_SETTINGS);
   }
 });
 
@@ -547,8 +549,8 @@ router.put("/outline", requireAdmin, async (req, res) => {
     await db.update(companiesTable).set({ outlineSettings: parsed.data }).where(eq(companiesTable.id, companyId));
     res.json(parsed.data);
   } catch (err) {
-    req.log.error({ err }, "Failed to update outline settings");
-    res.status(500).json({ error: "Failed to update outline settings" });
+    req.log.error({ err }, "Failed to update outline settings — run migration 0016_outline_settings.sql");
+    res.status(500).json({ error: "Failed to update outline settings. Please run the latest migration." });
   }
 });
 
