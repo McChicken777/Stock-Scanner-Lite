@@ -178,7 +178,7 @@ function AdminDesktopSidebar() {
     refetchInterval: 60_000,
   });
 
-  const isJobsActive = location.startsWith("/work/projects") || location.startsWith("/tasks") || location.startsWith("/work/inbound") || location.startsWith("/work/templates");
+  const isJobsActive = location.startsWith("/work/projects") || location.startsWith("/tasks") || location.startsWith("/work/inbound") || location.startsWith("/work/templates") || location.startsWith("/work/template-outline");
   const isCustomersActive = location.startsWith("/customers") || location.startsWith("/quotes") || location.startsWith("/orders");
   const isPurchasingActive = location.startsWith("/work/reorder") || location.startsWith("/work/purchase-orders");
 
@@ -200,16 +200,17 @@ function AdminDesktopSidebar() {
         <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />
 
         <SidebarSection label="Work" />
-        <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates")} />
+        <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />
         <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials")} />
         <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />
+        <SideNavItem href="/work/queues" icon={CheckSquare} label="Station Queues" active={location.startsWith("/work/queue")} />
         {user?.plan === "pro" && (
           <SideNavItem href="/analytics" icon={BarChart2} label="AI Analytics" active={location.startsWith("/analytics")} />
         )}
 
         <SidebarSection label="People" />
         <SideNavItem href="/admin/users" icon={Users} label="Manage Users" active={location.startsWith("/admin/users")} />
-        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location === "/attendance" || location.startsWith("/attendance-report")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />
         <SideNavItem href="/admin/leave-inbox" icon={Inbox} label="Leave Requests" active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />
 
         <SidebarSection label="Business" />
@@ -251,6 +252,7 @@ function SupervisorDesktopSidebar() {
         <SideNavItem href="/tasks" icon={CheckSquare} label="Tasks" active={location.startsWith("/tasks")} />
         <SideNavItem href="/work/projects" icon={FolderKanban} label="Projects" active={location.startsWith("/work/projects")} />
         <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/work/queues" icon={Layers} label="Station Queues" active={location.startsWith("/work/queue")} />
         <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />
         <SideNavItem href="/supervisor" icon={Eye} label="Supervisor View" active={location.startsWith("/supervisor")} />
       </nav>
@@ -300,6 +302,7 @@ function WorkerDesktopSidebar() {
         <SidebarSection label="Navigation" />
         <SideNavItem href="/tasks" icon={CheckSquare} label="My Tasks" active={location.startsWith("/tasks")} />
         <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/work/queues" icon={Layers} label="Station Queues" active={location.startsWith("/work/queue")} />
         <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
         {painterData?.isPainter && (
           <SideNavItem href="/work/paint-queue" icon={Palette} label="Paint Shop" active={location.startsWith("/work/paint-queue")} />
@@ -345,7 +348,8 @@ function AdminBottomNav() {
     location.startsWith("/work/projects") ||
     location.startsWith("/tasks") ||
     location.startsWith("/work/inbound") ||
-    location.startsWith("/work/templates");
+    location.startsWith("/work/templates") ||
+    location.startsWith("/work/template-outline");
   const isCustomersActive =
     location.startsWith("/customers") ||
     location.startsWith("/quotes") ||
@@ -428,6 +432,15 @@ function AdminBottomNav() {
                 <div>
                   <p className="text-sm font-semibold">Production Flow</p>
                   <p className="text-xs text-muted-foreground">Station types & workstations (machines)</p>
+                </div>
+              </div>
+            </Link>
+            <Link href="/work/queues" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <CheckSquare className="h-5 w-5 text-teal-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">Station Queues</p>
+                  <p className="text-xs text-muted-foreground">Live work queue per station type</p>
                 </div>
               </div>
             </Link>

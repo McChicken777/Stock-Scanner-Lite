@@ -30,6 +30,23 @@ export const PLAN_FEATURES: Record<"basic" | "pro", CompanyFeatures> = {
   },
 };
 
+export interface OutlineOpCode {
+  stationTypeId: number;
+  stationTypeName: string;
+}
+
+export interface OutlineConditionalExclusion {
+  excludeCode: string;
+  ifHasCode: string;
+}
+
+export interface OutlineSettings {
+  opCodes: Record<string, OutlineOpCode>;
+  defaultOpCodes: string[];
+  conditionalExclusions: OutlineConditionalExclusion[];
+  profiles: Record<string, string[]>;
+}
+
 export const companiesTable = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -39,6 +56,9 @@ export const companiesTable = pgTable("companies", {
   weekendOvertimeEnabled: boolean("weekend_overtime_enabled").notNull().default(true),
   country: text("country"),
   timezone: text("timezone").notNull().default("UTC"),
+  outlineSettings: jsonb("outline_settings").notNull().$type<OutlineSettings>().$defaultFn(() => ({
+    opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {},
+  })),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

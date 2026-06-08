@@ -7,6 +7,7 @@ import {
   productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
   suppliersTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
+  stationTypesTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -423,6 +424,134 @@ router.post("/templates/confirm-generate", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── OUTLINE IMPORT ───────────────────────────────────────────────────────────
+// Accepts a structured outline payload and bulk-creates a template + BOM + steps in one shot.
+
+interface OutlineImportPart {
+  name: string;
+  quantity: number;
+  ops: string[];
+  stationTypeIds: number[];
+  children: OutlineImportPart[];
+}
+
+router.post("/templates/outline-import", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const partSchema: z.ZodType<any> = z.lazy(() => z.object({
+      name: z.string().min(1),
+      quantity: z.number().int().min(1).default(1),
+      stationTypeIds: z.array(z.number().int()),
+      ops: z.array(z.string()),
+      children: z.array(partSchema),
+    }));
+
+    const bodySchema = z.object({
+      templateName: z.string().min(1),
+      rootOps: z.array(z.string()).default([]),
+      rootStationTypeIds: z.array(z.number().int()).default([]),
+      children: z.array(partSchema),
+    });
+
+    const parsed = bodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid outline payload", details: parsed.error.issues });
+      return;
+    }
+
+    const { templateName, rootOps, rootStationTypeIds, children } = parsed.data;
+
+    // Collect and verify all station type IDs belong to this company
+    const allTypeIds = new Set<number>();
+    const collectTypeIds = (parts: OutlineImportPart[]) => {
+      for (const p of parts) {
+        for (const id of p.stationTypeIds) allTypeIds.add(id);
+        collectTypeIds(p.children);
+      }
+    };
+    rootStationTypeIds.forEach((id) => allTypeIds.add(id));
+    collectTypeIds(children);
+
+    if (allTypeIds.size > 0) {
+      const validTypes = await db.select({ id: stationTypesTable.id })
+        .from(stationTypesTable)
+        .where(and(eq(stationTypesTable.companyId, companyId), inArray(stationTypesTable.id, Array.from(allTypeIds))));
+      const validIds = new Set(validTypes.map((t) => t.id));
+      const invalid = Array.from(allTypeIds).filter((id) => !validIds.has(id));
+      if (invalid.length > 0) {
+        res.status(400).json({ error: `Invalid station type IDs: ${invalid.join(", ")}` });
+        return;
+      }
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [rootProduct] = await tx.insert(productsTable).values({
+        name: templateName, category: "Template", itemType: "final_product",
+        bufferStock: 0, targetStock: 0, companyId,
+      }).returning();
+
+      const [template] = await tx.insert(workTemplatesTable).values({
+        name: templateName, companyId, productId: rootProduct.id,
+      }).returning();
+
+      // Top-level template steps (root ops)
+      for (let i = 0; i < rootStationTypeIds.length; i++) {
+        await tx.insert(workStepsTable).values({
+          templateId: template.id, name: rootOps[i] ?? `Step ${i + 1}`,
+          sortOrder: i, stationTypeId: rootStationTypeIds[i],
+          batchMode: "individual", templateComponentId: null,
+        });
+      }
+
+      let partCount = 0;
+
+      async function insertParts(parts: OutlineImportPart[], parentProductId: number) {
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          partCount++;
+
+          const [product] = await tx.insert(productsTable).values({
+            name: part.name, category: "Component", itemType: "manufactured_part",
+            bufferStock: 0, targetStock: 0, companyId,
+          }).returning();
+
+          const [compEntry] = await tx.insert(productComponentsTable).values({
+            parentProductId, componentProductId: product.id,
+            quantity: part.quantity, sortOrder: i,
+          }).returning();
+
+          for (let j = 0; j < part.stationTypeIds.length; j++) {
+            await tx.insert(workStepsTable).values({
+              templateId: template.id, templateComponentId: compEntry.id,
+              name: part.ops[j] ?? `Step ${j + 1}`,
+              sortOrder: j, stationTypeId: part.stationTypeIds[j],
+              batchMode: "individual",
+            });
+          }
+
+          if (part.children.length > 0) {
+            await insertParts(part.children, product.id);
+          }
+        }
+      }
+
+      await insertParts(children, rootProduct.id);
+      return { template, partCount };
+    });
+
+    res.status(201).json({
+      templateId: result.template.id,
+      templateName: result.template.name,
+      partCount: result.partCount,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to outline-import template");
+    res.status(500).json({ error: "Failed to create template from outline" });
+  }
+});
+
 router.post("/templates", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
@@ -472,7 +601,31 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
 
     const cloneName = `${source.name} (copy)`;
 
-    // Clone the final_product
+    // compEntryIdMap: old product_components.id → new product_components.id
+    const compEntryIdMap = new Map<number, number>();
+
+    // Recursively clone products + component entries for all BOM levels
+    async function cloneComponents(oldParentProductId: number, newParentProductId: number) {
+      const children = await db.select().from(productComponentsTable)
+        .where(eq(productComponentsTable.parentProductId, oldParentProductId))
+        .orderBy(productComponentsTable.sortOrder);
+      for (const comp of children) {
+        const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
+        if (!compProduct) continue;
+        const [newCompProduct] = await db.insert(productsTable).values({
+          name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
+          bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
+        }).returning();
+        const [newCompEntry] = await db.insert(productComponentsTable).values({
+          parentProductId: newParentProductId, componentProductId: newCompProduct.id,
+          quantity: comp.quantity, sortOrder: comp.sortOrder,
+        }).returning();
+        compEntryIdMap.set(comp.id, newCompEntry.id);
+        // Recurse for grandchildren
+        await cloneComponents(comp.componentProductId, newCompProduct.id);
+      }
+    }
+
     let newProductId: number | null = null;
     if (source.productId) {
       const [srcProduct] = await db.select().from(productsTable).where(eq(productsTable.id, source.productId));
@@ -482,27 +635,7 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
           bufferStock: srcProduct.bufferStock, targetStock: srcProduct.targetStock, companyId,
         }).returning();
         newProductId = newProduct.id;
-
-        // Clone BOM components
-        const components = await db.select().from(productComponentsTable)
-          .where(eq(productComponentsTable.parentProductId, source.productId))
-          .orderBy(productComponentsTable.sortOrder);
-
-        // Track old→new component ID mapping for copying work_steps
-        const compIdMap = new Map<number, number>(); // oldComponentId → newComponentId
-        for (const comp of components) {
-          const [compProduct] = await db.select().from(productsTable).where(eq(productsTable.id, comp.componentProductId));
-          if (!compProduct) continue;
-          const [newComp] = await db.insert(productsTable).values({
-            name: compProduct.name, category: compProduct.category, itemType: compProduct.itemType,
-            bufferStock: compProduct.bufferStock, targetStock: compProduct.targetStock, companyId,
-          }).returning();
-          const [newCompEntry] = await db.insert(productComponentsTable).values({
-            parentProductId: newProductId, componentProductId: newComp.id,
-            quantity: comp.quantity, sortOrder: comp.sortOrder,
-          }).returning();
-          compIdMap.set(comp.id, newCompEntry.id);
-        }
+        await cloneComponents(source.productId, newProductId);
       }
     }
 
@@ -510,34 +643,20 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
       name: cloneName, companyId, productId: newProductId,
     }).returning();
 
-    // Clone all work_steps (top-level and component-level)
+    // Clone all work_steps using the complete compEntryIdMap
     const srcSteps = await db.select().from(workStepsTable)
       .where(eq(workStepsTable.templateId, templateId))
       .orderBy(workStepsTable.sortOrder);
 
-    // Rebuild compIdMap in scope for step cloning
-    // Re-query the new template's components to map old→new component IDs
-    const newComponents = newProductId
-      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, newProductId))
-      : [];
-    const oldComponents = source.productId
-      ? await db.select().from(productComponentsTable).where(eq(productComponentsTable.parentProductId, source.productId))
-        .orderBy(productComponentsTable.sortOrder)
-      : [];
-    // Match by sortOrder (same order as original)
-    const cloneCompIdMap = new Map<number, number>();
-    oldComponents.forEach((oc, i) => {
-      if (newComponents[i]) cloneCompIdMap.set(oc.id, newComponents[i].id);
-    });
-
     for (const s of srcSteps) {
       const newTemplateComponentId = s.templateComponentId
-        ? (cloneCompIdMap.get(s.templateComponentId) ?? null)
+        ? (compEntryIdMap.get(s.templateComponentId) ?? null)
         : null;
       await db.insert(workStepsTable).values({
         templateId: newTemplate.id, name: s.name, sortOrder: s.sortOrder,
         requiresInbound: s.requiresInbound, roleId: s.roleId ?? null,
         batchMode: s.batchMode ?? "individual", durationEstimate: s.durationEstimate ?? null,
+        stationTypeId: s.stationTypeId ?? null,
         templateComponentId: newTemplateComponentId,
       });
     }
