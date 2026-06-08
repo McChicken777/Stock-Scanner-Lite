@@ -4597,4 +4597,59 @@ router.get("/materials", requireAuth, async (req, res) => {
   }
 });
 
+// POST /work/stocktake — bulk-update stock quantities from a physical count.
+// Body: { items: { productId: number; newQuantity: number }[] }
+// Adjusts the location with the most stock (deduct) or the first location (add).
+router.post("/stocktake", requireAuth, async (req, res) => {
+  try {
+    if (req.session.role !== "admin" && !req.session.isSupervisor) {
+      res.status(403).json({ error: "Supervisor or admin only" }); return;
+    }
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      items: z.array(z.object({ productId: z.number().int(), newQuantity: z.number().int().min(0) })),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid payload" }); return; }
+
+    const locationIds = (await db.select({ id: locationsTable.id })
+      .from(locationsTable).where(eq(locationsTable.companyId, companyId)))
+      .map((l) => l.id);
+
+    for (const { productId, newQuantity } of parsed.data.items) {
+      // Verify product belongs to this company
+      const [product] = await db.select({ id: productsTable.id })
+        .from(productsTable)
+        .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+      if (!product) continue;
+
+      if (locationIds.length === 0) continue;
+
+      const stockRows = await db.select({ locationId: stockTable.locationId, quantity: stockTable.quantity })
+        .from(stockTable)
+        .where(and(eq(stockTable.productId, productId), inArray(stockTable.locationId, locationIds)));
+
+      const currentTotal = stockRows.reduce((sum, r) => sum + Number(r.quantity), 0);
+      if (currentTotal === newQuantity) continue;
+
+      if (stockRows.length === 0) {
+        // No existing stock rows — insert into first location
+        await db.insert(stockTable).values({ locationId: locationIds[0], productId, quantity: newQuantity })
+          .onConflictDoUpdate({ target: [stockTable.locationId, stockTable.productId], set: { quantity: newQuantity } });
+      } else {
+        // Apply delta to the location with highest stock
+        const target = stockRows.sort((a, b) => Number(b.quantity) - Number(a.quantity))[0];
+        const delta = newQuantity - currentTotal;
+        const newQty = Math.max(0, Number(target.quantity) + delta);
+        await db.update(stockTable).set({ quantity: newQty })
+          .where(and(eq(stockTable.locationId, target.locationId), eq(stockTable.productId, productId)));
+      }
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save stocktake");
+    res.status(500).json({ error: "Failed to save stocktake" });
+  }
+});
+
 export default router;

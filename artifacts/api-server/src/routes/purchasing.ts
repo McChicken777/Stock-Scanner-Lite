@@ -376,7 +376,7 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
     // Update item quantity arrived
     const [updatedItem] = await db.update(purchaseOrderItemsTable)
       .set({ quantityArrived: totalArrived })
-      .where(eq(purchaseOrderItemsTable.id, itemId))
+      .where(and(eq(purchaseOrderItemsTable.id, itemId), eq(purchaseOrderItemsTable.companyId, companyId)))
       .returning();
 
     // Auto-suggest unit cost from PO unit price when product has no cost yet

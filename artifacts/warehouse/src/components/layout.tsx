@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin, Clock,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
@@ -201,7 +201,8 @@ function AdminDesktopSidebar() {
 
         <SidebarSection label="Work" />
         <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />
-        <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials")} />
+        <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />
+        <SideNavItem href="/work/stocktake" icon={ClipboardList} label="Stock-Take" active={location.startsWith("/work/stocktake")} />
         <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />
         <SideNavItem href="/work/queues" icon={CheckSquare} label="Station Queues" active={location.startsWith("/work/queue")} />
         {user?.plan === "pro" && (

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Building2, Plus, ChevronDown, ChevronUp, Users, Loader2,
-  Pencil, Check, X, KeyRound, Trash2, UserPlus, Crown,
+  Pencil, Check, X, KeyRound, Trash2, UserPlus, Crown, FileDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -395,9 +395,16 @@ export default function OwnerPanelPage() {
               <p className="text-xs text-secondary-foreground/60">Manage all companies and accounts</p>
             </div>
           </div>
-          <Button size="sm" className="gap-1.5" onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4" /> New Company
-          </Button>
+          <div className="flex items-center gap-2">
+            <a href="/onboarding-guide.html" download="Stock-Scanner-Lite-Setup-Guide.html" target="_blank">
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <FileDown className="h-4 w-4" /> Setup Guide
+              </Button>
+            </a>
+            <Button size="sm" className="gap-1.5" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4" /> New Company
+            </Button>
+          </div>
         </div>
       </div>
 

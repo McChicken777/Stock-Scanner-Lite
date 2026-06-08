@@ -112,7 +112,7 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
       return;
     }
 
-    await db.delete(suppliersTable).where(eq(suppliersTable.id, parseInt(id)));
+    await db.delete(suppliersTable).where(and(eq(suppliersTable.id, parseInt(id)), eq(suppliersTable.companyId, companyId!)));
 
     res.json({ success: true });
   } catch (err) {

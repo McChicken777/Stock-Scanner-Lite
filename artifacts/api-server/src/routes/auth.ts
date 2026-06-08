@@ -204,11 +204,12 @@ router.patch("/users/:userId/shift", requireAdmin, async (req, res) => {
 router.delete("/users/:userId", requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.userId);
+    const companyId = req.session.companyId!;
     if (userId === req.session.userId) {
       res.status(400).json({ error: "Cannot delete your own account" });
       return;
     }
-    await db.delete(usersTable).where(eq(usersTable.id, userId));
+    await db.delete(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete user");

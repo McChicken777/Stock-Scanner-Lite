@@ -46,6 +46,7 @@ import PurchaseOrdersPage from "@/pages/work/purchase-orders";
 import PaintQueuePage from "@/pages/work/paint-queue";
 import CuttingQueuePage from "@/pages/work/cutting-queue";
 import MaterialsPage from "@/pages/work/materials";
+import StocktakePage from "@/pages/work/stocktake";
 import AdminStationsPage from "@/pages/admin-stations";
 import QueuesPage from "@/pages/work/queues";
 import StationQueuePage from "@/pages/work/station-queue";
@@ -162,6 +163,7 @@ function ProtectedRoutes() {
         <Route path="/work/paint-queue" component={PaintQueuePage} />
         <Route path="/work/cutting-queue" component={CuttingQueuePage} />
         <Route path="/work/materials" component={MaterialsPage} />
+        <Route path="/work/stocktake" component={StocktakePage} />
         <Route path="/work/queues" component={QueuesPage} />
         <Route path="/work/queue/:typeId" component={StationQueuePage} />
         <Route path="/admin/stations" component={AdminStationsPage} />
