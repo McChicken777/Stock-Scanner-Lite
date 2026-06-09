@@ -37,7 +37,7 @@ router.post("/companies", async (req, res) => {
   try {
     const parsed = z.object({
       companyName: z.string().min(1),
-      plan: z.enum(["basic", "pro"]).default("pro"),
+      plan: z.enum(["lite", "standard", "pro"]).default("standard"),
       adminUsername: z.string().min(2),
       adminPassword: z.string().min(6),
     }).safeParse(req.body);
@@ -83,7 +83,7 @@ router.put("/companies/:id", async (req, res) => {
     const id = Number(req.params.id);
     const parsed = z.object({
       name: z.string().min(1).optional(),
-      plan: z.enum(["basic", "pro"]).optional(),
+      plan: z.enum(["lite", "standard", "pro"]).optional(),
     }).safeParse(req.body);
 
     if (!parsed.success) {

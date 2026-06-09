@@ -16,7 +16,7 @@ export interface AuthUser {
   isSupervisor: boolean;
   companyId: number | null;
   features: CompanyFeatures;
-  plan: "basic" | "pro" | null;
+  plan: "lite" | "standard" | "pro" | null;
 }
 
 interface AuthContextValue {
@@ -32,7 +32,7 @@ const defaultFeatures: CompanyFeatures = {
   progress_tracking: true, deadline_alerts: true, time_tracking: true,
 };
 
-const defaultPlan = null as "basic" | "pro" | null;
+const defaultPlan = null as "lite" | "standard" | "pro" | null;
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -90,4 +90,16 @@ export function useAuth() {
 export function useFeature(feature: keyof CompanyFeatures): boolean {
   const { user } = useAuth();
   return user?.features?.[feature] ?? true;
+}
+
+export type Plan = "lite" | "standard" | "pro";
+const PLAN_ORDER: Record<Plan, number> = { lite: 0, standard: 1, pro: 2 };
+
+export function usePlan() {
+  const { user } = useAuth();
+  const plan = (user?.plan ?? "pro") as Plan;
+  return {
+    plan,
+    atLeast: (tier: Plan) => PLAN_ORDER[plan] >= PLAN_ORDER[tier],
+  };
 }

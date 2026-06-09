@@ -511,6 +511,7 @@ function MyStepsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stations/queue"] });
       toast({ title: "Step started — timer running" });
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
@@ -724,6 +725,7 @@ function BatchQueueTab() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/work/batch-queue"] });
     queryClient.invalidateQueries({ queryKey: ["/api/work/my-steps"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/stations/queue"] });
   };
 
   const batchStart = useMutation({

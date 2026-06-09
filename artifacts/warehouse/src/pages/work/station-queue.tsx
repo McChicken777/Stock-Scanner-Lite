@@ -217,11 +217,11 @@ export default function StationQueuePage() {
   const [completing, setCompleting] = useState<Set<number>>(new Set());
   const [starting, setStarting] = useState<Set<number>>(new Set());
 
-  const key = [`/api/stations/queue/${typeId}`];
+  const key = ["/api/stations/queue", typeId];
   const { data, isLoading } = useQuery<QueueData>({
     queryKey: key,
     queryFn: () => apiFetch(`/api/stations/queue/${typeId}`),
-    refetchInterval: 20000,
+    refetchInterval: 8000,
     enabled: !!typeId,
   });
 
@@ -244,6 +244,7 @@ export default function StationQueuePage() {
       await apiFetch(`/api/work/steps/${stepId}/start`, { method: "POST" });
       qc.invalidateQueries({ queryKey: key });
       qc.invalidateQueries({ queryKey: ["/api/work/active-timer"] });
+      qc.invalidateQueries({ queryKey: ["/api/stations/my-pending-count"] });
       toast({ title: "Step started — good luck! 💪" });
     } catch (e) {
       toast({ title: (e as Error).message, variant: "destructive" });
@@ -258,6 +259,7 @@ export default function StationQueuePage() {
       await apiFetch(`/api/work/steps/${stepId}/complete`, { method: "POST" });
       qc.invalidateQueries({ queryKey: key });
       qc.invalidateQueries({ queryKey: ["/api/work/projects"] });
+      qc.invalidateQueries({ queryKey: ["/api/stations/my-pending-count"] });
       toast({ title: "Step completed ✓" });
     } catch (e) {
       toast({ title: (e as Error).message, variant: "destructive" });

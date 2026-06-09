@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 interface Company {
   id: number;
   name: string;
-  plan: "basic" | "pro";
+  plan: "lite" | "standard" | "pro";
   workHoursPerDay: number;
   weekendOvertimeEnabled: boolean;
   country: string | null;
@@ -668,14 +668,21 @@ export default function AdminCompanyPage() {
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Plan</p>
           <div className={cn(
             "flex items-center justify-between p-4 rounded-xl border-2",
-            company.plan === "pro" ? "border-primary bg-primary/5" : "border-orange-400 bg-orange-50"
+            company.plan === "pro" ? "border-primary bg-primary/5"
+            : company.plan === "standard" ? "border-blue-400 bg-blue-50"
+            : "border-muted-foreground/30 bg-muted/30"
           )}>
             <div>
-              <p className={cn("font-black text-xl uppercase", company.plan === "pro" ? "text-primary" : "text-orange-600")}>
+              <p className={cn("font-black text-xl uppercase",
+                company.plan === "pro" ? "text-primary"
+                : company.plan === "standard" ? "text-blue-600"
+                : "text-muted-foreground")}>
                 {company.plan}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {company.plan === "pro" ? "All features enabled" : "Core features only"}
+                {company.plan === "pro" ? "Full production management"
+                : company.plan === "standard" ? "Jobs, attendance & purchasing"
+                : "Inventory & quotes"}
               </p>
             </div>
             <span className="text-xs font-bold text-green-600 bg-green-100 border border-green-200 rounded-full px-2.5 py-1">

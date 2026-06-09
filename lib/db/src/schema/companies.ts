@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, serial, jsonb, pgEnum, integer, boolean } from "drizzle-orm/pg-core";
 
-export const companyPlanEnum = pgEnum("company_plan", ["basic", "pro"]);
+export const companyPlanEnum = pgEnum("company_plan", ["lite", "standard", "pro"]);
 
 export interface CompanyFeatures {
   inventory: boolean;
@@ -11,13 +11,21 @@ export interface CompanyFeatures {
   time_tracking: boolean;
 }
 
-export const PLAN_FEATURES: Record<"basic" | "pro", CompanyFeatures> = {
-  basic: {
+export const PLAN_FEATURES: Record<"lite" | "standard" | "pro", CompanyFeatures> = {
+  lite: {
     inventory: true,
     alerts: false,
-    work_orders: true,
+    work_orders: false,
     progress_tracking: false,
     deadline_alerts: false,
+    time_tracking: false,
+  },
+  standard: {
+    inventory: true,
+    alerts: true,
+    work_orders: true,
+    progress_tracking: true,
+    deadline_alerts: true,
     time_tracking: false,
   },
   pro: {
@@ -50,7 +58,7 @@ export interface OutlineSettings {
 export const companiesTable = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  plan: companyPlanEnum("plan").notNull().default("pro"),
+  plan: companyPlanEnum("plan").notNull().default("standard"),
   features: jsonb("features").notNull().$type<CompanyFeatures>().$defaultFn(() => ({ ...PLAN_FEATURES.pro })),
   workHoursPerDay: integer("work_hours_per_day").notNull().default(480),
   weekendOvertimeEnabled: boolean("weekend_overtime_enabled").notNull().default(true),

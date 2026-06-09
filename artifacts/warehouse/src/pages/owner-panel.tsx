@@ -23,7 +23,7 @@ interface CompanyUser {
 interface Company {
   id: number;
   name: string;
-  plan: "basic" | "pro";
+  plan: "lite" | "standard" | "pro";
   createdAt: string;
   userCount: number;
 }
@@ -48,7 +48,7 @@ function CreateCompanyModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
-    companyName: "", plan: "pro" as "basic" | "pro",
+    companyName: "", plan: "standard" as "lite" | "standard" | "pro",
     adminUsername: "", adminPassword: "",
   });
 
@@ -97,13 +97,18 @@ function CreateCompanyModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-1.5">
             <Label className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Plan</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["basic", "pro"] as const).map((p) => (
-                <button key={p} onClick={() => setForm((prev) => ({ ...prev, plan: p }))}
-                  className={cn("h-11 rounded-lg border-2 font-bold uppercase text-sm transition-all",
-                    form.plan === p ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: "lite", label: "Lite", desc: "Inventory & quotes" },
+                { value: "standard", label: "Standard", desc: "Jobs & attendance" },
+                { value: "pro", label: "Pro", desc: "Full production" },
+              ] as const).map((p) => (
+                <button key={p.value} onClick={() => setForm((prev) => ({ ...prev, plan: p.value }))}
+                  className={cn("h-14 rounded-lg border-2 font-bold text-sm transition-all flex flex-col items-center justify-center gap-0.5",
+                    form.plan === p.value ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"
                   )}>
-                  {p}
+                  <span className="uppercase">{p.label}</span>
+                  <span className="text-[10px] font-normal opacity-70">{p.desc}</span>
                 </button>
               ))}
             </div>
@@ -135,6 +140,7 @@ function CreateCompanyModal({ onClose }: { onClose: () => void }) {
 
 function CompanyRow({ company }: { company: Company }) {
   const { toast } = useToast();
+  const { refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -151,7 +157,7 @@ function CompanyRow({ company }: { company: Company }) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (updates: { name?: string; plan?: "basic" | "pro" }) => {
+    mutationFn: async (updates: { name?: string; plan?: "lite" | "standard" | "pro" }) => {
       const res = await fetch(`/api/owner/companies/${company.id}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -163,6 +169,7 @@ function CompanyRow({ company }: { company: Company }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/companies"] });
+      refreshUser();
       setEditingName(false);
       toast({ title: "Updated!" });
     },
@@ -227,7 +234,10 @@ function CompanyRow({ company }: { company: Company }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-bold text-base">{company.name}</p>
-            <Badge className={cn("text-xs uppercase font-bold border", company.plan === "pro" ? "bg-primary/10 text-primary border-primary/20" : "bg-muted text-muted-foreground border-border")}>
+            <Badge className={cn("text-xs uppercase font-bold border",
+              company.plan === "pro" ? "bg-primary/10 text-primary border-primary/20"
+              : company.plan === "standard" ? "bg-blue-100 text-blue-700 border-blue-200"
+              : "bg-muted text-muted-foreground border-border")}>
               {company.plan}
             </Badge>
           </div>
@@ -267,13 +277,18 @@ function CompanyRow({ company }: { company: Company }) {
           {/* Plan switcher */}
           <div className="space-y-1.5">
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Plan</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(["basic", "pro"] as const).map((p) => (
-                <button key={p} onClick={() => updateMutation.mutate({ plan: p })}
-                  className={cn("h-10 rounded-lg border-2 font-bold uppercase text-sm transition-all",
-                    company.plan === p ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/50"
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: "lite", label: "Lite", desc: "Inventory & quotes" },
+                { value: "standard", label: "Standard", desc: "Jobs & attendance" },
+                { value: "pro", label: "Pro", desc: "Full production" },
+              ] as const).map((p) => (
+                <button key={p.value} onClick={() => updateMutation.mutate({ plan: p.value })}
+                  className={cn("h-14 rounded-lg border-2 font-bold text-sm transition-all flex flex-col items-center justify-center gap-0.5",
+                    company.plan === p.value ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/50"
                   )}>
-                  {p} {company.plan === p && "✓"}
+                  <span className="uppercase">{p.label}</span>
+                  <span className="text-[10px] font-normal opacity-70">{p.desc}</span>
                 </button>
               ))}
             </div>
@@ -370,7 +385,7 @@ function CompanyRow({ company }: { company: Company }) {
 // ── Owner Panel Page ─────────────────────────────────────────────────────────
 
 export default function OwnerPanelPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
 
   const { data: companies = [], isLoading } = useQuery({
