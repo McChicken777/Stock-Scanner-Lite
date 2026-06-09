@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
 import { AuthProvider, useAuth, usePlan } from "@/contexts/auth";
+import { SetupWizard } from "@/pages/setup-wizard";
 
 // Inventory Pages
 import Dashboard from "@/pages/dashboard";
@@ -89,6 +91,29 @@ function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
   const { atLeast } = usePlan();
 
+  const wizardKey = user?.companyId != null ? `setup_done_${user.companyId}` : null;
+  const [wizardDismissed, setWizardDismissed] = useState(() =>
+    wizardKey ? !!localStorage.getItem(wizardKey) : true
+  );
+
+  const { data: stationTypes } = useQuery<{ id: number }[]>({
+    queryKey: ["/api/stations/types"],
+    queryFn: () => fetch("/api/stations/types", { credentials: "include" }).then((r) => r.json()),
+    enabled: !!user && user.role === "admin" && !wizardDismissed,
+    staleTime: 60_000,
+  });
+
+  const showWizard =
+    !wizardDismissed &&
+    user?.role === "admin" &&
+    Array.isArray(stationTypes) &&
+    stationTypes.length === 0;
+
+  function dismissWizard() {
+    if (wizardKey) localStorage.setItem(wizardKey, "1");
+    setWizardDismissed(true);
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center bg-background">
@@ -120,6 +145,10 @@ function ProtectedRoutes() {
   }
 
   return (
+    <>
+      {showWizard && (
+        <SetupWizard onComplete={dismissWizard} onDismiss={dismissWizard} />
+      )}
     <AppLayout>
       <Switch>
         {/* Admin home — Lite goes to Customers, Standard/Pro goes to Jobs */}
@@ -183,6 +212,7 @@ function ProtectedRoutes() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+    </>
   );
 }
 

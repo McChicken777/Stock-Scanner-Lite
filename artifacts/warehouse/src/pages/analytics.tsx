@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart2, Brain, RefreshCw, X, TrendingUp, Clock, Target, Lock,
-  AlertTriangle, Lightbulb, Zap, Calendar,
+  AlertTriangle, Lightbulb, Zap, Calendar, ArrowUpRight, ArrowDownRight, Minus,
+  Activity,
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart, Line,
@@ -15,6 +17,38 @@ import {
 } from "recharts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+interface DriftRow {
+  stepName: string;
+  stationName: string | null;
+  stationColor: string | null;
+  sampleCount: number;
+  avgActualMin: number;
+  avgEstimateMin: number;
+  driftPct: number;
+}
+
+interface BottleneckRow {
+  stationTypeId: number;
+  stationName: string;
+  stationColor: string;
+  queueDepth: number;
+}
+
+interface AtRiskRow {
+  projectId: number;
+  projectName: string;
+  deadline: string;
+  priority: string;
+  incompleteSteps: number;
+  totalSteps: number;
+}
+
+interface LiveInsightsData {
+  durationDrift: DriftRow[];
+  bottlenecks: BottleneckRow[];
+  atRisk: AtRiskRow[];
+}
 
 interface AnalyticsInsight {
   id: string;
@@ -168,13 +202,168 @@ function InsightCard({ insight, onDismiss }: { insight: AnalyticsInsight; onDism
   );
 }
 
+// ─── Live Insights Section (Standard+, pure SQL) ──────────────────────────────
+
+function driftIcon(pct: number) {
+  if (pct > 15) return <ArrowUpRight className="h-3.5 w-3.5 text-rose-500" />;
+  if (pct < -15) return <ArrowDownRight className="h-3.5 w-3.5 text-emerald-500" />;
+  return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+function driftColor(pct: number) {
+  if (pct > 30) return "text-rose-600 font-bold";
+  if (pct > 15) return "text-orange-500 font-semibold";
+  if (pct < -15) return "text-emerald-600 font-semibold";
+  return "text-muted-foreground";
+}
+
+function deadlineBadge(deadline: string) {
+  const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000);
+  if (diff < 0) return <Badge variant="destructive" className="text-[10px]">Overdue</Badge>;
+  if (diff === 0) return <Badge variant="destructive" className="text-[10px]">Due today</Badge>;
+  return <Badge variant="outline" className="text-[10px]">{diff}d left</Badge>;
+}
+
+function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undefined; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-32 rounded-xl" />
+      </div>
+    );
+  }
+
+  const noData = !data || (
+    data.durationDrift.length === 0 &&
+    data.bottlenecks.length === 0 &&
+    data.atRisk.length === 0
+  );
+
+  if (noData) {
+    return (
+      <div className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
+        <Activity className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
+        No live data yet — insights appear as jobs are logged and completed.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* At-risk jobs */}
+      {data.atRisk.length > 0 && (
+        <Card className="border-rose-200 bg-rose-50/30 dark:border-rose-900 dark:bg-rose-950/20">
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-rose-700 dark:text-rose-400">
+              <Target className="h-4 w-4" />
+              At-Risk Jobs
+              <span className="font-normal text-xs text-muted-foreground ml-1">deadline within 5 days</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="space-y-2">
+              {data.atRisk.map((job) => (
+                <div key={job.projectId} className="flex items-center justify-between gap-3 text-sm">
+                  <a href={`/work/projects/${job.projectId}`} className="font-medium hover:underline truncate">
+                    {job.projectName}
+                  </a>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">{job.incompleteSteps}/{job.totalSteps} steps left</span>
+                    {deadlineBadge(job.deadline)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bottlenecks */}
+      {data.bottlenecks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+              Live Bottlenecks
+              <span className="font-normal text-xs text-muted-foreground ml-1">pending steps per station right now</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="space-y-2">
+              {data.bottlenecks.map((b) => {
+                const max = data.bottlenecks[0].queueDepth;
+                const pct = Math.round((b.queueDepth / max) * 100);
+                return (
+                  <div key={b.stationTypeId} className="flex items-center gap-3">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ background: b.stationColor || "#6b7280" }}
+                    />
+                    <span className="text-sm w-28 truncate shrink-0">{b.stationName}</span>
+                    <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, background: b.stationColor || "#6b7280" }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-muted-foreground w-8 text-right shrink-0">
+                      {b.queueDepth}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Duration drift */}
+      {data.durationDrift.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+              Duration Drift
+              <span className="font-normal text-xs text-muted-foreground ml-1">actual vs. estimated (≥3 samples)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <div className="space-y-2">
+              {data.durationDrift.map((row, i) => (
+                <div key={i} className="flex items-center gap-3 text-sm">
+                  {row.stationColor && (
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: row.stationColor }} />
+                  )}
+                  <span className="flex-1 truncate text-sm">{row.stepName}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {row.avgActualMin}m actual / {row.avgEstimateMin}m est
+                  </span>
+                  <span className={`text-xs flex items-center gap-0.5 shrink-0 ${driftColor(row.driftPct)}`}>
+                    {driftIcon(row.driftPct)}
+                    {row.driftPct > 0 ? "+" : ""}{row.driftPct}%
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-3">
+              Update estimates in Templates → step settings to improve scheduling accuracy.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function PaywallState() {
   return (
     <div className="p-4 pb-24 space-y-6">
       <div className="px-1 pt-2">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <BarChart2 className="h-6 w-6 text-primary" />
-          AI Analytics
+          Analytics
         </h1>
       </div>
       <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-4">
@@ -182,17 +371,17 @@ function PaywallState() {
           <Lock className="h-8 w-8 text-primary" />
         </div>
         <div className="space-y-2">
-          <p className="font-black text-lg">Pro feature</p>
+          <p className="font-black text-lg">Standard feature</p>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            AI Analytics surfaces patterns in your production data — bottlenecks, wait times, deadline trends — as plain-language insight cards.
+            Analytics surfaces real-time bottlenecks, at-risk jobs, and duration drift across your shop floor.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 text-xs text-left max-w-xs mx-auto">
           {[
-            "AI-generated insight cards updated weekly",
-            "Efficiency over time per procedure type",
-            "Bottleneck wait-time heatmap (step × month)",
-            "Deadline accuracy trend over 6 months",
+            "Live bottleneck queue depth by station",
+            "At-risk jobs with upcoming deadlines",
+            "Duration drift — actual vs estimated per step",
+            "AI insight cards & trend charts (Pro)",
           ].map((f) => (
             <div key={f} className="flex items-start gap-2">
               <Lightbulb className="h-3.5 w-3.5 text-primary flex-shrink-0 mt-0.5" />
@@ -201,7 +390,7 @@ function PaywallState() {
           ))}
         </div>
         <Button asChild variant="default" className="mt-2">
-          <a href="/admin/company">Upgrade to Pro</a>
+          <a href="/admin/company">Upgrade to Standard</a>
         </Button>
       </div>
     </div>
@@ -230,9 +419,12 @@ function EmptySnapshotState({ onGenerate, loading }: { onGenerate: () => void; l
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin";
+  const canSeeLive = isAdmin && atLeast("standard");
+  const canSeeAI = isAdmin && atLeast("pro");
 
   const [dismissed, setDismissed] = useState<Set<string>>(
     () => new Set(JSON.parse(sessionStorage.getItem("analytics_dismissed") ?? "[]")),
@@ -244,6 +436,13 @@ export default function AnalyticsPage() {
     sessionStorage.setItem("analytics_dismissed", JSON.stringify([...next]));
   };
 
+  const { data: liveInsights, isLoading: liveLoading } = useQuery<LiveInsightsData>({
+    queryKey: ["/api/analytics/live-insights"],
+    queryFn: () => apiFetch("/api/analytics/live-insights"),
+    enabled: canSeeLive,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
   const {
     data: insightsData,
     isLoading: insightsLoading,
@@ -254,7 +453,7 @@ export default function AnalyticsPage() {
   >({
     queryKey: ["/api/analytics/insights"],
     queryFn: () => apiFetch("/api/analytics/insights"),
-    enabled: isAdmin,
+    enabled: canSeeAI,
     retry: false,
   });
 
@@ -264,7 +463,7 @@ export default function AnalyticsPage() {
   }>({
     queryKey: ["/api/analytics/charts"],
     queryFn: () => apiFetch("/api/analytics/charts"),
-    enabled: isAdmin && !!insightsData?.snapshotAt,
+    enabled: canSeeAI && !!insightsData?.snapshotAt,
   });
 
   const refreshMutation = useMutation({
@@ -289,11 +488,11 @@ export default function AnalyticsPage() {
     );
   }
 
-  if ((insightsError as (Error & { planRequired?: string }) | null)?.planRequired === "pro") {
+  if (!canSeeLive) {
     return <PaywallState />;
   }
 
-  if (insightsLoading) {
+  if (liveLoading && insightsLoading) {
     return (
       <div className="p-4 space-y-4 pb-24">
         <Skeleton className="h-9 w-48" />
@@ -307,50 +506,72 @@ export default function AnalyticsPage() {
   const insights = insightsData?.insights ?? [];
   const visibleInsights = insights.filter((i) => !dismissed.has(i.id));
   const charts = chartsData?.charts ?? null;
-  const snapshotAt = insightsData?.snapshotAt;
   const hasData = insights.length > 0 || charts !== null;
 
   return (
     <div className="p-4 space-y-6 pb-24">
       {/* Header */}
-      <div className="px-1 pt-2 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <BarChart2 className="h-6 w-6 text-primary" />
-            AI Analytics
-          </h1>
-          {snapshotAt && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Last updated {new Date(snapshotAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-              {insightsData?.triggeredBy === "manual" ? " (manual)" : " (weekly)"}
-            </p>
-          )}
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2 flex-shrink-0"
-          disabled={refreshMutation.isPending}
-          onClick={() => refreshMutation.mutate()}
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-          {refreshMutation.isPending ? "Generating…" : "Refresh"}
-        </Button>
+      <div className="px-1 pt-2">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <BarChart2 className="h-6 w-6 text-primary" />
+          Analytics
+        </h1>
       </div>
 
-      {!hasData ? (
-        <EmptySnapshotState
-          onGenerate={() => refreshMutation.mutate()}
-          loading={refreshMutation.isPending}
-        />
-      ) : (
+      {/* Live Insights (Standard+) */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+          <Activity className="h-3.5 w-3.5" /> Live Insights
+        </p>
+        <LiveInsightsSection data={liveInsights} loading={liveLoading} />
+      </div>
+
+      {/* AI Analytics (Pro) */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Brain className="h-3.5 w-3.5" /> AI Analytics
+            {!canSeeAI && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Pro</span>}
+          </p>
+          {canSeeAI && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 h-7 text-xs"
+              disabled={refreshMutation.isPending}
+              onClick={() => refreshMutation.mutate()}
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
+              {refreshMutation.isPending ? "Generating…" : "Refresh"}
+            </Button>
+          )}
+        </div>
+
+        {!canSeeAI ? (
+          <div className="rounded-xl border-2 border-dashed border-primary/20 bg-primary/5 p-5 text-center space-y-3">
+            <div className="mx-auto h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Lock className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="font-bold text-sm">AI Analytics — Pro feature</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                Weekly AI-generated insight cards, bottleneck wait-time heatmap, and deadline accuracy trend.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline">
+              <a href="/admin/company">Upgrade to Pro</a>
+            </Button>
+          </div>
+        ) : !hasData ? (
+          <EmptySnapshotState
+            onGenerate={() => refreshMutation.mutate()}
+            loading={refreshMutation.isPending}
+          />
+        ) : (
         <>
           {/* AI Insight Cards */}
           {visibleInsights.length > 0 && (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                <Brain className="h-3.5 w-3.5" /> AI Insights
-              </p>
+            <div className="mb-4">
               <div className="space-y-3">
                 {visibleInsights.map((insight) => (
                   <InsightCard key={insight.id} insight={insight} onDismiss={dismiss} />
@@ -368,7 +589,7 @@ export default function AnalyticsPage() {
           )}
 
           {insights.length === 0 && (
-            <div className="rounded-xl border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-xl border-2 border-dashed border-border p-6 text-center text-sm text-muted-foreground mb-4">
               No AI insights yet. Generate a report using the Refresh button above.
             </div>
           )}
@@ -492,6 +713,7 @@ export default function AnalyticsPage() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
