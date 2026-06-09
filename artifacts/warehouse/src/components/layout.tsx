@@ -674,8 +674,8 @@ function WorkerBottomNav() {
       if (!r.ok) throw new Error("Failed");
       return r.json();
     },
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 
   const attendanceBadge = workerNotifs?.total ?? 0;
