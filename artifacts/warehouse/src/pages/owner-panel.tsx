@@ -140,6 +140,7 @@ function CreateCompanyModal({ onClose }: { onClose: () => void }) {
 
 function CompanyRow({ company }: { company: Company }) {
   const { toast } = useToast();
+  const { refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -168,6 +169,7 @@ function CompanyRow({ company }: { company: Company }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/owner/companies"] });
+      refreshUser();
       setEditingName(false);
       toast({ title: "Updated!" });
     },
@@ -383,7 +385,7 @@ function CompanyRow({ company }: { company: Company }) {
 // ── Owner Panel Page ─────────────────────────────────────────────────────────
 
 export default function OwnerPanelPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
 
   const { data: companies = [], isLoading } = useQuery({

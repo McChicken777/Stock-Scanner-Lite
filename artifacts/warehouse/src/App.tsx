@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
-import { AuthProvider, useAuth } from "@/contexts/auth";
+import { AuthProvider, useAuth, usePlan } from "@/contexts/auth";
 
 // Inventory Pages
 import Dashboard from "@/pages/dashboard";
@@ -87,6 +87,7 @@ function WorkerRoutes() {
 
 function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
+  const { atLeast } = usePlan();
 
   if (isLoading) {
     return (
@@ -121,8 +122,8 @@ function ProtectedRoutes() {
   return (
     <AppLayout>
       <Switch>
-        {/* Admin home → Jobs */}
-        <Route path="/"><Redirect to="/work/projects" /></Route>
+        {/* Admin home — Lite goes to Customers, Standard/Pro goes to Jobs */}
+        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/customers"} /></Route>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/scan" component={ScanPage} />
         <Route path="/locations" component={LocationsPage} />
