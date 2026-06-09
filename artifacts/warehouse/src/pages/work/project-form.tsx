@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,6 +139,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { atLeast } = usePlan();
 
   const [name, setName] = useState(items.length === 1 ? items[0].template.name : "");
   const [deadline, setDeadline] = useState("");
@@ -152,6 +153,15 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
 
   // Effective quantity of a product across the whole order (per-package qty × packages).
   const effectiveQty = (perPackage: number) => perPackage * packages;
+
+  // Delivery date prediction for single-template jobs (Standard+)
+  const singleTemplateId = items.length === 1 ? items[0].template.id : null;
+  const { data: durationData } = useQuery<{ avgDays: number | null; jobCount: number }>({
+    queryKey: ["/api/analytics/template-duration", singleTemplateId],
+    queryFn: () =>
+      fetch(`/api/analytics/template-duration?templateId=${singleTemplateId}`, { credentials: "include" }).then((r) => r.json()),
+    enabled: !!singleTemplateId && atLeast("standard"),
+  });
 
   // Combined stock check across every selected item, scaled by the package multiplier.
   const { data: bomResults = [] } = useQuery<BomCheckResult[]>({
@@ -279,6 +289,25 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
               type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
               className="h-11 border-2 text-base" min={new Date().toISOString().split("T")[0]}
             />
+            {durationData && durationData.jobCount >= 3 && durationData.avgDays != null && (
+              <div className="flex items-center gap-2 text-xs bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="text-muted-foreground">
+                  Avg <span className="font-semibold text-foreground">{durationData.avgDays}d</span> based on {durationData.jobCount} similar jobs
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + Math.ceil(durationData.avgDays!));
+                    setDeadline(d.toISOString().split("T")[0]);
+                  }}
+                  className="ml-auto text-primary hover:underline font-semibold whitespace-nowrap"
+                >
+                  Suggest →
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Priority */}
