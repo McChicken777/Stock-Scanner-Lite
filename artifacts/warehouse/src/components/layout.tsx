@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
-import { useAuth, useFeature } from "@/contexts/auth";
+import { useAuth, useFeature, usePlan } from "@/contexts/auth";
 import { TutorialProvider, useTutorial } from "@/contexts/tutorial";
 import { TutorialModal } from "@/components/tutorial-modal";
 import {
@@ -156,7 +156,8 @@ interface AttentionCounts { total: number; leaveRequests: number; lowStock: numb
 
 function AdminDesktopSidebar() {
   const [location] = useLocation();
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
+  const { atLeast } = usePlan();
 
   const { data: attention } = useQuery<AttentionCounts>({
     queryKey: ["/api/admin/attention"],
@@ -186,28 +187,26 @@ function AdminDesktopSidebar() {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         <SidebarSection label="Main" />
-        <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} badge={attention?.overdueJobs ?? 0} />
+        {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
         <SideNavItem href="/customers" icon={Store} label="Customers" active={isCustomersActive} />
-        <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />
+        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />}
 
-        <SidebarSection label="Work" />
-        <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />
-        <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />
-        <SideNavItem href="/work/stocktake" icon={ClipboardList} label="Stock-Take" active={location.startsWith("/work/stocktake")} />
-        <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />
-        <SideNavItem href="/work/queues" icon={CheckSquare} label="Station Queues" active={location.startsWith("/work/queue")} />
-        {user?.plan === "pro" && (
-          <SideNavItem href="/analytics" icon={BarChart2} label="AI Analytics" active={location.startsWith("/analytics")} />
-        )}
+        {atLeast("standard") && <SidebarSection label="Work" />}
+        {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
+        {atLeast("standard") && <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />}
+        {atLeast("pro") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label="Stock-Take" active={location.startsWith("/work/stocktake")} />}
+        {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />}
+        {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label="Station Queues" active={location.startsWith("/work/queue")} />}
+        {atLeast("pro") && <SideNavItem href="/analytics" icon={BarChart2} label="AI Analytics" active={location.startsWith("/analytics")} />}
 
         <SidebarSection label="People" />
         <SideNavItem href="/admin/users" icon={Users} label="Manage Users" active={location.startsWith("/admin/users")} />
-        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />
-        <SideNavItem href="/admin/leave-inbox" icon={Inbox} label="Leave Requests" active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />
+        {atLeast("standard") && <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />}
+        {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label="Leave Requests" active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
 
         <SidebarSection label="Business" />
         <SideNavItem href="/products" icon={Package2} label="Products & Stock" active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-        <SideNavItem href="/admin/suppliers" icon={Truck} label="Suppliers" active={location.startsWith("/admin/suppliers")} />
+        {atLeast("standard") && <SideNavItem href="/admin/suppliers" icon={Truck} label="Suppliers" active={location.startsWith("/admin/suppliers")} />}
         <SideNavItem href="/admin/company" icon={Building2} label="Company & Plan" active={location.startsWith("/admin/company")} />
       </nav>
 
@@ -649,6 +648,7 @@ function WorkOrdersBottomNav() {
 
 function WorkerBottomNav() {
   const [location] = useLocation();
+  const { atLeast } = usePlan();
 
   const { data: painterData } = useQuery<{ isPainter: boolean }>({
     queryKey: ["/api/work/painter-access"],
@@ -682,11 +682,11 @@ function WorkerBottomNav() {
   const queueBadge = queueCount?.pending ?? 0;
 
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "My Tasks", badge: 0 },
-    { href: "/work/queues", icon: Layers, label: "Queues", badge: queueBadge },
-    { href: "/attendance", icon: CalendarCheck, label: "Attendance", badge: attendanceBadge },
-    ...(painterData?.isPainter ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint", badge: 0 }] : []),
-  ];
+    { href: "/tasks", icon: CheckSquare, label: "My Tasks", badge: 0, show: atLeast("standard") },
+    { href: "/work/queues", icon: Layers, label: "Queues", badge: queueBadge, show: atLeast("pro") },
+    { href: "/attendance", icon: CalendarCheck, label: "Attendance", badge: attendanceBadge, show: atLeast("standard") },
+    ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint", badge: 0, show: true }] : []),
+  ].filter((i) => i.show);
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">

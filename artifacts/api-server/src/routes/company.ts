@@ -24,7 +24,7 @@ router.put("/", requireAdmin, async (req, res) => {
     const companyId = req.session.companyId!;
     const schema = z.object({
       name: z.string().min(1).optional(),
-      plan: z.enum(["basic", "pro"]).optional(),
+      plan: z.enum(["lite", "standard", "pro"]).optional(),
       workHoursPerDay: z.number().int().min(60).max(1440).optional(),
       weekendOvertimeEnabled: z.boolean().optional(),
       country: z.string().max(10).nullable().optional(),

@@ -95,7 +95,7 @@ router.post("/logout", (req, res) => {
 router.get("/me", requireAuth, async (req, res) => {
   // Refresh features from DB each time /me is called
   let features = req.session.features;
-  let plan: "basic" | "pro" | null = null;
+  let plan: "lite" | "standard" | "pro" | null = null;
   if (req.session.companyId) {
     const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, req.session.companyId));
     if (company) {
