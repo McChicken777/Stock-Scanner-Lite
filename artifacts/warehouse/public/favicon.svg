@@ -1,3 +1,7 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <rect width="180" height="180" rx="40" fill="#4f46e5"/>
+  <!-- F letterform -->
+  <path d="M30 27h86v25H57v27h54v25H57v69H30V27Z" fill="white"/>
+  <!-- Flow arrow -->
+  <path d="M126 58l32 32-32 32" stroke="white" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

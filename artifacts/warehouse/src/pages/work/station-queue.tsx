@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   ChevronLeft, ChevronDown, ChevronUp, Monitor, CheckCircle2,
-  Clock, Loader2, Inbox, Play, User, Timer,
+  Clock, Loader2, Inbox, Play, User, Timer, ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +24,7 @@ interface QueueStep {
   itemId: number; itemName: string;
   projectId: number; projectName: string;
   projectDeadline: string; projectPriority: string;
+  qcEnabled: boolean; qcInstructions: string | null; qcPhotoUrl: string | null;
 }
 
 interface QueueItem  { itemId: number; itemName: string; steps: QueueStep[]; }
@@ -80,8 +81,40 @@ const PRIORITY_COLORS: Record<string, string> = {
   low:    "bg-gray-100 text-gray-600 border-gray-200",
 };
 
+function QcCheckModal({ step, onConfirm }: { step: QueueStep; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto">
+        <div className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-100 rounded-xl p-2.5 flex-shrink-0">
+              <ShieldCheck className="h-6 w-6 text-amber-600" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-black text-lg leading-tight">Quality Check</h3>
+              <p className="text-sm text-muted-foreground truncate">{step.stepName}</p>
+            </div>
+          </div>
+          {step.qcPhotoUrl && (
+            <img src={step.qcPhotoUrl} alt="Quality reference" className="w-full rounded-xl object-cover max-h-52 border border-amber-200" />
+          )}
+          {step.qcInstructions && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-amber-900 whitespace-pre-wrap leading-relaxed">{step.qcInstructions}</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Review the requirements above, then confirm the work meets specifications before marking complete.</p>
+          <Button className="w-full h-13 py-3.5 font-bold gap-2 text-base bg-green-600 hover:bg-green-700" onClick={onConfirm}>
+            <CheckCircle2 className="h-5 w-5" /> Looks Good — Confirm
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StepRow({
-  step, user, activeWorkstations, completing, starting, onStart, onComplete, onAssign,
+  step, user, activeWorkstations, completing, starting, onStart, onComplete, onRequestComplete, onAssign,
 }: {
   step: QueueStep;
   user: AuthUser | null;
@@ -90,6 +123,7 @@ function StepRow({
   starting: Set<number>;
   onStart: (id: number) => void;
   onComplete: (id: number) => void;
+  onRequestComplete: (step: QueueStep) => void;
   onAssign: (workstationId: number | null) => void;
 }) {
   const isInProgress = step.status === "in_progress";
@@ -137,7 +171,7 @@ function StepRow({
         <Button
           className="w-full h-12 font-bold text-base gap-2 bg-green-600 hover:bg-green-700"
           disabled={isCompleting}
-          onClick={() => onComplete(step.stepId)}
+          onClick={() => onRequestComplete(step)}
         >
           {isCompleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle2 className="h-5 w-5" /> Done</>}
         </Button>
@@ -197,7 +231,7 @@ function StepRow({
           size="sm"
           className="h-9 px-3 font-bold flex-shrink-0 gap-1.5"
           disabled={isCompleting}
-          onClick={() => onComplete(step.stepId)}
+          onClick={() => onRequestComplete(step)}
         >
           {isCompleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>}
         </Button>
@@ -216,6 +250,7 @@ export default function StationQueuePage() {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const [completing, setCompleting] = useState<Set<number>>(new Set());
   const [starting, setStarting] = useState<Set<number>>(new Set());
+  const [qcStep, setQcStep] = useState<QueueStep | null>(null);
 
   const key = ["/api/stations/queue", typeId];
   const { data, isLoading } = useQuery<QueueData>({
@@ -265,6 +300,14 @@ export default function StationQueuePage() {
       toast({ title: (e as Error).message, variant: "destructive" });
     } finally {
       setCompleting((prev) => { const n = new Set(prev); n.delete(stepId); return n; });
+    }
+  }
+
+  function requestComplete(step: QueueStep) {
+    if (step.qcEnabled) {
+      setQcStep(step);
+    } else {
+      completeStep(step.stepId);
     }
   }
 
@@ -400,6 +443,7 @@ export default function StationQueuePage() {
                             starting={starting}
                             onStart={startStep}
                             onComplete={completeStep}
+                            onRequestComplete={requestComplete}
                             onAssign={(workstationId) => assignMutation.mutate({ stepId: step.stepId, workstationId })}
                           />
                         ))}
@@ -411,6 +455,17 @@ export default function StationQueuePage() {
             );
           })}
         </div>
+      )}
+
+      {qcStep && (
+        <QcCheckModal
+          step={qcStep}
+          onConfirm={() => {
+            const stepId = qcStep.stepId;
+            setQcStep(null);
+            completeStep(stepId);
+          }}
+        />
       )}
     </div>
   );

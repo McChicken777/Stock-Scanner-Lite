@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Play, CheckCircle2, AlertCircle, Calendar, Flag, Timer, User,
   Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X, AlertTriangle, TrendingDown,
-  Clock, LogOut,
+  Clock, LogOut, ShieldCheck,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -42,6 +42,7 @@ interface MyStep {
   item: { id: number; name: string };
   project: { id: number; name: string; deadline: string; priority: string };
   parentChain: string[];
+  qcEnabled: boolean; qcInstructions: string | null; qcPhotoUrl: string | null;
 }
 
 interface BatchItem {
@@ -488,11 +489,44 @@ function ClockInBanner() {
 
 // ─── My Steps Tab ────────────────────────────────────────────────────────────
 
+function QcCheckModal({ step, onConfirm }: { step: MyStep; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto">
+        <div className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-100 rounded-xl p-2.5 flex-shrink-0">
+              <ShieldCheck className="h-6 w-6 text-amber-600" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-black text-lg leading-tight">Quality Check</h3>
+              <p className="text-sm text-muted-foreground truncate">{step.name}</p>
+            </div>
+          </div>
+          {step.qcPhotoUrl && (
+            <img src={step.qcPhotoUrl} alt="Quality reference" className="w-full rounded-xl object-cover max-h-52 border border-amber-200" />
+          )}
+          {step.qcInstructions && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-sm font-semibold text-amber-900 whitespace-pre-wrap leading-relaxed">{step.qcInstructions}</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Review the requirements above, then confirm the work meets specifications before marking complete.</p>
+          <Button className="w-full py-3.5 font-bold gap-2 text-base bg-green-600 hover:bg-green-700" onClick={onConfirm}>
+            <CheckCircle2 className="h-5 w-5" /> Looks Good — Confirm
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MyStepsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [wipStepId, setWipStepId] = useState<number | null>(null);
   const [shortageStepId, setShortageStepId] = useState<number | null>(null);
+  const [qcStep, setQcStep] = useState<MyStep | null>(null);
 
   const { data: steps = [], isLoading } = useQuery<MyStep[]>({
     queryKey: ["/api/work/my-steps"],
@@ -633,9 +667,16 @@ function MyStepsTab() {
         )}
         {variant === "inProgress" && (
           <div className="flex gap-2">
-            <Button onClick={() => setWipStepId(step.id)}
+            <Button
+              onClick={() => {
+                if (step.qcEnabled) {
+                  setQcStep(step);
+                } else {
+                  setWipStepId(step.id);
+                }
+              }}
               className="flex-1 h-12 text-base bg-green-600 hover:bg-green-700 font-bold gap-2">
-              <CheckCircle2 className="h-5 w-5" /> Mark Complete
+              {step.qcEnabled ? <ShieldCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />} Mark Complete
             </Button>
             <Button variant="outline" className="h-12 w-12 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
               onClick={() => setShortageStepId(step.id)}>
@@ -700,6 +741,16 @@ function MyStepsTab() {
       />
       {shortageStepId !== null && (
         <ShortageFlagDialog stepId={shortageStepId} onClose={() => setShortageStepId(null)} />
+      )}
+      {qcStep && (
+        <QcCheckModal
+          step={qcStep}
+          onConfirm={() => {
+            const stepId = qcStep.id;
+            setQcStep(null);
+            setWipStepId(stepId);
+          }}
+        />
       )}
     </>
   );

@@ -1,0 +1,7 @@
+ALTER TABLE work_steps ADD COLUMN IF NOT EXISTS qc_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE work_steps ADD COLUMN IF NOT EXISTS qc_instructions TEXT;
+ALTER TABLE work_steps ADD COLUMN IF NOT EXISTS qc_photo_url TEXT;
+
+ALTER TABLE work_item_steps ADD COLUMN IF NOT EXISTS qc_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE work_item_steps ADD COLUMN IF NOT EXISTS qc_instructions TEXT;
+ALTER TABLE work_item_steps ADD COLUMN IF NOT EXISTS qc_photo_url TEXT;

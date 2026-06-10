@@ -104,6 +104,9 @@ const procSchema = z.object({
   consumesProductId: z.number().int().nullable().optional(),
   consumesQuantity: z.number().nonnegative().optional(),
   stationTypeId: z.number().int().nullable().optional(),
+  qcEnabled: z.boolean().optional(),
+  qcInstructions: z.string().nullable().optional(),
+  qcPhotoUrl: z.string().nullable().optional(),
 });
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
@@ -500,6 +503,9 @@ router.post("/templates/:id/clone", requireAdmin, async (req, res) => {
         batchMode: s.batchMode ?? "individual", durationEstimate: s.durationEstimate ?? null,
         stationTypeId: s.stationTypeId ?? null,
         templateComponentId: newTemplateComponentId,
+        qcEnabled: s.qcEnabled ?? false,
+        qcInstructions: s.qcInstructions ?? null,
+        qcPhotoUrl: s.qcPhotoUrl ?? null,
       });
     }
 
@@ -2227,6 +2233,9 @@ router.post("/projects", requireAdmin, async (req, res) => {
               roleId: proc.roleId ?? null,
               batchMode: proc.batchMode ?? "individual",
               durationEstimate: proc.durationEstimate ?? null,
+              qcEnabled: proc.qcEnabled ?? false,
+              qcInstructions: proc.qcInstructions ?? null,
+              qcPhotoUrl: proc.qcPhotoUrl ?? null,
               templateStepId: proc.id,
               consumesProductId: proc.consumesProductId ?? null,
               consumesQuantity: proc.consumesQuantity ?? 0,
@@ -2267,6 +2276,9 @@ router.post("/projects", requireAdmin, async (req, res) => {
                     consumesProductId: proc.consumesProductId ?? null,
                     consumesQuantity: proc.consumesQuantity ?? 0,
                     stationTypeId: proc.stationTypeId ?? null,
+                    qcEnabled: proc.qcEnabled ?? false,
+                    qcInstructions: proc.qcInstructions ?? null,
+                    qcPhotoUrl: proc.qcPhotoUrl ?? null,
                   }).returning({ id: workItemStepsTable.id });
                   templateToLiveStepId.set(proc.id, liveStep.id);
                 }
@@ -2299,6 +2311,9 @@ router.post("/projects", requireAdmin, async (req, res) => {
                   consumesProductId: templateStep?.consumesProductId ?? null,
                   consumesQuantity: templateStep?.consumesQuantity ?? 0,
                   stationTypeId: templateStep?.stationTypeId ?? null,
+                  qcEnabled: templateStep?.qcEnabled ?? false,
+                  qcInstructions: templateStep?.qcInstructions ?? null,
+                  qcPhotoUrl: templateStep?.qcPhotoUrl ?? null,
                 }).returning({ id: workItemStepsTable.id });
                 templateToLiveStepId.set(proc.id, liveStep.id);
               }
@@ -2559,6 +2574,9 @@ router.post("/projects/:id/items", requireAdmin, async (req, res) => {
           consumesProductId: proc.consumesProductId ?? null,
           consumesQuantity: proc.consumesQuantity ?? 0,
           stationTypeId: proc.stationTypeId ?? null,
+          qcEnabled: proc.qcEnabled ?? false,
+          qcInstructions: proc.qcInstructions ?? null,
+          qcPhotoUrl: proc.qcPhotoUrl ?? null,
         });
       }
 
