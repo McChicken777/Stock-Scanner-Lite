@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Loader2, Package, ChevronDown, ChevronUp, ChevronRight,
   Wrench, ShoppingCart, X, ListPlus, GripVertical,
-  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, FileText,
+  Copy, Sparkles, Undo2, BookOpen, BookPlus, Zap, FileText, ShieldCheck,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import {
@@ -27,6 +27,7 @@ interface TemplateProcedure {
   requiresInbound: boolean; roleId: number | null; batchMode: string; durationEstimate: number | null;
   consumesProductId: number | null; consumesQuantity: number | null;
   stationTypeId: number | null;
+  qcEnabled: boolean; qcInstructions: string | null; qcPhotoUrl: string | null;
 }
 interface ComponentEntry {
   id: number; parentProductId: number; componentProductId: number;
@@ -314,7 +315,38 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
                     />
                     <span className="text-xs text-muted-foreground">min</span>
                   </div>
+                  <button
+                    onClick={() => updateProc.mutate({ id: proc.id, data: { qcEnabled: !proc.qcEnabled } })}
+                    className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-colors ${proc.qcEnabled ? "bg-amber-100 text-amber-700 border-amber-300" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    title="Quality Control check required before completing this step"
+                  >
+                    <ShieldCheck className="h-3 w-3" /> QC
+                  </button>
                 </div>
+                {proc.qcEnabled && (
+                  <div className="space-y-1 pt-1">
+                    <textarea
+                      placeholder="QC instructions (e.g. measurements, tolerances, checks…)"
+                      defaultValue={proc.qcInstructions ?? ""}
+                      rows={2}
+                      className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim() || null;
+                        if (v !== (proc.qcInstructions ?? null)) updateProc.mutate({ id: proc.id, data: { qcInstructions: v } });
+                      }}
+                    />
+                    <input
+                      type="url"
+                      placeholder="Reference photo URL (optional)"
+                      defaultValue={proc.qcPhotoUrl ?? ""}
+                      className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                      onBlur={(e) => {
+                        const v = e.target.value.trim() || null;
+                        if (v !== (proc.qcPhotoUrl ?? null)) updateProc.mutate({ id: proc.id, data: { qcPhotoUrl: v } });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <button onClick={() => deleteProc.mutate(proc.id)}
                 className="text-muted-foreground hover:text-destructive p-0.5 rounded flex-shrink-0 mt-1">
@@ -526,7 +558,38 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
                     <span className="text-xs text-muted-foreground">mm</span>
                   </>
                 )}
+                <button
+                  onClick={() => updateProc.mutate({ procId: proc.id, data: { qcEnabled: !proc.qcEnabled } })}
+                  className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-colors ${proc.qcEnabled ? "bg-amber-100 text-amber-700 border-amber-300" : "border-border text-muted-foreground hover:bg-muted"}`}
+                  title="Quality Control check required before completing this step"
+                >
+                  <ShieldCheck className="h-3 w-3" /> QC
+                </button>
               </div>
+              {proc.qcEnabled && (
+                <div className="space-y-1 pt-1">
+                  <textarea
+                    placeholder="QC instructions (e.g. measurements, tolerances, checks…)"
+                    defaultValue={proc.qcInstructions ?? ""}
+                    rows={2}
+                    className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    onBlur={(e) => {
+                      const v = e.target.value.trim() || null;
+                      if (v !== (proc.qcInstructions ?? null)) updateProc.mutate({ procId: proc.id, data: { qcInstructions: v } });
+                    }}
+                  />
+                  <input
+                    type="url"
+                    placeholder="Reference photo URL (optional)"
+                    defaultValue={proc.qcPhotoUrl ?? ""}
+                    className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    onBlur={(e) => {
+                      const v = e.target.value.trim() || null;
+                      if (v !== (proc.qcPhotoUrl ?? null)) updateProc.mutate({ procId: proc.id, data: { qcPhotoUrl: v } });
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
           <button onClick={() => deleteProc.mutate(proc.id)}

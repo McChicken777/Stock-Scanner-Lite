@@ -53,6 +53,9 @@ export const workStepsTable = pgTable("work_steps", {
   consumesProductId: integer("consumes_product_id").references(() => productsTable.id, { onDelete: "set null" }),
   consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
   stationTypeId: integer("station_type_id").references(() => stationTypesTable.id, { onDelete: "set null" }),
+  qcEnabled: boolean("qc_enabled").notNull().default(false),
+  qcInstructions: text("qc_instructions"),
+  qcPhotoUrl: text("qc_photo_url"),
 });
 
 /** @deprecated use workStepsTable */
@@ -102,6 +105,9 @@ export const workItemStepsTable = pgTable("work_item_steps", {
   consumesQuantity: numeric("consumes_quantity", { precision: 12, scale: 3, mode: "number" }).notNull().default(0),
   stationTypeId: integer("station_type_id").references(() => stationTypesTable.id, { onDelete: "set null" }),
   workstationId: integer("workstation_id").references(() => workstationsTable.id, { onDelete: "set null" }),
+  qcEnabled: boolean("qc_enabled").notNull().default(false),
+  qcInstructions: text("qc_instructions"),
+  qcPhotoUrl: text("qc_photo_url"),
 });
 
 /** @deprecated use workItemStepsTable */
