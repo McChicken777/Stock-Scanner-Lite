@@ -11,8 +11,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { TutorialProvider, useTutorial } from "@/contexts/tutorial";
 import { TutorialModal } from "@/components/tutorial-modal";
+import { FabriflowMark } from "@/components/fabriflow-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -73,6 +75,21 @@ function UserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// ─── Language Toggle ─────────────────────────────────────────────────────────
+
+function LangToggle() {
+  const { lang, setLang } = useLang();
+  return (
+    <button
+      onClick={() => setLang(lang === "en" ? "sl" : "en")}
+      className="flex items-center gap-1 px-2 py-1 rounded-full border border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+      title="Switch language"
+    >
+      {lang === "en" ? "🇸🇮 SL" : "🇬🇧 EN"}
+    </button>
   );
 }
 
@@ -158,6 +175,7 @@ function AdminDesktopSidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
   const { atLeast } = usePlan();
+  const { t } = useLang();
 
   const { data: attention } = useQuery<AttentionCounts>({
     queryKey: ["/api/admin/attention"],
@@ -179,35 +197,35 @@ function AdminDesktopSidebar() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
         <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <ScanLine className="h-4 w-4 text-primary-foreground" />
+          <FabriflowMark className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="font-bold text-base">Stock Scanner</span>
+        <span className="font-bold text-base">Fabriflow</span>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        <SidebarSection label="Main" />
-        {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label="Jobs" active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
-        <SideNavItem href="/customers" icon={Store} label="Customers" active={isCustomersActive} />
-        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label="Purchasing" active={isPurchasingActive} />}
+        <SidebarSection label={t("navMain")} />
+        {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navJobs")} active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
+        <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
+        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} />}
 
-        {atLeast("standard") && <SidebarSection label="Work" />}
-        {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label="Job Templates" active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
-        {atLeast("standard") && <SideNavItem href="/work/materials" icon={PackageOpen} label="Materials" active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />}
-        {atLeast("pro") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label="Stock-Take" active={location.startsWith("/work/stocktake")} />}
-        {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label="Production Flow" active={location.startsWith("/admin/stations")} />}
-        {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label="Station Queues" active={location.startsWith("/work/queue")} />}
-        {atLeast("pro") && <SideNavItem href="/analytics" icon={BarChart2} label="AI Analytics" active={location.startsWith("/analytics")} />}
+        {atLeast("standard") && <SidebarSection label={t("navWork")} />}
+        {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
+        {atLeast("standard") && <SideNavItem href="/work/materials" icon={PackageOpen} label={t("navMaterials")} active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />}
+        {atLeast("pro") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />}
+        {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
+        {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
+        {atLeast("standard") && <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />}
 
-        <SidebarSection label="People" />
-        <SideNavItem href="/admin/users" icon={Users} label="Manage Users" active={location.startsWith("/admin/users")} />
-        {atLeast("standard") && <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />}
-        {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label="Leave Requests" active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
+        <SidebarSection label={t("navPeople")} />
+        <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
+        {atLeast("standard") && <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} />}
+        {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label={t("navLeaveRequests")} active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
 
-        <SidebarSection label="Business" />
-        <SideNavItem href="/products" icon={Package2} label="Products & Stock" active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-        {atLeast("standard") && <SideNavItem href="/admin/suppliers" icon={Truck} label="Suppliers" active={location.startsWith("/admin/suppliers")} />}
-        <SideNavItem href="/admin/company" icon={Building2} label="Company & Plan" active={location.startsWith("/admin/company")} />
+        <SidebarSection label={t("navBusiness")} />
+        <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
+        {atLeast("standard") && <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />}
+        <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
       </nav>
 
       {/* Sign out */}
@@ -217,7 +235,7 @@ function AdminDesktopSidebar() {
           className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors"
         >
           <LogOut className="h-[18px] w-[18px] flex-shrink-0" />
-          Sign Out
+          {t("signOut")}
         </button>
       </div>
     </aside>
@@ -229,27 +247,28 @@ function AdminDesktopSidebar() {
 function SupervisorDesktopSidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
+  const { t } = useLang();
 
   return (
     <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 bg-background border-r border-border">
       <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
         <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <ScanLine className="h-4 w-4 text-primary-foreground" />
+          <FabriflowMark className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="font-bold text-base">Stock Scanner</span>
+        <span className="font-bold text-base">Fabriflow</span>
       </div>
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        <SidebarSection label="Navigation" />
-        <SideNavItem href="/tasks" icon={CheckSquare} label="Tasks" active={location.startsWith("/tasks")} />
-        <SideNavItem href="/work/projects" icon={FolderKanban} label="Projects" active={location.startsWith("/work/projects")} />
-        <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
-        <SideNavItem href="/work/queues" icon={Layers} label="Station Queues" active={location.startsWith("/work/queue")} />
-        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} />
-        <SideNavItem href="/supervisor" icon={Eye} label="Supervisor View" active={location.startsWith("/supervisor")} />
+        <SidebarSection label={t("navNavigation")} />
+        <SideNavItem href="/tasks" icon={CheckSquare} label={t("navTasks")} active={location.startsWith("/tasks")} />
+        <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navProjects")} active={location.startsWith("/work/projects")} />
+        <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} />
+        <SideNavItem href="/supervisor" icon={Eye} label={t("navSupervisor")} active={location.startsWith("/supervisor")} />
       </nav>
       <div className="flex-shrink-0 border-t border-border p-2">
         <button onClick={logout} className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors">
-          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> Sign Out
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> {t("signOut")}
         </button>
       </div>
     </aside>
@@ -263,6 +282,7 @@ interface WorkerNotifications { total: number; autoClosed: number; leaveDecision
 function WorkerDesktopSidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
+  const { t } = useLang();
 
   const { data: painterData } = useQuery<{ isPainter: boolean }>({
     queryKey: ["/api/work/painter-access"],
@@ -285,23 +305,23 @@ function WorkerDesktopSidebar() {
     <aside className="hidden lg:flex flex-col w-64 fixed inset-y-0 left-0 z-30 bg-background border-r border-border">
       <div className="flex items-center gap-2.5 h-14 px-4 border-b border-border flex-shrink-0">
         <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <ScanLine className="h-4 w-4 text-primary-foreground" />
+          <FabriflowMark className="h-4 w-4 text-primary-foreground" />
         </div>
-        <span className="font-bold text-base">Stock Scanner</span>
+        <span className="font-bold text-base">Fabriflow</span>
       </div>
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        <SidebarSection label="Navigation" />
-        <SideNavItem href="/tasks" icon={CheckSquare} label="My Tasks" active={location.startsWith("/tasks")} />
-        <SideNavItem href="/work/inbound" icon={PackageCheck} label="Inbound" active={location.startsWith("/work/inbound")} />
-        <SideNavItem href="/work/queues" icon={Layers} label="Station Queues" active={location.startsWith("/work/queue")} />
-        <SideNavItem href="/attendance" icon={CalendarCheck} label="Attendance" active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
+        <SidebarSection label={t("navNavigation")} />
+        <SideNavItem href="/tasks" icon={CheckSquare} label={t("navMyTasks")} active={location.startsWith("/tasks")} />
+        <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
         {painterData?.isPainter && (
-          <SideNavItem href="/work/paint-queue" icon={Palette} label="Paint Shop" active={location.startsWith("/work/paint-queue")} />
+          <SideNavItem href="/work/paint-queue" icon={Palette} label={t("navPaintShop")} active={location.startsWith("/work/paint-queue")} />
         )}
       </nav>
       <div className="flex-shrink-0 border-t border-border p-2">
         <button onClick={logout} className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-destructive hover:bg-destructive/10 transition-colors">
-          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> Sign Out
+          <LogOut className="h-[18px] w-[18px] flex-shrink-0" /> {t("signOut")}
         </button>
       </div>
     </aside>
@@ -323,6 +343,7 @@ function AdminBottomNav() {
   const [location] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { logout, user } = useAuth();
+  const { t } = useLang();
 
   const { data: attention } = useQuery<AttentionCounts>({
     queryKey: ["/api/admin/attention"],
@@ -350,9 +371,9 @@ function AdminBottomNav() {
     location.startsWith("/work/purchase-orders");
 
   const tabs = [
-    { key: "jobs", href: "/work/projects", icon: FolderKanban, label: "Jobs", active: isJobsActive },
-    { key: "customers", href: "/customers", icon: Store, label: "Customers", active: isCustomersActive },
-    { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: "Purchasing", active: isPurchasingActive },
+    { key: "jobs", href: "/work/projects", icon: FolderKanban, label: t("navJobs"), active: isJobsActive },
+    { key: "customers", href: "/customers", icon: Store, label: t("navCustomers"), active: isCustomersActive },
+    { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: t("navPurchasing"), active: isPurchasingActive },
   ];
 
   return (
@@ -398,13 +419,13 @@ function AdminBottomNav() {
 
           <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
             {/* Work section */}
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">Work</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">{t("navWork")}</p>
             <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Job Templates</p>
-                  <p className="text-xs text-muted-foreground">Define steps & parts for each job type</p>
+                  <p className="text-sm font-semibold">{t("navJobTemplates")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descJobTemplates")}</p>
                 </div>
               </div>
             </Link>
@@ -412,8 +433,8 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <PackageOpen className="h-5 w-5 text-amber-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Materials</p>
-                  <p className="text-xs text-muted-foreground">Raw materials & purchased parts — import via Excel</p>
+                  <p className="text-sm font-semibold">{t("navMaterials")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descMaterials")}</p>
                 </div>
               </div>
             </Link>
@@ -421,8 +442,8 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Layers className="h-5 w-5 text-indigo-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Production Flow</p>
-                  <p className="text-xs text-muted-foreground">Station types & workstations (machines)</p>
+                  <p className="text-sm font-semibold">{t("navProductionFlow")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descProductionFlow")}</p>
                 </div>
               </div>
             </Link>
@@ -430,31 +451,29 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <CheckSquare className="h-5 w-5 text-teal-600 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Station Queues</p>
-                  <p className="text-xs text-muted-foreground">Live work queue per station type</p>
+                  <p className="text-sm font-semibold">{t("navStationQueues")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descStationQueues")}</p>
                 </div>
               </div>
             </Link>
-            {user?.plan === "pro" && (
-              <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
-                <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                  <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">AI Analytics</p>
-                    <p className="text-xs text-muted-foreground">Production insights & trends</p>
-                  </div>
+            <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{t("navAnalytics")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descAnalytics")}</p>
                 </div>
-              </Link>
-            )}
+              </div>
+            </Link>
 
             {/* People section */}
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">People</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navPeople")}</p>
             <Link href="/admin/users" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Users className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Manage Users</p>
-                  <p className="text-xs text-muted-foreground">Add workers, set roles & permissions</p>
+                  <p className="text-sm font-semibold">{t("navManageUsers")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descManageUsers")}</p>
                 </div>
               </div>
             </Link>
@@ -462,8 +481,8 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <CalendarCheck className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Attendance</p>
-                  <p className="text-xs text-muted-foreground">Check-ins, timesheets & reports</p>
+                  <p className="text-sm font-semibold">{t("navAttendance")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descAttendance")}</p>
                 </div>
               </div>
             </Link>
@@ -471,21 +490,21 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Inbox className="h-5 w-5 text-violet-600 shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold">Leave Requests</p>
-                  <p className="text-xs text-muted-foreground">Approve or reject time-off requests</p>
+                  <p className="text-sm font-semibold">{t("navLeaveRequests")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descLeaveRequests")}</p>
                 </div>
                 <AttentionBadge count={attention?.leaveRequests ?? 0} />
               </div>
             </Link>
 
             {/* Business section */}
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">Business</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navBusiness")}</p>
             <Link href="/products" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Package2 className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold">Products & Stock</p>
-                  <p className="text-xs text-muted-foreground">Manage your product catalogue</p>
+                  <p className="text-sm font-semibold">{t("navProductsStock")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descProductsStock")}</p>
                 </div>
                 <AttentionBadge count={attention?.lowStock ?? 0} />
               </div>
@@ -494,8 +513,8 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Truck className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Suppliers</p>
-                  <p className="text-xs text-muted-foreground">Manage your supplier list</p>
+                  <p className="text-sm font-semibold">{t("navSuppliers")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descSuppliers")}</p>
                 </div>
               </div>
             </Link>
@@ -503,8 +522,8 @@ function AdminBottomNav() {
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">Company & Plan</p>
-                  <p className="text-xs text-muted-foreground">Company details & subscription</p>
+                  <p className="text-sm font-semibold">{t("navCompanyPlan")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descCompanyPlan")}</p>
                 </div>
               </div>
             </Link>
@@ -515,7 +534,7 @@ function AdminBottomNav() {
                 className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-destructive/10 transition-colors cursor-pointer w-full text-destructive"
               >
                 <LogOut className="h-5 w-5 shrink-0" />
-                <p className="text-sm font-semibold">Sign Out</p>
+                <p className="text-sm font-semibold">{t("signOut")}</p>
               </button>
             </div>
           </div>
@@ -529,13 +548,14 @@ function AdminBottomNav() {
 
 function SupervisorBottomNav() {
   const [location] = useLocation();
+  const { t } = useLang();
 
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-    { href: "/work/projects", icon: FolderKanban, label: "Projects" },
-    { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/attendance", icon: CalendarCheck, label: "Attendance" },
-    { href: "/supervisor", icon: Eye, label: "Supervisor" },
+    { href: "/tasks", icon: CheckSquare, label: t("navTasks") },
+    { href: "/work/projects", icon: FolderKanban, label: t("navProjects") },
+    { href: "/work/inbound", icon: PackageCheck, label: t("navInbound") },
+    { href: "/attendance", icon: CalendarCheck, label: t("navAttendance") },
+    { href: "/supervisor", icon: Eye, label: t("navSupervisor") },
   ];
 
   return (
@@ -649,6 +669,7 @@ function WorkOrdersBottomNav() {
 function WorkerBottomNav() {
   const [location] = useLocation();
   const { atLeast } = usePlan();
+  const { t } = useLang();
 
   const { data: painterData } = useQuery<{ isPainter: boolean }>({
     queryKey: ["/api/work/painter-access"],
@@ -682,10 +703,10 @@ function WorkerBottomNav() {
   const queueBadge = queueCount?.pending ?? 0;
 
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "My Tasks", badge: 0, show: atLeast("standard") },
-    { href: "/work/queues", icon: Layers, label: "Queues", badge: queueBadge, show: atLeast("pro") },
-    { href: "/attendance", icon: CalendarCheck, label: "Attendance", badge: attendanceBadge, show: atLeast("standard") },
-    ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: "Paint", badge: 0, show: true }] : []),
+    { href: "/tasks", icon: CheckSquare, label: t("navMyTasks"), badge: 0, show: atLeast("standard") },
+    { href: "/work/queues", icon: Layers, label: t("navQueues"), badge: queueBadge, show: atLeast("pro") },
+    { href: "/attendance", icon: CalendarCheck, label: t("navAttendance"), badge: attendanceBadge, show: atLeast("standard") },
+    ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: t("navPaintShop"), badge: 0, show: true }] : []),
   ].filter((i) => i.show);
 
   return (
@@ -770,9 +791,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex items-center gap-2">
           <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center lg:hidden">
-            <ScanLine className="h-3.5 w-3.5 text-primary-foreground" />
+            <FabriflowMark className="h-3.5 w-3.5 text-primary-foreground" />
           </div>
-          <span className="font-bold text-sm">Stock Scanner</span>
+          <span className="font-bold text-sm">Fabriflow</span>
         </div>
       );
     }
@@ -816,6 +837,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between px-3 py-2 gap-2">
               <HeaderLeft />
               <div className="flex items-center gap-1.5">
+                <LangToggle />
                 <TutorialHelpButton />
                 <UserMenu />
                 <div className={cn(

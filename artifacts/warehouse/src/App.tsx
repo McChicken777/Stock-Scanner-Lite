@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
 import { AuthProvider, useAuth, usePlan } from "@/contexts/auth";
+import { LangProvider } from "@/contexts/lang";
 import { SetupWizard } from "@/pages/setup-wizard";
+import { FabriflowMark } from "@/components/fabriflow-logo";
 
 // Inventory Pages
 import Dashboard from "@/pages/dashboard";
@@ -216,16 +218,56 @@ function ProtectedRoutes() {
   );
 }
 
+// ── Splash screen ────────────────────────────────────────────────────────────
+
+function SplashScreen({ onDone }: { onDone: () => void }) {
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setFading(true), 1100);
+    const t2 = setTimeout(onDone, 1500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [onDone]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] bg-primary flex flex-col items-center justify-center gap-4"
+      style={{ transition: "opacity 0.4s ease", opacity: fading ? 0 : 1, pointerEvents: "none" }}
+    >
+      <div className="flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300">
+        <div className="h-14 w-14 rounded-2xl bg-white/15 flex items-center justify-center">
+          <FabriflowMark className="h-8 w-8 text-white" />
+        </div>
+        <span className="text-white font-black text-3xl tracking-tight">Fabriflow</span>
+      </div>
+      <div className="flex gap-1.5 mt-2 animate-in fade-in duration-500 delay-200">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-white/60"
+            style={{ animation: `pulse 1s ease-in-out ${i * 0.2}s infinite` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function App() {
+  const [splashDone, setSplashDone] = useState(false);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <ProtectedRoutes />
-          </WouterRouter>
-          <Toaster />
-        </AuthProvider>
+        <LangProvider>
+          <AuthProvider>
+            {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <ProtectedRoutes />
+            </WouterRouter>
+            <Toaster />
+          </AuthProvider>
+        </LangProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
