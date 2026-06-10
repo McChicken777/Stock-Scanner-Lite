@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,7 @@ async function unassignUserRole(userId: number, roleId: number) {
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
@@ -305,7 +307,7 @@ export default function AdminUsersPage() {
   if (user?.role !== "admin") {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        Access restricted to admins.
+        {t("accessDenied")}
       </div>
     );
   }
@@ -314,20 +316,20 @@ export default function AdminUsersPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Users</h1>
+          <h1 className="text-2xl font-black">{t("usersTitle")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Manage access & roles
+            {t("usersManageAccess")}
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="font-bold gap-2">
-              <UserPlus className="h-4 w-4" /> Add User
+              <UserPlus className="h-4 w-4" /> {t("usersAddUser")}
             </Button>
           </DialogTrigger>
           <DialogContent className="w-[90vw] max-w-sm rounded-xl">
             <DialogHeader>
-              <DialogTitle>New User</DialogTitle>
+              <DialogTitle>{t("usersNewUser")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -357,8 +359,8 @@ export default function AdminUsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="worker">Worker</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="worker">{t("usersWorker")}</SelectItem>
+                    <SelectItem value="admin">{t("usersAdmin")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -368,7 +370,7 @@ export default function AdminUsersPage() {
                 onClick={() => createMutation.mutate({ username: newUsername, password: newPassword, role: newRole })}
               >
                 {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Create User
+                {t("usersCreateUser")}
               </Button>
             </div>
           </DialogContent>
@@ -414,7 +416,7 @@ export default function AdminUsersPage() {
               <div className="flex gap-2 items-center">
                 {u.role === "worker" && (
                   <button
-                    title={u.isSupervisor ? "Remove supervisor access" : "Grant supervisor access"}
+                    title={u.isSupervisor ? t("usersRemoveSupervisor") : t("usersGrantSupervisor")}
                     onClick={() => supervisorMutation.mutate({ userId: u.id, isSupervisor: !u.isSupervisor })}
                     disabled={supervisorMutation.isPending}
                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
@@ -437,7 +439,7 @@ export default function AdminUsersPage() {
                       title="Assign shift"
                       className="h-7 px-1.5 rounded-md border border-input bg-background text-[11px] font-medium focus:outline-none focus:ring-1 focus:ring-primary/40 max-w-[90px]"
                     >
-                      <option value="">No shift</option>
+                      <option value="">{t("usersNoShift")}</option>
                       {companyShifts.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
@@ -461,15 +463,15 @@ export default function AdminUsersPage() {
                     </DialogTrigger>
                     <DialogContent className="w-[90vw] max-w-sm rounded-xl max-h-[80vh] overflow-y-auto">
                       <DialogHeader>
-                        <DialogTitle>Assign Roles: {u.username}</DialogTitle>
+                        <DialogTitle>{`${t("usersAssignRolesTitle")}: ${u.username}`}</DialogTitle>
                       </DialogHeader>
                       {rolesLoading ? (
-                        <div className="text-center text-muted-foreground">Loading...</div>
+                        <div className="text-center text-muted-foreground">{t("loading")}</div>
                       ) : (
                         <div className="space-y-4">
                           {userRoles?.assigned?.length > 0 && (
                             <div>
-                              <p className="text-sm font-bold mb-2">Current Roles:</p>
+                              <p className="text-sm font-bold mb-2">{t("usersCurrentRoles")}:</p>
                               <div className="space-y-2">
                                 {userRoles.assigned.map((ar: UserRoleAssignment) => {
                                   const role = userRoles.available.find((r: Role) => r.id === ar.roleId);
@@ -499,10 +501,10 @@ export default function AdminUsersPage() {
                           )}
 
                           <div className="pt-4 border-t space-y-2">
-                            <p className="text-sm font-bold">Add Role:</p>
+                            <p className="text-sm font-bold">{t("usersAddRole")}:</p>
                             <Select value={newRoleId} onValueChange={setNewRoleId}>
                               <SelectTrigger className="h-10">
-                                <SelectValue placeholder="Select role" />
+                                <SelectValue placeholder={t("usersSelectRole")} />
                               </SelectTrigger>
                               <SelectContent>
                                 {userRoles?.available?.map((r: Role) => (
@@ -537,7 +539,7 @@ export default function AdminUsersPage() {
                                 });
                               }}
                             >
-                              <Plus className="h-4 w-4" /> Add Role
+                              <Plus className="h-4 w-4" /> {t("usersAddRole")}
                             </Button>
                           </div>
                         </div>
@@ -568,8 +570,8 @@ export default function AdminUsersPage() {
       {/* Production Roles */}
       <div className="pt-4 border-t space-y-3">
         <div>
-          <p className="text-base font-bold flex items-center gap-2"><HardHat className="h-4 w-4 text-purple-600" /> Production Roles</p>
-          <p className="text-xs text-muted-foreground">Roles like Welder, CNC Operator — assign above to workers, attach to steps in Production Flow</p>
+          <p className="text-base font-bold flex items-center gap-2"><HardHat className="h-4 w-4 text-purple-600" /> {t("usersProductionRoles")}</p>
+          <p className="text-xs text-muted-foreground">{t("usersRolesDesc")}</p>
         </div>
 
         <div className="space-y-2">
@@ -614,7 +616,7 @@ export default function AdminUsersPage() {
             )
           )}
           {allRoles.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-3">No roles yet</p>
+            <p className="text-sm text-muted-foreground text-center py-3">{t("usersNoRoles")}</p>
           )}
         </div>
 
@@ -628,7 +630,7 @@ export default function AdminUsersPage() {
           />
           <Button size="sm" onClick={() => createRoleMutation.mutate(newRoleName.trim())}
             disabled={!newRoleName.trim() || createRoleMutation.isPending} className="gap-1 font-bold">
-            <Plus className="h-4 w-4" /> Add
+            <Plus className="h-4 w-4" /> {t("add")}
           </Button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth, usePlan } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -217,14 +218,14 @@ function driftColor(pct: number) {
   return "text-muted-foreground";
 }
 
-function deadlineBadge(deadline: string) {
+function deadlineBadge(deadline: string, t: (k: string) => string) {
   const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000);
-  if (diff < 0) return <Badge variant="destructive" className="text-[10px]">Overdue</Badge>;
-  if (diff === 0) return <Badge variant="destructive" className="text-[10px]">Due today</Badge>;
+  if (diff < 0) return <Badge variant="destructive" className="text-[10px]">{t("statusOverdue")}</Badge>;
+  if (diff === 0) return <Badge variant="destructive" className="text-[10px]">{t("statusDueToday")}</Badge>;
   return <Badge variant="outline" className="text-[10px]">{diff}d left</Badge>;
 }
 
-function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undefined; loading: boolean }) {
+function LiveInsightsSection({ data, loading, t }: { data: LiveInsightsData | undefined; loading: boolean; t: (k: string) => string }) {
   if (loading) {
     return (
       <div className="space-y-3">
@@ -245,7 +246,7 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
     return (
       <div className="rounded-xl border border-dashed border-border p-5 text-center text-sm text-muted-foreground">
         <Activity className="h-6 w-6 mx-auto mb-2 text-muted-foreground/50" />
-        No live data yet — insights appear as jobs are logged and completed.
+        {t("analyticsNoData")}
       </div>
     );
   }
@@ -258,8 +259,8 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-rose-700 dark:text-rose-400">
               <Target className="h-4 w-4" />
-              At-Risk Jobs
-              <span className="font-normal text-xs text-muted-foreground ml-1">deadline within 5 days</span>
+              {t("analyticsAtRisk")}
+              <span className="font-normal text-xs text-muted-foreground ml-1">{t("analyticsAtRiskDesc")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
@@ -270,8 +271,8 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
                     {job.projectName}
                   </a>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-muted-foreground">{job.incompleteSteps}/{job.totalSteps} steps left</span>
-                    {deadlineBadge(job.deadline)}
+                    <span className="text-xs text-muted-foreground">{job.incompleteSteps}/{job.totalSteps} {t("analyticsStepsLeft")}</span>
+                    {deadlineBadge(job.deadline, t)}
                   </div>
                 </div>
               ))}
@@ -286,8 +287,8 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-orange-500" />
-              Live Bottlenecks
-              <span className="font-normal text-xs text-muted-foreground ml-1">pending steps per station right now</span>
+              {t("analyticsLiveBottlenecks")}
+              <span className="font-normal text-xs text-muted-foreground ml-1">{t("analyticsLiveBottlenecksDesc")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
@@ -325,8 +326,8 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
           <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-blue-500" />
-              Duration Drift
-              <span className="font-normal text-xs text-muted-foreground ml-1">actual vs. estimated (≥3 samples)</span>
+              {t("analyticsDurationDrift")}
+              <span className="font-normal text-xs text-muted-foreground ml-1">{t("analyticsDurationDriftDesc")}</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-4">
@@ -357,13 +358,13 @@ function LiveInsightsSection({ data, loading }: { data: LiveInsightsData | undef
   );
 }
 
-function PaywallState() {
+function PaywallState({ t }: { t: (k: string) => string }) {
   return (
     <div className="p-4 pb-24 space-y-6">
       <div className="px-1 pt-2">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <BarChart2 className="h-6 w-6 text-primary" />
-          Analytics
+          {t("analyticsTitle")}
         </h1>
       </div>
       <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-4">
@@ -371,9 +372,9 @@ function PaywallState() {
           <Lock className="h-8 w-8 text-primary" />
         </div>
         <div className="space-y-2">
-          <p className="font-black text-lg">Standard feature</p>
+          <p className="font-black text-lg">{t("analyticsStandardFeature")}</p>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-            Analytics surfaces real-time bottlenecks, at-risk jobs, and duration drift across your shop floor.
+            {t("analyticsStandardDesc")}
           </p>
         </div>
         <div className="grid grid-cols-1 gap-2 text-xs text-left max-w-xs mx-auto">
@@ -390,26 +391,26 @@ function PaywallState() {
           ))}
         </div>
         <Button asChild variant="default" className="mt-2">
-          <a href="/admin/company">Upgrade to Standard</a>
+          <a href="/admin/company">{t("analyticsUpgradeToStandard")}</a>
         </Button>
       </div>
     </div>
   );
 }
 
-function EmptySnapshotState({ onGenerate, loading }: { onGenerate: () => void; loading: boolean }) {
+function EmptySnapshotState({ onGenerate, loading, t }: { onGenerate: () => void; loading: boolean; t: (k: string) => string }) {
   return (
     <div className="rounded-2xl border-2 border-dashed border-border bg-muted/30 p-8 text-center space-y-4">
       <div className="mx-auto h-14 w-14 rounded-full bg-muted flex items-center justify-center">
         <Brain className="h-7 w-7 text-muted-foreground" />
       </div>
       <div className="space-y-1">
-        <p className="font-bold">No analytics yet</p>
-        <p className="text-sm text-muted-foreground">Generate your first AI analytics report from your production history.</p>
+        <p className="font-bold">{t("analyticsNoInsights")}</p>
+        <p className="text-sm text-muted-foreground">{t("analyticsNoInsightsDesc")}</p>
       </div>
       <Button onClick={onGenerate} disabled={loading} className="gap-2">
         {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-        {loading ? "Generating…" : "Generate First Report"}
+        {loading ? t("analyticsGenerating") : t("analyticsGenerate")}
       </Button>
     </div>
   );
@@ -420,6 +421,7 @@ function EmptySnapshotState({ onGenerate, loading }: { onGenerate: () => void; l
 export default function AnalyticsPage() {
   const { user } = useAuth();
   const { atLeast } = usePlan();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin";
@@ -483,13 +485,13 @@ export default function AnalyticsPage() {
   if (!isAdmin) {
     return (
       <div className="p-4 flex items-center justify-center h-64 text-center">
-        <p className="text-muted-foreground text-sm">Admin access required.</p>
+        <p className="text-muted-foreground text-sm">{t("analyticsAdminRequired")}</p>
       </div>
     );
   }
 
   if (!canSeeLive) {
-    return <PaywallState />;
+    return <PaywallState t={t} />;
   }
 
   if (liveLoading && insightsLoading) {
@@ -514,23 +516,23 @@ export default function AnalyticsPage() {
       <div className="px-1 pt-2">
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <BarChart2 className="h-6 w-6 text-primary" />
-          Analytics
+          {t("analyticsTitle")}
         </h1>
       </div>
 
       {/* Live Insights (Standard+) */}
       <div>
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-          <Activity className="h-3.5 w-3.5" /> Live Insights
+          <Activity className="h-3.5 w-3.5" /> {t("analyticsLiveInsights")}
         </p>
-        <LiveInsightsSection data={liveInsights} loading={liveLoading} />
+        <LiveInsightsSection data={liveInsights} loading={liveLoading} t={t} />
       </div>
 
       {/* AI Analytics (Pro) */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Brain className="h-3.5 w-3.5" /> AI Analytics
+            <Brain className="h-3.5 w-3.5" /> {t("analyticsAiAnalytics")}
             {!canSeeAI && <span className="ml-1 text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Pro</span>}
           </p>
           {canSeeAI && (
@@ -542,7 +544,7 @@ export default function AnalyticsPage() {
               onClick={() => refreshMutation.mutate()}
             >
               <RefreshCw className={`h-3 w-3 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-              {refreshMutation.isPending ? "Generating…" : "Refresh"}
+              {refreshMutation.isPending ? t("analyticsGenerating") : t("analyticsRefresh")}
             </Button>
           )}
         </div>
@@ -553,19 +555,20 @@ export default function AnalyticsPage() {
               <Lock className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-bold text-sm">AI Analytics — Pro feature</p>
+              <p className="font-bold text-sm">{t("analyticsProFeature")}</p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
-                Weekly AI-generated insight cards, bottleneck wait-time heatmap, and deadline accuracy trend.
+                {t("analyticsProDesc")}
               </p>
             </div>
             <Button asChild size="sm" variant="outline">
-              <a href="/admin/company">Upgrade to Pro</a>
+              <a href="/admin/company">{t("analyticsUpgradeToPro")}</a>
             </Button>
           </div>
         ) : !hasData ? (
           <EmptySnapshotState
             onGenerate={() => refreshMutation.mutate()}
             loading={refreshMutation.isPending}
+            t={t}
           />
         ) : (
         <>
@@ -609,8 +612,8 @@ export default function AnalyticsPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary" />
-                      Efficiency Over Time
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">avg active minutes per step</span>
+                      {t("analyticsEfficiency")}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">{t("analyticsEfficiencyDesc")}</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -646,8 +649,8 @@ export default function AnalyticsPage() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-bold flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-orange-500" />
-                    Bottleneck Heatmap
-                    <span className="text-[10px] font-normal text-muted-foreground ml-1">avg wait before pickup, per step &times; month</span>
+                    {t("analyticsBottleneckHeatmap")}
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">{t("analyticsBottleneckHeatmapDesc")}</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -661,8 +664,8 @@ export default function AnalyticsPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-bold flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-blue-500" />
-                      Deadline Accuracy
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">% completed on or before deadline</span>
+                      {t("analyticsDeadlineAccuracy")}
+                      <span className="text-[10px] font-normal text-muted-foreground ml-1">{t("analyticsDeadlineAccuracyDesc")}</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

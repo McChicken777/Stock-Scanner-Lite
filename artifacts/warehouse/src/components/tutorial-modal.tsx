@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useTutorial } from "@/contexts/tutorial";
+import { useLang } from "@/contexts/lang";
 import { TUTORIALS } from "@/data/tutorials";
 import {
   Dialog,
@@ -12,6 +13,7 @@ import { ChevronLeft, ChevronRight, Lightbulb, GraduationCap } from "lucide-reac
 
 export function TutorialModal() {
   const { isOpen, activeKey, closeTutorial } = useTutorial();
+  const { t } = useLang();
   const [step, setStep] = useState(0);
 
   const tutorial = activeKey ? TUTORIALS[activeKey] : null;
@@ -93,7 +95,7 @@ export function TutorialModal() {
                 onClick={closeTutorial}
                 className="flex-1 h-9 font-bold"
               >
-                Got it!
+                {t("tutorialGotIt")}
               </Button>
             ) : (
               <Button
@@ -101,7 +103,7 @@ export function TutorialModal() {
                 onClick={() => setStep((s) => s + 1)}
                 className="flex-1 h-9 font-bold"
               >
-                Next <ChevronRight className="h-4 w-4 ml-1" />
+                {t("tutorialNext")} <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             )}
           </div>
@@ -112,7 +114,7 @@ export function TutorialModal() {
               onClick={closeTutorial}
               className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Skip tutorial
+              {t("tutorialSkip")}
             </button>
             <span className="text-[11px] text-muted-foreground">
               {step + 1} / {steps.length}

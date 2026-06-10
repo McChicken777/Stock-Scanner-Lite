@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -54,13 +55,14 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 function RolePicker({ roles, value, onChange }: { roles: Role[]; value: number | null; onChange: (v: number | null) => void }) {
+  const { t } = useLang();
   return (
     <select
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
       className="text-xs rounded border border-border bg-background px-1.5 py-0.5 min-w-0 max-w-[120px] truncate"
     >
-      <option value="">No role</option>
+      <option value="">{t("templatesNoRole")}</option>
       {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
     </select>
   );
@@ -71,6 +73,7 @@ function RolePicker({ roles, value, onChange }: { roles: Role[]; value: number |
 function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
   template: Template; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[];
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const qc = useQueryClient();
   const key = [`/api/work/templates/${template.id}/procedures`];
@@ -191,7 +194,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
     <div className="space-y-2">
       {/* Header bar */}
       <div className="flex items-center justify-between">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Top-level Steps</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("templatesTopLevelSteps")}</p>
         <div className="flex items-center gap-1.5">
           {procs.length > 0 && (
             <button
@@ -232,7 +235,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
               </div>
             </div>
           ))}
-          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowPresetPicker(false)}>Cancel</Button>
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowPresetPicker(false)}>{t("cancel")}</Button>
         </div>
       )}
 
@@ -248,7 +251,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
             onKeyDown={(e) => { if (e.key === "Enter" && savingPresetName.trim()) saveAsPreset.mutate(savingPresetName.trim()); if (e.key === "Escape") setShowSavePreset(false); }}
           />
           <Button size="sm" className="h-7 text-xs px-2" disabled={!savingPresetName.trim() || saveAsPreset.isPending}
-            onClick={() => saveAsPreset.mutate(savingPresetName.trim())}>Save</Button>
+            onClick={() => saveAsPreset.mutate(savingPresetName.trim())}>{t("save")}</Button>
           <button onClick={() => setShowSavePreset(false)} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
         </div>
       )}
@@ -257,7 +260,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
       {isLoading ? (
         <div className="h-10 bg-muted/40 rounded animate-pulse" />
       ) : procs.length === 0 ? (
-        <p className="text-xs text-muted-foreground italic pl-1">No steps yet. Add steps below or apply a preset.</p>
+        <p className="text-xs text-muted-foreground italic pl-1">{t("templatesNoSteps")}</p>
       ) : (
         <div className="space-y-1.5">
           {procs.map((proc, idx) => (
@@ -290,7 +293,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
                       onChange={(e) => updateProc.mutate({ id: proc.id, data: { stationTypeId: e.target.value ? Number(e.target.value) : null } })}
                       className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[110px]"
                     >
-                      <option value="">— no station —</option>
+                      <option value="">{t("templatesNoStation")}</option>
                       {stationTypes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   )}
@@ -320,13 +323,13 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
                     className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-colors ${proc.qcEnabled ? "bg-amber-100 text-amber-700 border-amber-300" : "border-border text-muted-foreground hover:bg-muted"}`}
                     title="Quality Control check required before completing this step"
                   >
-                    <ShieldCheck className="h-3 w-3" /> QC
+                    <ShieldCheck className="h-3 w-3" /> {t("templatesQC")}
                   </button>
                 </div>
                 {proc.qcEnabled && (
                   <div className="space-y-1 pt-1">
                     <textarea
-                      placeholder="QC instructions (e.g. measurements, tolerances, checks…)"
+                      placeholder={t("templatesQCInstructions")}
                       defaultValue={proc.qcInstructions ?? ""}
                       rows={2}
                       className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
@@ -337,7 +340,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
                     />
                     <input
                       type="url"
-                      placeholder="Reference photo URL (optional)"
+                      placeholder={t("templatesRefPhoto")}
                       defaultValue={proc.qcPhotoUrl ?? ""}
                       className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
                       onBlur={(e) => {
@@ -362,7 +365,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
         <Input
           value={newProcName}
           onChange={(e) => setNewProcName(e.target.value)}
-          placeholder="Add step (e.g. Sandblast, Weld, Prime)…"
+          placeholder={t("templatesAddStepPlaceholder")}
           className="h-8 text-sm border-2"
           onKeyDown={(e) => { if (e.key === "Enter" && newProcName.trim()) addProc.mutate(newProcName.trim()); }}
         />
@@ -409,6 +412,7 @@ function TemplateProceduresEditor({ template, roles, stationTypes, presets }: {
 function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets, products, onInvalidate }: {
   templateId: number; comp: ComponentEntry; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[]; products: Product[]; onInvalidate: () => void;
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const [addingProc, setAddingProc] = useState(false);
   const [newProcName, setNewProcName] = useState("");
@@ -503,7 +507,7 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
                   onChange={(e) => updateProc.mutate({ procId: proc.id, data: { stationTypeId: e.target.value ? Number(e.target.value) : null } })}
                   className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[110px]"
                 >
-                  <option value="">— no station —</option>
+                  <option value="">{t("templatesNoStation")}</option>
                   {stationTypes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               )}
@@ -538,7 +542,7 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
                   }}
                   className="text-xs rounded border border-border bg-background px-1.5 py-0.5 max-w-[120px]"
                 >
-                  <option value="">— no material —</option>
+                  <option value="">{t("templatesNoMaterial")}</option>
                   {products.filter((p) => p.itemType === "purchased_part").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 {proc.consumesProductId && (
@@ -563,13 +567,13 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
                   className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border transition-colors ${proc.qcEnabled ? "bg-amber-100 text-amber-700 border-amber-300" : "border-border text-muted-foreground hover:bg-muted"}`}
                   title="Quality Control check required before completing this step"
                 >
-                  <ShieldCheck className="h-3 w-3" /> QC
+                  <ShieldCheck className="h-3 w-3" /> {t("templatesQC")}
                 </button>
               </div>
               {proc.qcEnabled && (
                 <div className="space-y-1 pt-1">
                   <textarea
-                    placeholder="QC instructions (e.g. measurements, tolerances, checks…)"
+                    placeholder={t("templatesQCInstructions")}
                     defaultValue={proc.qcInstructions ?? ""}
                     rows={2}
                     className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
@@ -580,7 +584,7 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
                   />
                   <input
                     type="url"
-                    placeholder="Reference photo URL (optional)"
+                    placeholder={t("templatesRefPhoto")}
                     defaultValue={proc.qcPhotoUrl ?? ""}
                     className="w-full text-xs rounded border border-amber-200 bg-amber-50/40 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-amber-400"
                     onBlur={(e) => {
@@ -627,7 +631,7 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
             onClick={() => { setAddingProc(true); setNewProcName(""); }}
             className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 font-medium"
           >
-            <Plus className="h-3 w-3" /> Add step
+            <Plus className="h-3 w-3" /> {t("templatesAddStep")}
           </button>
           {presets.length > 0 && (
             <button
@@ -673,6 +677,7 @@ function BomSection({ templateId, productId, allProducts, roles, stationTypes, p
   templateId: number; productId: number; allProducts: Product[];
   roles: Role[]; stationTypes: StationType[]; presets: StepPreset[]; depth?: number;
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -785,7 +790,7 @@ function BomSection({ templateId, productId, allProducts, roles, stationTypes, p
                   }}
                 />
                 <span className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${isManufactured ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
-                  {isManufactured ? "Manufactured" : "Purchased"}
+                  {isManufactured ? t("templatesManufactured") : t("templatesPurchased")}
                 </span>
                 {comp.quantity > 1 && (
                   <span className="text-xs font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">×{comp.quantity}</span>
@@ -840,13 +845,13 @@ function BomSection({ templateId, productId, allProducts, roles, stationTypes, p
               onClick={() => setNewPartType("manufactured_part")}
               className={`flex-1 text-xs font-semibold py-1.5 rounded border-2 transition-colors ${newPartType === "manufactured_part" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border"}`}
             >
-              <Wrench className="h-3 w-3 inline mr-1" />Manufactured
+              <Wrench className="h-3 w-3 inline mr-1" />{t("templatesManufactured")}
             </button>
             <button
               onClick={() => setNewPartType("purchased_part")}
               className={`flex-1 text-xs font-semibold py-1.5 rounded border-2 transition-colors ${newPartType === "purchased_part" ? "border-orange-500 bg-orange-50 text-orange-700" : "border-border"}`}
             >
-              <ShoppingCart className="h-3 w-3 inline mr-1" />Purchased
+              <ShoppingCart className="h-3 w-3 inline mr-1" />{t("templatesPurchased")}
             </button>
           </div>
           <select
@@ -883,11 +888,11 @@ function BomSection({ templateId, productId, allProducts, roles, stationTypes, p
                 }
               }}>
               {(addComponentMutation.isPending || createPartAndAddMutation.isPending) ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
-              Add
+              {t("add")}
             </Button>
             <Button size="sm" variant="outline" className="h-9"
               onClick={() => { setAddingComponent(false); setSelectedComponentId("new"); setNewPartName(""); setComponentQty(1); }}>
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </div>
@@ -906,10 +911,11 @@ function BomSection({ templateId, productId, allProducts, roles, stationTypes, p
 function TemplateBOM({ template, allProducts, roles, stationTypes, presets }: {
   template: Template; allProducts: Product[]; roles: Role[]; stationTypes: StationType[]; presets: StepPreset[];
 }) {
+  const { t } = useLang();
   if (!template.productId) return null;
   return (
     <div className="px-4 pb-4 space-y-3">
-      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sub-parts (BOM)</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("templatesBOM")}</p>
       <BomSection
         templateId={template.id}
         productId={template.productId}
@@ -926,6 +932,7 @@ function TemplateBOM({ template, allProducts, roles, stationTypes, presets }: {
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function WorkTemplatesPage() {
+  const { t } = useLang();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1014,15 +1021,15 @@ export default function WorkTemplatesPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground mt-20"><p>Admin only</p></div>;
+    return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("adminOnly")}</p></div>;
   }
 
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Item Templates</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Admin Only</p>
+          <h1 className="text-2xl font-black">{t("templatesTitle")}</h1>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("templatesAdminOnly")}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Outline Import */}
@@ -1031,14 +1038,14 @@ export default function WorkTemplatesPage() {
             className="font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => navigate("/work/template-outline")}
           >
-            <FileText className="h-3.5 w-3.5" /> Outline Import
+            <FileText className="h-3.5 w-3.5" /> {t("templatesOutlineImport")}
           </Button>
 
           {/* New Template */}
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="font-bold gap-1">
-                <Plus className="h-4 w-4" /> New
+                <Plus className="h-4 w-4" /> {t("new")}
               </Button>
             </DialogTrigger>
             <DialogContent className="w-[90vw] max-w-sm rounded-xl">
@@ -1096,15 +1103,15 @@ export default function WorkTemplatesPage() {
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed space-y-4">
           <Package className="h-10 w-10 mx-auto text-muted-foreground" />
           <div>
-            <p className="font-semibold">No templates yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Create a template or start from our starter pack.</p>
+            <p className="font-semibold">{t("templatesNoTemplates")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("templatesNoTemplatesDesc")}</p>
           </div>
           <div className="flex flex-col gap-2 max-w-xs mx-auto">
             <Button
               className="w-full font-bold gap-2 bg-emerald-600 hover:bg-emerald-700"
               onClick={() => navigate("/work/template-outline")}
             >
-              <FileText className="h-4 w-4" /> Outline Import (Fast)
+              <FileText className="h-4 w-4" /> {t("templatesOutlineImport")}
             </Button>
             <Button
               className="w-full font-bold gap-2 bg-green-600 hover:bg-green-700"
@@ -1112,10 +1119,10 @@ export default function WorkTemplatesPage() {
               disabled={seedStarterPack.isPending}
             >
               {seedStarterPack.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-              Load 6 Starter Templates
+              {t("templatesLoadStarter")}
             </Button>
             <Button variant="outline" className="w-full gap-2" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" /> Create Blank Template
+              <Plus className="h-4 w-4" /> {t("templatesCreateBlank")}
             </Button>
           </div>
         </div>
@@ -1137,7 +1144,7 @@ export default function WorkTemplatesPage() {
                       {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                       <div>
                         <h3 className="font-bold text-base">{template.name}</h3>
-                        <p className="text-xs text-muted-foreground mt-0.5">Final product</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t("templatesFinalProduct")}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1">

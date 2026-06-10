@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ProductLocationsDialog } from "@/components/product-locations-dialog";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -185,8 +186,16 @@ export default function ProductsPage() {
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
+
+  const FILTER_LABELS_T: Record<FilterType, string> = {
+    all: t("productsAll"),
+    purchased: t("productsPurchased"),
+    manufactured: t("productsManufactured"),
+    final: t("productsFinalProduct"),
+  };
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -299,7 +308,7 @@ export default function ProductsPage() {
     >
       {product.isLowStock && (
         <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] font-bold px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" /> LOW STOCK
+          <AlertTriangle className="h-3 w-3" /> {t("productsLowStock")}
         </div>
       )}
 
@@ -311,7 +320,7 @@ export default function ProductsPage() {
               className={`font-medium text-xs ${typeBadgeClass(product.itemType)}`}
               variant="outline"
             >
-              {typeLabel(product.itemType)}
+              {product.itemType === "manufactured_part" || product.itemType === "production" ? t("productsManufactured") : product.itemType === "final_product" ? t("productsFinalProduct") : t("productsPurchased")}
             </Badge>
           </div>
         </div>
@@ -373,18 +382,18 @@ export default function ProductsPage() {
                 </AlertDialogTrigger>
                 <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Product?</AlertDialogTitle>
+                    <AlertDialogTitle>{t("productsDeleteQ")}</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will permanently delete {product.name} and remove it from all locations. This action cannot be undone.
+                      {t("productsDeleteDesc")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
-                    <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
+                    <AlertDialogCancel className="h-12 w-full sm:w-auto">{t("cancel")}</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => handleDelete(product.id)}
                       className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
-                      Delete
+                      {t("delete")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -399,19 +408,19 @@ export default function ProductsPage() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between px-1 pt-2 gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Products</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("productsTitle")}</h1>
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
               <Button size="sm" variant="outline" className="font-bold" onClick={downloadTemplate}>
-                <Download className="h-4 w-4 mr-1" /> Template
+                <Download className="h-4 w-4 mr-1" /> {t("productsTemplate")}
               </Button>
               <Button size="sm" variant="outline" className="font-bold" onClick={() => { setShowImport(true); setCsvRows(null); }}>
-                <Upload className="h-4 w-4 mr-1" /> Import
+                <Upload className="h-4 w-4 mr-1" /> {t("productsImport")}
               </Button>
               <Link href="/products/new">
                 <Button size="sm" className="font-bold">
-                  <Plus className="h-4 w-4 mr-1" /> New
+                  <Plus className="h-4 w-4 mr-1" /> {t("new")}
                 </Button>
               </Link>
             </>
@@ -422,7 +431,7 @@ export default function ProductsPage() {
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
         <Input
-          placeholder="Search products..."
+          placeholder={t("search") + "…"}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-10 h-12 text-md shadow-sm bg-background border-2"
@@ -440,7 +449,7 @@ export default function ProductsPage() {
                 : "bg-background border-border text-muted-foreground hover:border-primary/40"
             }`}
           >
-            {FILTER_LABELS[f]}
+            {FILTER_LABELS_T[f]}
             {f !== "all" && products && (
               <span className="ml-1.5 opacity-70 text-xs">
                 ({byType(f).length})
@@ -456,7 +465,7 @@ export default function ProductsPage() {
         </div>
       ) : visibleProducts.length === 0 ? (
         <div className="text-center py-12 px-4 bg-muted/30 rounded-xl border border-dashed">
-          <p className="text-muted-foreground">No products found.</p>
+          <p className="text-muted-foreground">{t("productsNoFound")}</p>
         </div>
       ) : (
         <div className="space-y-4 pb-8">
@@ -513,7 +522,7 @@ export default function ProductsPage() {
       <Dialog open={showImport} onOpenChange={(o) => { setShowImport(o); if (!o) { setCsvRows(null); setImportResult(null); } }}>
         <DialogContent className="w-[95vw] max-w-2xl rounded-xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Import Products from CSV</DialogTitle>
+            <DialogTitle>{t("productsImport")} Products from CSV</DialogTitle>
           </DialogHeader>
 
           {importResult ? (
@@ -578,7 +587,7 @@ export default function ProductsPage() {
                 />
                 <div className="flex gap-2 justify-center">
                   <Button variant="outline" onClick={downloadTemplate}>
-                    <Download className="h-4 w-4 mr-1" /> Download Template
+                    <Download className="h-4 w-4 mr-1" /> {t("productsTemplate")}
                   </Button>
                   <Button onClick={() => fileInputRef.current?.click()}>
                     <Upload className="h-4 w-4 mr-1" /> Choose File
@@ -682,7 +691,7 @@ export default function ProductsPage() {
                   className="flex-1"
                   onClick={() => { setShowImport(false); setCsvRows(null); setImportResult(null); }}
                 >
-                  Cancel
+                  {t("cancel")}
                 </Button>
                 <Button
                   className="flex-1"

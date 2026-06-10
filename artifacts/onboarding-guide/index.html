@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Scanner Lite — Setup Guide</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand: #2563eb;
+      --brand-light: #eff6ff;
+      --brand-mid: #bfdbfe;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --warn: #92400e;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --tip: #065f46;
+      --tip-bg: #ecfdf5;
+      --tip-border: #a7f3d0;
+      --step-bg: #f9fafb;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      font-size: 11pt;
+      line-height: 1.6;
+      background: white;
+    }
+
+    /* ── PRINT ── */
+    @media print {
+      body { font-size: 10.5pt; }
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+      .section { page-break-inside: avoid; }
+      a { color: var(--text); text-decoration: none; }
+      .screenshot { break-inside: avoid; }
+    }
+
+    /* ── LAYOUT ── */
+    .page { max-width: 720px; margin: 0 auto; padding: 48px 40px; }
+
+    /* ── COVER ── */
+    .cover {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 80px 40px;
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #3b82f6 100%);
+      color: white;
+      text-align: center;
+    }
+    .cover-logo {
+      font-size: 48px;
+      margin-bottom: 24px;
+    }
+    .cover h1 {
+      font-size: 36pt;
+      font-weight: 900;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+    .cover .subtitle {
+      font-size: 16pt;
+      opacity: 0.85;
+      margin-bottom: 40px;
+    }
+    .cover .version {
+      font-size: 10pt;
+      opacity: 0.6;
+      margin-top: auto;
+      padding-top: 60px;
+    }
+    .cover-steps {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 32px;
+    }
+    .cover-step {
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 100px;
+      padding: 6px 18px;
+      font-size: 10pt;
+      font-weight: 600;
+    }
+
+    /* ── TOC ── */
+    .toc { padding: 48px 40px; max-width: 720px; margin: 0 auto; }
+    .toc h2 { font-size: 20pt; font-weight: 800; margin-bottom: 24px; }
+    .toc-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 6px;
+    }
+    .toc-item:hover { background: var(--brand-light); }
+    .toc-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: white;
+      font-size: 10pt;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .toc-label { font-weight: 600; font-size: 11.5pt; }
+    .toc-desc { color: var(--muted); font-size: 10pt; }
+    .toc-dots { flex: 1; border-bottom: 2px dotted var(--border); margin: 0 8px; }
+    .toc-page { color: var(--muted); font-size: 10pt; font-weight: 600; }
+
+    /* ── CHAPTER HEADER ── */
+    .chapter-header {
+      border-left: 5px solid var(--brand);
+      padding: 20px 24px;
+      background: var(--brand-light);
+      border-radius: 0 12px 12px 0;
+      margin-bottom: 28px;
+    }
+    .chapter-num { font-size: 9pt; font-weight: 700; color: var(--brand); text-transform: uppercase; letter-spacing: 1px; }
+    .chapter-title { font-size: 22pt; font-weight: 900; margin-top: 4px; }
+    .chapter-intro { font-size: 11pt; color: #374151; margin-top: 8px; }
+
+    /* ── STEPS ── */
+    .steps { counter-reset: step; }
+    .step {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 32px;
+      padding: 20px;
+      background: var(--step-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .step-num {
+      counter-increment: step;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: white;
+      font-size: 13pt;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-body { flex: 1; min-width: 0; }
+    .step-title { font-size: 13pt; font-weight: 700; margin-bottom: 6px; }
+    .step-body p { margin-bottom: 8px; color: #374151; }
+    .step-body ul, .step-body ol { padding-left: 20px; margin-bottom: 8px; }
+    .step-body li { margin-bottom: 4px; }
+
+    /* ── SCREENSHOT PLACEHOLDER ── */
+    .screenshot {
+      border: 2px dashed var(--brand-mid);
+      border-radius: 10px;
+      background: var(--brand-light);
+      padding: 20px;
+      text-align: center;
+      color: var(--brand);
+      font-size: 9.5pt;
+      font-weight: 600;
+      margin: 14px 0;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .screenshot .ss-icon { font-size: 28px; opacity: 0.5; }
+    .screenshot .ss-label { opacity: 0.7; }
+
+    /* ── CALLOUTS ── */
+    .tip, .warn, .note {
+      display: flex;
+      gap: 12px;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 16px 0;
+      font-size: 10.5pt;
+    }
+    .tip { background: var(--tip-bg); border: 1px solid var(--tip-border); color: var(--tip); }
+    .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn); }
+    .note { background: #f3f4f6; border: 1px solid var(--border); color: #374151; }
+    .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .callout-body strong { display: block; font-weight: 700; margin-bottom: 3px; }
+
+    /* ── FIELD LABELS ── */
+    .field {
+      display: inline-block;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-family: monospace;
+      font-size: 9.5pt;
+      padding: 2px 8px;
+      border-radius: 5px;
+      margin: 1px 2px;
+    }
+
+    /* ── ORDER OF SETUP TABLE ── */
+    .setup-order {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 10.5pt;
+    }
+    .setup-order th {
+      background: var(--brand);
+      color: white;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 700;
+    }
+    .setup-order td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .setup-order tr:nth-child(even) td { background: var(--brand-light); }
+    .setup-order .tick { color: #16a34a; font-weight: 700; }
+
+    /* ── DIVIDER ── */
+    hr { border: none; border-top: 2px solid var(--border); margin: 40px 0; }
+
+    /* ── PRINT BUTTON ── */
+    .print-bar {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 100;
+    }
+    .print-btn {
+      background: var(--brand);
+      color: white;
+      border: none;
+      border-radius: 100px;
+      padding: 12px 28px;
+      font-size: 11pt;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(37,99,235,0.4);
+    }
+    .print-btn:hover { background: #1d4ed8; }
+
+    /* ── MISC ── */
+    h3 { font-size: 13pt; font-weight: 700; margin: 20px 0 8px; }
+    .muted { color: var(--muted); }
+    strong { font-weight: 700; }
+    .badge {
+      display: inline-block;
+      background: var(--brand);
+      color: white;
+      font-size: 8.5pt;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 100px;
+    }
+    .badge-green { background: #16a34a; }
+    .badge-orange { background: #d97706; }
+  </style>
+</head>
+<body>
+
+<!-- PRINT BUTTON (hidden when printing) -->
+<div class="print-bar no-print">
+  <button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ COVER -->
+<div class="cover no-print" style="page-break-after: always;">
+  <div class="cover-logo">📦</div>
+  <h1>Stock Scanner Lite</h1>
+  <div class="subtitle">Complete Setup Guide for New Customers</div>
+  <div class="cover-steps">
+    <span class="cover-step">1. Company Settings</span>
+    <span class="cover-step">2. Roles</span>
+    <span class="cover-step">3. Workers</span>
+    <span class="cover-step">4. Stations</span>
+    <span class="cover-step">5. Stock</span>
+    <span class="cover-step">6. Templates</span>
+    <span class="cover-step">7. First Job</span>
+    <span class="cover-step">8. Daily Workflow</span>
+  </div>
+  <div class="version">Version 1.0 &nbsp;·&nbsp; 2026</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ TABLE OF CONTENTS -->
+<div class="toc page-break">
+  <h2>Table of Contents</h2>
+
+  <a href="#ch0" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">0</div>
+      <div>
+        <div class="toc-label">Before You Start — Overview &amp; Login</div>
+        <div class="toc-desc">What you need, how to log in, understanding roles</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch1" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">1</div>
+      <div>
+        <div class="toc-label">Company Settings</div>
+        <div class="toc-desc">Name, timezone, working hours, shifts, leave policy</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch2" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">2</div>
+      <div>
+        <div class="toc-label">Roles</div>
+        <div class="toc-desc">Create permission roles before adding any workers</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch3" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">3</div>
+      <div>
+        <div class="toc-label">Workers &amp; Users</div>
+        <div class="toc-desc">Add every person who will use the app</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch4" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">4</div>
+      <div>
+        <div class="toc-label">Production Stations</div>
+        <div class="toc-desc">Define every workstation in your shop (cutting, painting, welding…)</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch5" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">5</div>
+      <div>
+        <div class="toc-label">Stock &amp; Materials</div>
+        <div class="toc-desc">Set up locations, add products, enter opening stock quantities</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch6" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">6</div>
+      <div>
+        <div class="toc-label">Job Templates</div>
+        <div class="toc-desc">Build reusable step-by-step templates for your common job types</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch7" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">7</div>
+      <div>
+        <div class="toc-label">Creating Your First Job</div>
+        <div class="toc-desc">Start a work order and assign it to workers</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch8" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">8</div>
+      <div>
+        <div class="toc-label">Daily Worker Workflow</div>
+        <div class="toc-desc">How workers clock in, claim steps, and mark tasks done</div>
+      </div>
+    </div>
+  </a>
+
+  <a href="#ch9" style="text-decoration:none; color:inherit;">
+    <div class="toc-item">
+      <div class="toc-num">9</div>
+      <div>
+        <div class="toc-label">Supervisor &amp; Admin Workflow</div>
+        <div class="toc-desc">Monitoring jobs, attendance, stock-takes, reports</div>
+      </div>
+    </div>
+  </a>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH0: OVERVIEW -->
+<div class="page page-break" id="ch0">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 0</div>
+    <div class="chapter-title">Before You Start</div>
+    <div class="chapter-intro">Read this first. It explains how the app is structured and what order to set things up in.</div>
+  </div>
+
+  <h3>What is Stock Scanner Lite?</h3>
+  <p>Stock Scanner Lite is a web-based workshop management app. It tracks:</p>
+  <ul>
+    <li><strong>Jobs (Work Orders)</strong> — each customer job broken into steps that workers complete one by one</li>
+    <li><strong>Materials/Stock</strong> — raw materials and purchased parts, with automatic deduction as jobs progress</li>
+    <li><strong>Attendance</strong> — clock-in/out, leave requests, live attendance view</li>
+    <li><strong>Purchasing</strong> — reorder alerts, purchase orders to suppliers</li>
+  </ul>
+
+  <h3>User Roles — Who Sees What</h3>
+  <table class="setup-order">
+    <thead>
+      <tr><th>Role</th><th>Can see</th><th>Cannot see</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Admin</strong></td>
+        <td>Everything — all pages, all jobs, all settings</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td><strong>Supervisor</strong></td>
+        <td>Jobs, queues, attendance, stock-take, reports</td>
+        <td>Admin settings, user management</td>
+      </tr>
+      <tr>
+        <td><strong>Worker</strong></td>
+        <td>My Tasks, Station Queues, Attendance</td>
+        <td>Jobs list, stock, settings, reports</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Correct Setup Order</h3>
+  <p>Follow this order exactly. Each step depends on the previous one.</p>
+  <table class="setup-order">
+    <thead>
+      <tr><th>#</th><th>What to set up</th><th>Why first</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>Company Settings</td><td>Timezone and shifts are needed for attendance</td></tr>
+      <tr><td>2</td><td>Roles</td><td>Workers must be assigned a role on creation</td></tr>
+      <tr><td>3</td><td>Workers</td><td>Stations reference roles to control who can work them</td></tr>
+      <tr><td>4</td><td>Stations</td><td>Templates reference stations</td></tr>
+      <tr><td>5</td><td>Suppliers &amp; Stock</td><td>Materials are consumed by template steps</td></tr>
+      <tr><td>6</td><td>Templates</td><td>Jobs are cloned from templates</td></tr>
+      <tr><td>7</td><td>First Job</td><td>Everything ready</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Logging In</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Open the app in a browser</div>
+        <p>Navigate to the URL provided by your account manager. The login page will appear automatically.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Login page</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Enter your admin credentials</div>
+        <p>Your initial admin username and password are provided in your welcome email. Enter them and click <strong>Log In</strong>.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>First login</strong> Use the admin account for all setup steps. You can change the password later in Admin → Users.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">You land on the Jobs page</div>
+        <p>After login, admins are redirected to the Jobs (Work Orders) page. The left sidebar gives access to all sections. Start with <strong>Admin → Company</strong>.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Main layout after login, sidebar visible</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH1: COMPANY SETTINGS -->
+<div class="page page-break" id="ch1">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 1</div>
+    <div class="chapter-title">Company Settings</div>
+    <div class="chapter-intro">Navigate to <strong>Admin → Company</strong> in the sidebar. Fill in every section before moving to the next chapter.</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Company Name &amp; Timezone</div>
+        <p>In the <strong>Company Information</strong> card, enter your company name exactly as it should appear on reports and printed tags.</p>
+        <p>Set <strong>Timezone</strong> from the dropdown. This controls when "today" starts for attendance and reports. <em>Incorrect timezone = wrong attendance dates.</em></p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Company name and timezone selector</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Working Hours</div>
+        <p>In the <strong>Work Hours</strong> card, set the default start and end time for your working day (e.g. 07:00 – 16:00). This is used for attendance alerts when workers forget to clock out.</p>
+        <div class="warn">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-body"><strong>Important:</strong> Set this before workers start clocking in. It cannot be back-dated.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Shifts (optional)</div>
+        <p>If your workshop runs multiple shifts (e.g. morning / afternoon), click <strong>Add Shift</strong> and enter each shift name, start time, and end time.</p>
+        <p>Workers assigned to a shift will have their attendance checked against those hours instead of the default working hours.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Shifts section with example morning/afternoon shifts</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Leave Policy</div>
+        <p>Set the number of <strong>annual leave days</strong> each worker receives per year (e.g. 20). This is used when workers submit leave requests — the system automatically tracks remaining days.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Tip:</strong> You can override the leave allowance per individual worker later in Admin → Users.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Save</div>
+        <p>Click <strong>Save Changes</strong> at the bottom of each card. There is no auto-save — if you leave the page without saving, changes are lost.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH2: ROLES -->
+<div class="page page-break" id="ch2">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 2</div>
+    <div class="chapter-title">Roles</div>
+    <div class="chapter-intro">Navigate to <strong>Admin → Roles</strong>. Roles control which station queues a worker can see and work on. Create roles before adding workers.</div>
+  </div>
+
+  <p>Think of roles as job titles in your workshop. Examples: <em>Cutter, Painter, Welder, Assembler, Foreman</em>. A worker can have only one role, but a station can accept multiple roles.</p>
+
+  <div class="screenshot">
+    <div class="ss-icon">🖼️</div>
+    <div class="ss-label">Screenshot: Admin → Roles page showing role list</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Create a Role</div>
+        <p>Click <strong>New Role</strong> (top right). Enter a name (e.g. "Painter") and click Save.</p>
+        <p>Repeat for every job type in your workshop. Common roles:</p>
+        <ul>
+          <li>Cutter / CNC Operator</li>
+          <li>Painter / Powder Coater</li>
+          <li>Welder / Fabricator</li>
+          <li>Assembler</li>
+          <li>Foreman / Supervisor (can also be the isSupervisor flag on the user)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Understand how roles connect to stations</div>
+        <p>When you create a <strong>Station</strong> (Chapter 4), you will assign one or more roles to it. Only workers with those roles will see that station's queue on their mobile device.</p>
+        <div class="note">
+          <div class="callout-icon">ℹ️</div>
+          <div class="callout-body"><strong>Example:</strong> Station "Paint Booth" → assigned roles: Painter, Powder Coater. Workers with either role see the Paint Booth queue. Workers with role "Cutter" do not.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH3: WORKERS -->
+<div class="page page-break" id="ch3">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 3</div>
+    <div class="chapter-title">Workers &amp; Users</div>
+    <div class="chapter-intro">Navigate to <strong>Admin → Users</strong>. Add every person who will use the app — workers, supervisors, and any additional admins.</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Add a Worker</div>
+        <p>Click <strong>Add User</strong>. Fill in:</p>
+        <ul>
+          <li><span class="field">Name</span> — full name as it appears in reports</li>
+          <li><span class="field">Username</span> — what they type to log in (no spaces, e.g. "jsmith")</li>
+          <li><span class="field">Password</span> — set a temporary password; the worker can change it after first login</li>
+          <li><span class="field">Role</span> — select the role you created in Chapter 2</li>
+          <li><span class="field">Is Supervisor</span> — tick this if the worker should see the supervisor views (attendance live, stock-take, reports) even though their role is "worker"</li>
+        </ul>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Add User dialog with fields filled in</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Set Leave Allowance (optional override)</div>
+        <p>After saving, click the user's row to edit them. If this worker has a different annual leave allowance than the company default, enter it in <span class="field">Leave Days</span>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Assign to a Shift (optional)</div>
+        <p>If you created shifts in Chapter 1, select the worker's shift from the <span class="field">Shift</span> dropdown. Leave blank to use default working hours.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Repeat for all workers</div>
+        <p>Add every person before moving on. You can always add more workers later — the setup order only matters for roles and stations.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Tip:</strong> Workers do not need email addresses. Username + password is all they need to log in from any device on the workshop floor.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Worker vs Supervisor vs Admin — Summary</h3>
+  <table class="setup-order">
+    <thead>
+      <tr><th>Flag</th><th>What it unlocks</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Role = <strong>admin</strong></td><td>Full access including all admin settings and user management</td></tr>
+      <tr><td>Role = <strong>worker</strong> + <strong>Is Supervisor ✓</strong></td><td>Jobs list, queues, attendance reports, stock-take — no admin settings</td></tr>
+      <tr><td>Role = <strong>worker</strong> (no supervisor)</td><td>My Tasks, Queues, Attendance (clock in/out, leave) only</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH4: STATIONS -->
+<div class="page page-break" id="ch4">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 4</div>
+    <div class="chapter-title">Production Stations</div>
+    <div class="chapter-intro">Navigate to <strong>Admin → Stations</strong>. Define every physical workstation or process stage in your workshop.</div>
+  </div>
+
+  <p>A station is a named step-type that job steps are assigned to. When a job step is at "Paint Booth", only painters see it in their queue. This keeps each worker's screen uncluttered — they only see the work meant for them.</p>
+
+  <div class="screenshot">
+    <div class="ss-icon">🖼️</div>
+    <div class="ss-label">Screenshot: Admin → Stations page showing station list</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Create a Station</div>
+        <p>Click <strong>Add Station</strong>. Enter:</p>
+        <ul>
+          <li><span class="field">Station Name</span> — e.g. "CNC Cutting", "Paint Booth", "Assembly", "Welding"</li>
+          <li><span class="field">Roles</span> — select one or more roles that are allowed to work at this station</li>
+          <li><span class="field">Color</span> — optional color-coding shown in the job detail view</li>
+        </ul>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Add Station dialog</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Create all stations</div>
+        <p>Think about every distinct stage a job passes through in your workshop. Common examples:</p>
+        <ul>
+          <li>Design / Drawing</li>
+          <li>Material Prep / Cutting</li>
+          <li>CNC / Laser</li>
+          <li>Welding / Fabrication</li>
+          <li>Grinding / Finishing</li>
+          <li>Paint / Powder Coat</li>
+          <li>Assembly</li>
+          <li>Quality Check</li>
+          <li>Packing / Dispatch</li>
+        </ul>
+        <div class="warn">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-body"><strong>Create all stations now.</strong> Template steps reference stations — if you forget one, you'll need to go back and add it before building that template step.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH5: STOCK -->
+<div class="page page-break" id="ch5">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 5</div>
+    <div class="chapter-title">Stock &amp; Materials</div>
+    <div class="chapter-intro">This chapter sets up your physical locations, your material products, and enters the opening stock quantities. Use <strong>Admin → Suppliers</strong>, <strong>Locations</strong>, and <strong>Products</strong> from the sidebar.</div>
+  </div>
+
+  <h3>Step A — Add Suppliers</h3>
+  <p>Navigate to <strong>Admin → Suppliers</strong>. Add every company you buy materials from.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Create a Supplier</div>
+        <p>Click <strong>New Supplier</strong>. Enter the supplier name, email, phone, and any notes (e.g. lead time, account number). Click Save.</p>
+        <p>Repeat for all suppliers. You can always add more later.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+  <h3>Step B — Add Storage Locations</h3>
+  <p>Navigate to <strong>Locations</strong> in the sidebar. A location is a physical place where stock is stored — e.g. "Main Warehouse", "Shelf A1", "Paint Store".</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Create Locations</div>
+        <p>Click <strong>Add Location</strong>. Enter a name. You must have at least one location before you can enter stock quantities.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Simple setup:</strong> If you have one storage area, create a single location called "Warehouse". You can always add more locations later as your tracking needs grow.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+  <h3>Step C — Add Products / Materials</h3>
+  <p>Navigate to <strong>Products</strong> in the sidebar. A product can be a raw material, a purchased part, or a finished goods item.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Create a Material Product</div>
+        <p>Click <strong>New Product</strong>. Fill in:</p>
+        <ul>
+          <li><span class="field">Name</span> — e.g. "Steel Tube 50×50×3mm"</li>
+          <li><span class="field">SKU</span> — your internal code (optional)</li>
+          <li><span class="field">Category</span> — groups products in the stock-take view</li>
+          <li><span class="field">Item Type</span> — select <strong>Purchase</strong> for anything you buy from a supplier</li>
+          <li><span class="field">Supplier</span> — select from your supplier list</li>
+          <li><span class="field">Unit Cost</span> — cost per unit (used for valuation reports)</li>
+          <li><span class="field">Buffer Stock</span> — the quantity that triggers a low-stock alert (e.g. 10)</li>
+          <li><span class="field">Target Stock</span> — ideal quantity to reorder up to (e.g. 50)</li>
+        </ul>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: New Product form filled in</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Enter Opening Stock Quantities</div>
+        <p>After creating the product, go to <strong>Work → Stock-Take</strong> in the sidebar. This is the fastest way to enter all your starting quantities at once.</p>
+        <p>For each material, type the current physical count in the <strong>Counted</strong> box. Items where the count differs from the system total are highlighted orange. Click <strong>Save</strong> when done.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Stock-Take page with counts being entered</div>
+        </div>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Alternatively:</strong> Open a product, navigate to its detail page, and use the "Adjust Stock" button to add stock to a specific location.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Repeat for all materials</div>
+        <p>Add every material, consumable, and purchased part your workshop uses. These are referenced when building template steps (Chapter 6) — a step can automatically deduct material when completed.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH6: TEMPLATES -->
+<div class="page page-break" id="ch6">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 6</div>
+    <div class="chapter-title">Job Templates</div>
+    <div class="chapter-intro">Navigate to <strong>Work → Templates</strong>. Templates are reusable step-by-step recipes for your common job types. Every new job is cloned from a template.</div>
+  </div>
+
+  <p>Think of a template as a checklist for a job type — e.g. "Steel Gate", "Powder Coat Only", "Aluminium Window". When you create a job, you pick a template and all its steps are copied in automatically.</p>
+
+  <div class="screenshot">
+    <div class="ss-icon">🖼️</div>
+    <div class="ss-label">Screenshot: Work → Templates page showing template list</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Create a Template</div>
+        <p>Click <strong>New Template</strong>. Enter a name (e.g. "Steel Security Gate") and an optional description. Click Create.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Open the Template Outline Editor</div>
+        <p>Click the template name to open it. You'll see the <strong>Outline Editor</strong> — a hierarchical step builder. Steps can be nested (parent step → sub-steps).</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Template outline editor with steps visible</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Add Steps</div>
+        <p>Click <strong>+ Add Step</strong> (or press Enter at the end of a step line in the editor). For each step, fill in:</p>
+        <ul>
+          <li><span class="field">Step Name</span> — what the worker sees, e.g. "Cut all tube sections to length"</li>
+          <li><span class="field">Station</span> — which workstation this step belongs to (e.g. CNC Cutting). Workers at that station will see this step in their queue.</li>
+          <li><span class="field">Estimated Time</span> — how long the step should take (used for scheduling reports)</li>
+          <li><span class="field">Consumes Material</span> — optional. Select a product and quantity that will be automatically deducted from stock when the step is completed.</li>
+          <li><span class="field">Notes</span> — instructions, tolerances, or any info the worker needs</li>
+        </ul>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Step edit panel with Station and Consumes Material fields</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Build out the full workflow</div>
+        <p>Add all steps in the order workers should complete them. A typical steel gate template might look like:</p>
+        <ol>
+          <li>Design &amp; Drawing <span class="badge">Design</span></li>
+          <li>Cut frame sections <span class="badge">CNC Cutting</span> — consumes: Steel Tube × qty</li>
+          <li>Cut infill bars <span class="badge">CNC Cutting</span></li>
+          <li>Weld frame <span class="badge">Welding</span></li>
+          <li>Weld infill <span class="badge">Welding</span></li>
+          <li>Grind welds <span class="badge">Grinding</span></li>
+          <li>Sandblast <span class="badge">Finishing</span></li>
+          <li>Powder coat <span class="badge badge-orange">Paint Booth</span></li>
+          <li>Fit hinges &amp; handles <span class="badge badge-green">Assembly</span></li>
+          <li>Quality check <span class="badge badge-green">QC</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Create all your common job types</div>
+        <p>Build a template for every recurring job type. You can always clone a template (click the copy icon) to create a variation without rebuilding from scratch.</p>
+        <div class="warn">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-body"><strong>Changing a template does not update existing jobs.</strong> Jobs already created are independent copies. Template changes only affect new jobs created after the change.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH7: FIRST JOB -->
+<div class="page page-break" id="ch7">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 7</div>
+    <div class="chapter-title">Creating Your First Job</div>
+    <div class="chapter-intro">Navigate to <strong>Work → Jobs</strong>. A job (work order) is a specific customer order that workers will complete step by step.</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Create a New Job</div>
+        <p>Click <strong>New Job</strong> (top right of the Jobs page). Fill in:</p>
+        <ul>
+          <li><span class="field">Job Name</span> — e.g. "Smith Residence — Security Gate"</li>
+          <li><span class="field">Template</span> — select the template that matches this job type (e.g. "Steel Security Gate"). All steps are imported automatically.</li>
+          <li><span class="field">Customer</span> — optionally link to a customer record</li>
+          <li><span class="field">Due Date</span> — the deadline. Overdue jobs appear with a red badge and the admin attention counter will increase.</li>
+          <li><span class="field">Priority</span> — Normal, High, or Urgent. Affects the ordering in queues.</li>
+          <li><span class="field">Notes</span> — any job-specific information (measurements, colour, special instructions)</li>
+        </ul>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: New Job form with template selected</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Review the Job Detail</div>
+        <p>After saving, you are taken to the job detail page. All steps from the template are listed. Each step shows its station, status (<em>Not Started → In Progress → Done</em>), and assigned worker.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Job detail page with all steps listed</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Adjust Steps if Needed</div>
+        <p>Steps can be edited, reordered, or deleted directly in the job (this only affects this job, not the template). Add job-specific steps by clicking <strong>Add Step</strong>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">The Job is Now Live</div>
+        <p>Workers at each station will see the relevant steps appear in their queue as soon as the job is created. No further action from the admin is needed — workers claim and complete steps themselves.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Print Tag:</strong> Use the print icon on the job detail page to print a physical tag/label for the job. Stick it to the workpiece so it travels through the shop with the job.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH8: WORKER WORKFLOW -->
+<div class="page page-break" id="ch8">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 8</div>
+    <div class="chapter-title">Daily Worker Workflow</div>
+    <div class="chapter-intro">Workers use the app on any phone or tablet. Their view is simplified — they only see what's relevant to their role.</div>
+  </div>
+
+  <h3>Morning: Clocking In</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Open the app and log in</div>
+        <p>Worker opens the app URL in their phone browser, enters username and password. The app loads their simplified view with a bottom navigation bar.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Worker login and bottom nav (My Tasks / Queues / Attendance)</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Clock In via Attendance</div>
+        <p>Tap <strong>Attendance</strong> in the bottom nav. Tap <strong>Clock In</strong>. The system records the time. The button changes to <strong>Clock Out</strong>.</p>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Reminder:</strong> Workers must clock in every day. The admin/supervisor can view who is clocked in on the live attendance board (Admin → Attendance → Live).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>During the Day: Working on Jobs</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Check the Queue</div>
+        <p>Tap <strong>Queues</strong> in the bottom nav. The worker sees all steps assigned to their station(s) that are not yet done. Steps are ordered by job priority and due date.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Station queue on mobile with step cards</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Claim a Step</div>
+        <p>Tap a step card to expand it. Tap <strong>Claim</strong> to assign it to yourself. The step moves to the top of your queue with a green highlight. Other workers can see it is claimed and will skip it.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Complete the Step</div>
+        <p>Once the physical work is done, tap the large <strong>Done</strong> button on the claimed step card. The step is marked complete. If the step consumes a material, stock is automatically deducted.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Claimed step card with green border and Done button</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">My Tasks view</div>
+        <p>Workers can also tap <strong>My Tasks</strong> to see only steps they have personally claimed across all jobs. This is useful when a worker has claimed steps in multiple jobs.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>End of Day: Clocking Out</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <div class="step-title">Clock Out</div>
+        <p>Tap <strong>Attendance</strong> → <strong>Clock Out</strong>. Total hours for the day are recorded.</p>
+        <div class="warn">
+          <div class="callout-icon">⚠️</div>
+          <div class="callout-body"><strong>Forgot to clock out?</strong> The supervisor or admin can correct attendance records from Admin → Attendance → Report.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Submitting Leave Requests</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <div class="step-title">Submit a Leave Request</div>
+        <p>In the Attendance tab, scroll down to <strong>Leave Requests</strong>. Tap <strong>New Request</strong>. Choose the type (Annual Leave, Sick Leave, etc.), the dates, and add a reason. Tap Submit.</p>
+        <p>The admin receives the request in <strong>Admin → Leave Inbox</strong> and can approve or reject it.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ CH9: SUPERVISOR -->
+<div class="page page-break" id="ch9">
+  <div class="chapter-header">
+    <div class="chapter-num">Chapter 9</div>
+    <div class="chapter-title">Supervisor &amp; Admin Workflow</div>
+    <div class="chapter-intro">Supervisors and admins have a wider view of the app. This chapter covers the most important daily and periodic tasks.</div>
+  </div>
+
+  <h3>Monitoring Jobs</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Jobs Page Overview</div>
+        <p>Navigate to <strong>Work → Jobs</strong>. Jobs are grouped by status (In Progress, Pending, Completed). Use the search bar to find a specific job by name. Colour-coded status chips show at a glance how far along each job is.</p>
+        <p>The <strong>attention badge</strong> in the sidebar nav shows the count of overdue jobs — investigate these first.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Jobs page with status groups and search bar</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Job Detail — Progress Tracking</div>
+        <p>Click any job to open it. You can see every step, its station, who has claimed it, and whether it is done. If a step is stuck, you can reassign or manually mark it complete here.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Attendance Monitoring</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Live Attendance Board</div>
+        <p>Navigate to <strong>Attendance → Live</strong>. See in real time who is clocked in, who is absent, and how long each person has been in. Useful for the morning stand-up.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Attendance Live board</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Attendance Report</div>
+        <p>Navigate to <strong>Attendance → Report</strong>. Filter by worker and date range to see hours worked, late arrivals, and absences. Use this for payroll.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Leave Inbox (Admin only)</div>
+        <p>Navigate to <strong>Admin → Leave Inbox</strong>. Approve or reject pending leave requests. The worker is notified on their next login.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Stock Monitoring &amp; Periodic Stock-Take</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Low-Stock Alerts</div>
+        <p>The attention badge on <strong>Work → Materials</strong> shows how many items are below their buffer stock level. Navigate to Materials to see the full list with current quantities, buffer levels, and reorder suggestions.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <div class="step-title">Periodic Stock-Take (recommended every 1–2 months)</div>
+        <p>Navigate to <strong>Work → Stock-Take</strong>. Go through every item in the list and physically count what is in the storeroom. Enter the count in the <strong>Counted</strong> field next to each item.</p>
+        <ul>
+          <li>Items where your count matches the system show a <strong>green tick</strong></li>
+          <li>Items where your count differs show an <strong>orange highlight</strong> with the delta (±)</li>
+        </ul>
+        <p>The discrepancy panel at the top summarises all differences. When ready, click <strong>Save</strong>. Stock levels are corrected immediately.</p>
+        <div class="screenshot">
+          <div class="ss-icon">🖼️</div>
+          <div class="ss-label">Screenshot: Stock-Take page with some orange discrepancies highlighted</div>
+        </div>
+        <div class="tip">
+          <div class="callout-icon">✅</div>
+          <div class="callout-body"><strong>Best practice:</strong> Do the stock-take at the start of the day before production begins, so quantities are stable while you count.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <div class="step-title">Purchase Orders</div>
+        <p>Navigate to <strong>Work → Reorder Queue</strong> to see all items below buffer stock. Click <strong>Generate Draft Orders</strong> to automatically create purchase order drafts grouped by supplier. Review and send the orders to suppliers from <strong>Work → Purchase Orders</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr />
+
+  <div class="tip" style="margin-top: 24px;">
+    <div class="callout-icon">✅</div>
+    <div class="callout-body">
+      <strong>You're all set!</strong>
+      Your workshop is now fully configured. Workers can start using the app immediately. If you have any questions or run into issues, contact your account manager. Keep this guide handy for onboarding new workers or admins.
+    </div>
+  </div>
+
+  <div style="margin-top: 48px; text-align: center; color: var(--muted); font-size: 9.5pt;">
+    <p>Stock Scanner Lite &nbsp;·&nbsp; Setup Guide &nbsp;·&nbsp; Confidential</p>
+    <p style="margin-top: 4px;">Prepared for new customers by the Stock Scanner Lite team</p>
+  </div>
+
+</div>
+
+</body>
+</html>

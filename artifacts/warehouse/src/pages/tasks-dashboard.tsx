@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -147,6 +148,7 @@ function WipLocationDialog({
   onSkip: () => void;
 }) {
   const { toast } = useToast();
+  const { t } = useLang();
   const [locationType, setLocationType] = useState<"warehouse" | "zone" | "with_worker">("warehouse");
   const [zoneId, setZoneId] = useState<string>("");
   const [warehouseNote, setWarehouseNote] = useState<string>("");
@@ -220,8 +222,8 @@ function WipLocationDialog({
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/40 backdrop-blur-sm">
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4">
         <div>
-          <p className="font-black text-base">Step complete — where is this part now?</p>
-          <p className="text-xs text-muted-foreground">Log the location(s) so the next worker can find it. Add another if the batch is split across spots.</p>
+          <p className="font-black text-base">{t("tasksWipTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("tasksWipDesc")} Add another if the batch is split across spots.</p>
         </div>
 
         {/* Accumulated placements */}
@@ -246,7 +248,7 @@ function WipLocationDialog({
 
         <div className="grid grid-cols-3 gap-2">
           {(["warehouse", "zone", "with_worker"] as const).map((type) => {
-            const labels: Record<string, string> = { warehouse: "Warehouse", zone: "Zone", with_worker: "With me" };
+            const labels: Record<string, string> = { warehouse: t("tasksWarehouse"), zone: t("tasksZone"), with_worker: t("tasksWithMe") };
             const icons: Record<string, React.ReactNode> = {
               warehouse: <MapPin className="h-5 w-5" />,
               zone: <MapPin className="h-5 w-5" />,
@@ -312,14 +314,14 @@ function WipLocationDialog({
             disabled={saving}
             onClick={skip}
           >
-            Skip (supervisor sees as unlogged)
+            {t("tasksSkipLocation")}
           </Button>
           <Button
             className="flex-1 h-11 font-bold"
             disabled={saving || !currentEntryValid}
             onClick={save}
           >
-            {saving ? "Saving…" : savedLocations.length > 0 ? `Log ${savedLocations.length + 1} & Complete` : "Log & Complete"}
+            {saving ? "Saving…" : savedLocations.length > 0 ? `Log ${savedLocations.length + 1} & Complete` : t("tasksLogComplete")}
           </Button>
         </div>
       </div>
@@ -331,6 +333,7 @@ function WipLocationDialog({
 
 function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () => void }) {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [productName, setProductName] = useState("");
   const [quantityNeeded, setQuantityNeeded] = useState("");
@@ -361,9 +364,9 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
         <div className="flex items-center justify-between">
           <div>
             <p className="font-black text-base flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-rose-600" /> Flag Shortage
+              <AlertTriangle className="h-5 w-5 text-rose-600" /> {t("tasksFlagShortage")}
             </p>
-            <p className="text-xs text-muted-foreground mt-0.5">Report a missing or low part to admin</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("tasksFlagShortageDesc")}</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
             <X className="h-5 w-5" />
@@ -397,7 +400,7 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
         </div>
 
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1 h-11" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" className="flex-1 h-11" onClick={onClose}>{t("cancel")}</Button>
           <Button
             className="flex-1 h-11 font-bold bg-rose-600 hover:bg-rose-700"
             disabled={!productName.trim() || flagMutation.isPending}
@@ -409,7 +412,7 @@ function ShortageFlagDialog({ stepId, onClose }: { stepId: number; onClose: () =
             })}
           >
             <AlertTriangle className="h-4 w-4 mr-1.5" />
-            {flagMutation.isPending ? "Flagging…" : "Flag Shortage"}
+            {flagMutation.isPending ? "Flagging…" : t("tasksFlagShortage")}
           </Button>
         </div>
       </div>
@@ -428,6 +431,7 @@ interface AttendanceToday {
 
 function ClockInBanner() {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
 
   const { data: status } = useQuery<{ clockedIn: boolean }>({
@@ -470,7 +474,7 @@ function ClockInBanner() {
         <span className="inline-block w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse" />
         <Clock className="h-3.5 w-3.5 text-green-700 flex-shrink-0" />
         <span className="text-xs font-semibold text-green-800 truncate">
-          {timeLabel ? `Clocked in since ${timeLabel}` : "Clocked in"}
+          {timeLabel ? `${t("tasksClockedIn")} since ${timeLabel}` : t("tasksClockedIn")}
         </span>
       </div>
       <Button
@@ -481,7 +485,7 @@ function ClockInBanner() {
         onClick={() => clockOutMutation.mutate()}
       >
         <LogOut className="h-3 w-3 mr-1" />
-        {clockOutMutation.isPending ? "…" : "Clock Out"}
+        {clockOutMutation.isPending ? "…" : t("tasksClockOut")}
       </Button>
     </div>
   );
@@ -490,6 +494,7 @@ function ClockInBanner() {
 // ─── My Steps Tab ────────────────────────────────────────────────────────────
 
 function QcCheckModal({ step, onConfirm }: { step: MyStep; onConfirm: () => void }) {
+  const { t } = useLang();
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto">
@@ -499,7 +504,7 @@ function QcCheckModal({ step, onConfirm }: { step: MyStep; onConfirm: () => void
               <ShieldCheck className="h-6 w-6 text-amber-600" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-lg leading-tight">Quality Check</h3>
+              <h3 className="font-black text-lg leading-tight">{t("tasksQualityCheck")}</h3>
               <p className="text-sm text-muted-foreground truncate">{step.name}</p>
             </div>
           </div>
@@ -511,9 +516,9 @@ function QcCheckModal({ step, onConfirm }: { step: MyStep; onConfirm: () => void
               <p className="text-sm font-semibold text-amber-900 whitespace-pre-wrap leading-relaxed">{step.qcInstructions}</p>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Review the requirements above, then confirm the work meets specifications before marking complete.</p>
+          <p className="text-xs text-muted-foreground">{t("tasksQCBody")}</p>
           <Button className="w-full py-3.5 font-bold gap-2 text-base bg-green-600 hover:bg-green-700" onClick={onConfirm}>
-            <CheckCircle2 className="h-5 w-5" /> Looks Good — Confirm
+            <CheckCircle2 className="h-5 w-5" /> {t("tasksQCConfirm")}
           </Button>
         </div>
       </div>
@@ -523,6 +528,7 @@ function QcCheckModal({ step, onConfirm }: { step: MyStep; onConfirm: () => void
 
 function MyStepsTab() {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [wipStepId, setWipStepId] = useState<number | null>(null);
   const [shortageStepId, setShortageStepId] = useState<number | null>(null);
@@ -562,7 +568,7 @@ function MyStepsTab() {
       <div className={`rounded-xl border-2 p-3 space-y-2 ${bg} ${isTop ? "ring-2 ring-green-500 ring-offset-1" : ""}`}>
         {isTop && (
           <span className="inline-block px-2 py-0.5 rounded-full bg-green-600 text-white text-[10px] font-bold uppercase tracking-wider">
-            Next up
+            {t("tasksNextUp")}
           </span>
         )}
         <div className="flex items-start justify-between gap-2">
@@ -609,7 +615,7 @@ function MyStepsTab() {
         {step.partsNeeded.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 space-y-1.5">
             <p className="text-[10px] uppercase tracking-wider font-bold text-amber-700 flex items-center gap-1">
-              <Layers className="h-3 w-3" /> Parts needed
+              <Layers className="h-3 w-3" /> {t("tasksPartsNeeded")}
             </p>
             {step.partsNeeded.map((part, i) => (
               <div key={i} className="flex items-start justify-between gap-2">
@@ -676,7 +682,7 @@ function MyStepsTab() {
                 }
               }}
               className="flex-1 h-12 text-base bg-green-600 hover:bg-green-700 font-bold gap-2">
-              {step.qcEnabled ? <ShieldCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />} Mark Complete
+              {step.qcEnabled ? <ShieldCheck className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />} {t("tasksMarkComplete")}
             </Button>
             <Button variant="outline" className="h-12 w-12 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
               onClick={() => setShortageStepId(step.id)}>
@@ -688,7 +694,7 @@ function MyStepsTab() {
           <div className="flex gap-2">
             <Button size="sm" onClick={() => startMutation.mutate(step.id)} disabled={startMutation.isPending}
               className="flex-1 bg-green-600 hover:bg-green-700 font-bold">
-              <Play className="h-4 w-4 mr-1.5" /> Start
+              <Play className="h-4 w-4 mr-1.5" /> {t("tasksStart")}
             </Button>
             <Button size="sm" variant="outline" className="h-8 w-8 flex-shrink-0 border-rose-200 text-rose-600 hover:bg-rose-50 p-0"
               onClick={() => setShortageStepId(step.id)}>
@@ -703,8 +709,8 @@ function MyStepsTab() {
   if (isLoading) return <div className="space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}</div>;
   if (inProgress.length === 0 && ready.length === 0) return (
     <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
-      <p className="font-semibold text-muted-foreground">No steps ready for your roles</p>
-      <p className="text-sm text-muted-foreground mt-1">Steps appear here once earlier steps in the sequence are completed.</p>
+      <p className="font-semibold text-muted-foreground">{t("tasksNoStepsReady")}</p>
+      <p className="text-sm text-muted-foreground mt-1">{t("tasksNoStepsDesc")}</p>
     </div>
   );
 
@@ -715,14 +721,14 @@ function MyStepsTab() {
           <div className="space-y-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-              In Progress ({inProgress.length})
+              {t("tasksInProgressSection")} ({inProgress.length})
             </h2>
             {inProgress.map((s) => <StepCard key={s.id} step={s} variant="inProgress" />)}
           </div>
         )}
         {ready.length > 0 && (
           <div className="space-y-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">Ready to Start ({ready.length})</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">{t("tasksReadyToStart")} ({ready.length})</h2>
             {ready.map((s, i) => <StepCard key={s.id} step={s} variant="ready" isTop={i === 0 && inProgress.length === 0} />)}
           </div>
         )}
@@ -762,6 +768,7 @@ interface ConfirmState { stepIds: number[]; label: string }
 
 function BatchQueueTab() {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -852,8 +859,8 @@ function BatchQueueTab() {
   if (totalCount === 0) return (
     <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
       <Layers className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-      <p className="font-semibold text-muted-foreground">No batch steps ready</p>
-      <p className="text-sm text-muted-foreground mt-1">Steps marked as "Batch" appear here once they're unblocked.</p>
+      <p className="font-semibold text-muted-foreground">{t("tasksNoBatchSteps")}</p>
+      <p className="text-sm text-muted-foreground mt-1">{t("tasksNoBatchDesc")}</p>
     </div>
   );
 
@@ -1086,6 +1093,7 @@ function BatchQueueTab() {
 
 export default function TasksDashboardPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [tab, setTab] = useState<"my-steps" | "batch">("my-steps");
 
   const { data: batchQueueData } = useQuery<BatchQueue>({
@@ -1099,14 +1107,14 @@ export default function TasksDashboardPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">My Queue</h1>
+          <h1 className="text-2xl font-bold">{t("tasksMyQueue")}</h1>
           <p className="text-xs text-muted-foreground">
             {user?.username ? `${user.username} · ` : ""}Production steps across all active orders
           </p>
         </div>
         <Link href="/work/reorder-queue">
           <Button size="sm" variant="outline" className="h-8 font-bold text-xs border-rose-200 text-rose-700 hover:bg-rose-50 flex-shrink-0">
-            <TrendingDown className="h-3.5 w-3.5 mr-1" /> Reorder
+            <TrendingDown className="h-3.5 w-3.5 mr-1" /> {t("tasksReorder")}
           </Button>
         </Link>
       </div>
@@ -1121,7 +1129,7 @@ export default function TasksDashboardPage() {
             tab === "my-steps" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          My Steps
+          {t("tasksMySteps")}
         </button>
         <button
           onClick={() => setTab("batch")}
@@ -1129,7 +1137,7 @@ export default function TasksDashboardPage() {
             tab === "batch" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Batch Queue
+          {t("tasksBatchQueue")}
           {batchCount > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-purple-600 text-white text-[10px] font-bold">
               {batchCount}

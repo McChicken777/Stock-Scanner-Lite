@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth, usePlan } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -107,6 +108,13 @@ function PriorityPicker({ priority, setPriority }: {
   priority: "low" | "normal" | "high" | "urgent";
   setPriority: (p: "low" | "normal" | "high" | "urgent") => void;
 }) {
+  const { t } = useLang();
+  const priorityLabels: Record<string, string> = {
+    low: t("priorityLow"),
+    normal: t("priorityNormal"),
+    high: t("priorityHigh"),
+    urgent: t("priorityUrgent"),
+  };
   return (
     <div className="grid grid-cols-4 gap-2">
       {priorities.map((p) => (
@@ -119,7 +127,7 @@ function PriorityPicker({ priority, setPriority }: {
             priority === p.value ? p.color + " border-current" : "bg-muted/30 text-muted-foreground border-border"
           )}
         >
-          {p.label}
+          {priorityLabels[p.value]}
         </button>
       ))}
     </div>
@@ -137,6 +145,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
   onClose: () => void;
   onCreated: (id: number) => void;
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { atLeast } = usePlan();
@@ -234,7 +243,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
       <DialogContent className="w-[92vw] max-w-md rounded-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" /> Review work order
+            <Package className="h-5 w-5 text-primary" /> {t("jobsReviewOrder")}
           </DialogTitle>
         </DialogHeader>
 
@@ -258,7 +267,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
           {/* Order multiplier */}
           <div className="flex items-center justify-between rounded-xl border-2 border-border bg-card p-3">
             <div className="min-w-0">
-              <p className="font-bold text-sm">Packages</p>
+              <p className="font-bold text-sm">{t("jobsPackages")}</p>
               <p className="text-xs text-muted-foreground">Make this whole set this many times</p>
             </div>
             <div className="flex items-center gap-1 bg-background border-2 border-primary/20 rounded-lg flex-shrink-0">
@@ -278,13 +287,13 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
 
           {/* Job name */}
           <div className="space-y-2">
-            <Label className="text-sm font-bold">Job name</Label>
+            <Label className="text-sm font-bold">{t("jobsJobName")}</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11 border-2 text-base" placeholder="e.g. Smith roll cage order" />
           </div>
 
           {/* Deadline */}
           <div className="space-y-2">
-            <Label className="text-sm font-bold flex items-center gap-2"><Calendar className="h-4 w-4" /> Deadline</Label>
+            <Label className="text-sm font-bold flex items-center gap-2"><Calendar className="h-4 w-4" /> {t("fieldDeadline")}</Label>
             <Input
               type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
               className="h-11 border-2 text-base" min={new Date().toISOString().split("T")[0]}
@@ -312,7 +321,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
 
           {/* Priority */}
           <div className="space-y-2">
-            <Label className="text-sm font-bold">Priority</Label>
+            <Label className="text-sm font-bold">{t("fieldPriority")}</Label>
             <PriorityPicker priority={priority} setPriority={setPriority} />
           </div>
 
@@ -323,7 +332,7 @@ function ReviewJobDialog({ items, onClose, onCreated }: {
             className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground"
           >
             <Settings2 className="h-4 w-4" />
-            More options
+            {t("jobsMoreOptions")}
             <ChevronDown className={cn("h-4 w-4 transition-transform", showMore && "rotate-180")} />
           </button>
 

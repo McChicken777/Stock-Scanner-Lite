@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -112,6 +113,7 @@ function StepActionsMenu({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/work/supervisor/daily-plan"] });
@@ -178,13 +180,13 @@ function StepActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()} className="w-52">
         <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          Step actions
+          {t("supervisorChangeRole")}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <UserCog className="h-4 w-4 mr-2" /> Change role
+            <UserCog className="h-4 w-4 mr-2" /> {t("supervisorChangeRole")}
           </DropdownMenuSubTrigger>
           <DropdownMenuPortal>
             <DropdownMenuSubContent className="max-h-72 overflow-auto">
@@ -192,11 +194,11 @@ function StepActionsMenu({
                 disabled={reassignMutation.isPending || step.roleId === null}
                 onClick={() => reassignMutation.mutate(null)}
               >
-                Unassigned {step.roleId === null && "✓"}
+                {t("supervisorUnassigned")} {step.roleId === null && "✓"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               {roles.length === 0 && (
-                <DropdownMenuItem disabled>No roles defined</DropdownMenuItem>
+                <DropdownMenuItem disabled>{t("supervisorNoRoles")}</DropdownMenuItem>
               )}
               {roles.map((r) => (
                 <DropdownMenuItem
@@ -216,7 +218,7 @@ function StepActionsMenu({
           onClick={() => urgentMutation.mutate()}
         >
           <Zap className="h-4 w-4 mr-2 text-rose-500" />
-          Mark urgent {projectPriority === "urgent" && "✓"}
+          {t("supervisorMarkUrgent")} {projectPriority === "urgent" && "✓"}
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -229,7 +231,7 @@ function StepActionsMenu({
           }}
           className="text-amber-700 focus:text-amber-700"
         >
-          <SkipForward className="h-4 w-4 mr-2" /> Skip step
+          <SkipForward className="h-4 w-4 mr-2" /> {t("supervisorSkipStep")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -238,12 +240,13 @@ function StepActionsMenu({
 
 function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[] }) {
   const [, navigate] = useLocation();
+  const { t } = useLang();
 
   if (plan.totalReady + plan.totalInProgress === 0) {
     return (
       <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed">
         <CheckSquare className="h-8 w-8 text-green-500 mx-auto mb-2" />
-        <p className="font-semibold text-muted-foreground">All clear — no pending steps</p>
+        <p className="font-semibold text-muted-foreground">{t("supervisorAllClear")}</p>
       </div>
     );
   }
@@ -255,7 +258,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
           <div className="flex items-center justify-between">
             <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${group.overCapacity ? "text-red-600" : "text-foreground"}`}>
               <User className="h-3.5 w-3.5 text-blue-500" />
-              {group.roleName ?? "Unassigned"}
+              {group.roleName ?? t("supervisorUnassigned")}
               {group.overCapacity && <Zap className="h-3.5 w-3.5 text-red-500" aria-label="Over 8h capacity" />}
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -273,6 +276,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
               Over 8h of work queued for this role — consider re-assigning some steps.
             </p>
           )}
+
           <div className="space-y-1.5">
             {group.steps.map((step) => {
               const dl = formatDeadline(step.deadline);
@@ -327,14 +331,15 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
 
 function BottlenecksSection({ report }: { report: BottleneckReport }) {
   const [, navigate] = useLocation();
+  const { t } = useLang();
   const hasIssues = report.roleBottlenecks.length > 0 || report.overdueProjects.length > 0
     || report.allBlockedItems.length > 0 || (report.inboundDelays?.length ?? 0) > 0;
 
   if (!hasIssues) {
     return (
       <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
-        <p className="font-semibold text-green-700">No bottlenecks detected</p>
-        <p className="text-xs text-green-600 mt-1">All projects are flowing normally.</p>
+        <p className="font-semibold text-green-700">{t("supervisorNoBottlenecks")}</p>
+        <p className="text-xs text-green-600 mt-1">{t("supervisorAllFlowing")}</p>
       </div>
     );
   }
@@ -344,7 +349,7 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.overdueProjects.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-red-600 flex items-center gap-1.5">
-            <Flag className="h-3.5 w-3.5" /> Overdue Projects ({report.overdueProjects.length})
+            <Flag className="h-3.5 w-3.5" /> {t("supervisorOverProjects")} ({report.overdueProjects.length})
           </h3>
           <div className="space-y-1.5">
             {report.overdueProjects.map((p) => {
@@ -368,16 +373,16 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.roleBottlenecks.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> Role Queue Pressure
+            <AlertTriangle className="h-3.5 w-3.5" /> {t("supervisorRoleQueuePressure")}
           </h3>
           <div className="space-y-1.5">
             {report.roleBottlenecks.map((b) => (
               <div key={b.roleId ?? "unassigned"} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{b.roleName ?? "Unassigned"}</p>
+                  <p className="text-sm font-semibold">{b.roleName ?? t("supervisorUnassigned")}</p>
                   <div className="flex gap-2 text-xs">
-                    <span className="font-bold text-green-700">{b.readyCount} ready</span>
-                    <span className="font-bold text-red-600">{b.blockedCount} blocked</span>
+                    <span className="font-bold text-green-700">{b.readyCount} {t("statusReady")}</span>
+                    <span className="font-bold text-red-600">{b.blockedCount} {t("statusBlocked")}</span>
                   </div>
                 </div>
                 <div className="mt-1.5 h-2 rounded-full bg-amber-200 overflow-hidden">
@@ -395,9 +400,9 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.allBlockedItems.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> All-Blocked Items ({report.allBlockedItems.length})
+            <AlertTriangle className="h-3.5 w-3.5" /> {t("supervisorAllBlockedItems")} ({report.allBlockedItems.length})
           </h3>
-          <p className="text-xs text-muted-foreground">Items where every remaining step is blocked</p>
+          <p className="text-xs text-muted-foreground">{t("supervisorAllBlockedDesc")}</p>
           <div className="space-y-1.5">
             {report.allBlockedItems.map((item) => (
               <div key={item.id} className="rounded-lg border px-3 py-2.5 bg-card">
@@ -413,9 +418,9 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {(report.inboundDelays?.length ?? 0) > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
-            <Truck className="h-3.5 w-3.5" /> Stalled Inbound ({report.inboundDelays.length})
+            <Truck className="h-3.5 w-3.5" /> {t("supervisorStalledInbound")} ({report.inboundDelays.length})
           </h3>
-          <p className="text-xs text-muted-foreground">Pallets unrouted for 2+ days</p>
+          <p className="text-xs text-muted-foreground">{t("supervisorStalledDesc")}</p>
           <div className="space-y-1.5">
             {report.inboundDelays.map((d) => (
               <button
@@ -448,6 +453,7 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
 function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { t } = useLang();
 
   const copyReminder = (part: UnloggedPart, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -462,8 +468,8 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   if (parts.length === 0) {
     return (
       <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
-        <p className="font-semibold text-green-700">All parts have locations logged</p>
-        <p className="text-xs text-green-600 mt-1">No completed steps are missing a WIP location in the last 7 days.</p>
+        <p className="font-semibold text-green-700">{t("supervisorAllPartsLogged")}</p>
+        <p className="text-xs text-green-600 mt-1">{t("supervisorNoUnlogged")}</p>
       </div>
     );
   }
@@ -471,7 +477,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Steps completed in the last 7 days without a stored location. Tap a card to go to the project, or tap "Remind" to copy a message for the worker.
+        {t("supervisorUnloggedDesc")}
       </p>
       {parts.map((part) => {
         const completedAgo = part.completedAt
@@ -511,7 +517,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
                 onClick={(e) => copyReminder(part, e)}
                 className="text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors"
               >
-                Remind worker
+                {t("supervisorRemindWorker")}
               </button>
             </div>
           </div>
@@ -523,6 +529,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
 
 export default function SupervisorPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [tab, setTab] = useState<"plan" | "bottlenecks" | "unlogged">("plan");
 
   const { data: plan, isLoading: planLoading } = useQuery<DailyPlan>({
@@ -549,7 +556,7 @@ export default function SupervisorPage() {
   });
 
   if (!user?.isSupervisor && user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Supervisor access only.</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("supervisorAccessOnly")}</div>;
   }
 
   const overdueCount = bottlenecks?.overdueProjects.length ?? 0;
@@ -560,9 +567,9 @@ export default function SupervisorPage() {
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="pt-2">
-        <h1 className="text-2xl font-black">Supervisor View</h1>
+        <h1 className="text-2xl font-black">{t("supervisorTitle")}</h1>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          Daily plan &amp; bottleneck alerts
+          {t("supervisorSubtitle")}
         </p>
       </div>
 
@@ -573,7 +580,7 @@ export default function SupervisorPage() {
             tab === "plan" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Daily Plan
+          {t("jobsDailyPlan")}
           {plan && (plan.totalReady + plan.totalInProgress) > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold">
               {plan.totalReady + plan.totalInProgress}
@@ -586,7 +593,7 @@ export default function SupervisorPage() {
             tab === "bottlenecks" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Bottlenecks
+          {t("jobsBottlenecks")}
           {(overdueCount + bottleneckCount) > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold">
               {overdueCount + bottleneckCount}
@@ -599,7 +606,7 @@ export default function SupervisorPage() {
             tab === "unlogged" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Unlogged
+          {t("jobsUnlogged")}
           {unloggedParts.length > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
               {unloggedParts.length}

@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
+import { LANGUAGES } from "@/i18n/translations";
 import { TutorialProvider, useTutorial } from "@/contexts/tutorial";
 import { TutorialModal } from "@/components/tutorial-modal";
 import { FabriflowMark } from "@/components/fabriflow-logo";
@@ -78,18 +79,34 @@ function UserMenu() {
   );
 }
 
-// ─── Language Toggle ─────────────────────────────────────────────────────────
+// ─── Language Picker ─────────────────────────────────────────────────────────
 
 function LangToggle() {
   const { lang, setLang } = useLang();
+  const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0];
   return (
-    <button
-      onClick={() => setLang(lang === "en" ? "sl" : "en")}
-      className="flex items-center gap-1 px-2 py-1 rounded-full border border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-      title="Switch language"
-    >
-      {lang === "en" ? "🇸🇮 SL" : "🇬🇧 EN"}
-    </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="flex items-center gap-1 px-2 py-1 rounded-full border border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          {current.flag} {current.code.toUpperCase()}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Language</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {LANGUAGES.map((l) => (
+          <DropdownMenuItem
+            key={l.code}
+            onClick={() => setLang(l.code)}
+            className={cn("cursor-pointer gap-2", lang === l.code && "font-semibold text-primary")}
+          >
+            <span>{l.flag}</span>
+            <span>{l.label}</span>
+            {lang === l.code && <span className="ml-auto text-primary">✓</span>}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

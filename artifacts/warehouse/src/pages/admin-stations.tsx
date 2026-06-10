@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Link } from "wouter";
+import { useLang } from "@/contexts/lang";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, Loader2, GripVertical, ChevronDown, ChevronUp,
@@ -51,6 +52,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 export default function AdminStationsPage() {
+  const { t } = useLang();
   const { toast } = useToast();
   const qc = useQueryClient();
   const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/stations/types"] });
@@ -177,9 +179,9 @@ export default function AdminStationsPage() {
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="pt-2">
-        <h1 className="text-2xl font-black">Production Flow</h1>
+        <h1 className="text-2xl font-black">{t("stationsTitle")}</h1>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mt-0.5">
-          Define your workstations and production order
+          {t("stationsSubtitle")}
         </p>
       </div>
 
@@ -268,7 +270,7 @@ export default function AdminStationsPage() {
                     )}
                     <Link href={`/work/queue/${type.id}`}>
                       <button className="text-muted-foreground hover:text-foreground p-1 flex items-center gap-0.5 text-[10px] font-semibold">
-                        Queue <ChevronRight className="h-3 w-3" />
+                        {t("stationsQueue")} <ChevronRight className="h-3 w-3" />
                       </button>
                     </Link>
                     <button onClick={() => startEdit(type)} className="text-muted-foreground hover:text-foreground p-1">
@@ -289,7 +291,7 @@ export default function AdminStationsPage() {
               {expanded.has(type.id) && (
                 <div className="border-t border-border bg-muted/20 px-3 py-2 space-y-1.5">
                   {type.workstations.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic pl-6">No machines yet — add one below</p>
+                    <p className="text-xs text-muted-foreground italic pl-6">{t("stationsNoMachines")}</p>
                   )}
                   {type.workstations
                     .slice()
@@ -303,7 +305,7 @@ export default function AdminStationsPage() {
                           onClick={() => updateWsMutation.mutate({ id: ws.id, data: { isActive: !ws.isActive } })}
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${ws.isActive ? "bg-green-100 text-green-700 border-green-200" : "bg-muted text-muted-foreground border-border"}`}
                         >
-                          {ws.isActive ? "Active" : "Inactive"}
+                          {ws.isActive ? t("stationsActive") : t("stationsInactive")}
                         </button>
                         <button onClick={() => deleteWsMutation.mutate(ws.id)}
                           className="text-muted-foreground hover:text-destructive p-0.5">
@@ -347,7 +349,7 @@ export default function AdminStationsPage() {
                       onClick={() => { setAddingWsFor(type.id); setNewWsName(""); setNewWsPriority((type.workstations.length || 0) + 1); }}
                       className="flex items-center gap-1.5 text-xs font-semibold text-primary pl-1 hover:underline"
                     >
-                      <Plus className="h-3 w-3" /> Add machine
+                      <Plus className="h-3 w-3" /> {t("stationsAddMachine")}
                     </button>
                   )}
                 </div>
@@ -358,7 +360,7 @@ export default function AdminStationsPage() {
           {/* Add station type */}
           {addingType ? (
             <div className="rounded-xl border-2 border-dashed border-primary/40 p-4 space-y-3 bg-primary/5">
-              <p className="text-sm font-bold">New Station Type</p>
+              <p className="text-sm font-bold">{t("stationsAddType")}</p>
               <Input
                 value={newTypeName}
                 onChange={(e) => setNewTypeName(e.target.value)}
@@ -397,10 +399,10 @@ export default function AdminStationsPage() {
                 <Button size="sm" className="h-9 font-bold"
                   disabled={!newTypeName.trim() || createTypeMutation.isPending}
                   onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor, roleId: newTypeRoleId ? Number(newTypeRoleId) : null })}>
-                  {createTypeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
+                  {createTypeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("add")}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9"
-                  onClick={() => { setAddingType(false); setNewTypeName(""); setNewTypeRoleId(""); }}>Cancel</Button>
+                  onClick={() => { setAddingType(false); setNewTypeName(""); setNewTypeRoleId(""); }}>{t("cancel")}</Button>
               </div>
             </div>
           ) : (
@@ -408,7 +410,7 @@ export default function AdminStationsPage() {
               onClick={() => setAddingType(true)}
               className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-primary border-2 border-dashed border-primary/30 rounded-xl py-3 hover:border-primary/60 hover:bg-primary/5 transition-all"
             >
-              <Plus className="h-4 w-4" /> Add Station Type
+              <Plus className="h-4 w-4" /> {t("stationsAddType")}
             </button>
           )}
         </div>
@@ -418,8 +420,8 @@ export default function AdminStationsPage() {
       {!isLoading && types.length === 0 && !addingType && (
         <div className="text-center py-12 text-muted-foreground">
           <Settings2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          <p className="font-semibold">No production flow set up yet</p>
-          <p className="text-sm mt-1">Add your first station type to get started</p>
+          <p className="font-semibold">{t("stationsNoSetup")}</p>
+          <p className="text-sm mt-1">{t("stationsNoSetupDesc")}</p>
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -153,6 +154,7 @@ function crossesMidnight(start: string, end: string): boolean {
 
 export default function AdminCompanyPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState("");
@@ -326,7 +328,7 @@ export default function AdminCompanyPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground mt-20"><p>Admin only</p></div>;
+    return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("adminOnly")}</p></div>;
   }
 
   if (isLoading) {
@@ -344,13 +346,13 @@ export default function AdminCompanyPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <Building2 className="h-5 w-5" />
-        <h1 className="text-xl font-bold">Company Settings</h1>
+        <h1 className="text-xl font-bold">{t("companySettingsTitle")}</h1>
       </div>
 
       <div className="p-4 space-y-6 pb-24">
         {/* Company Name */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Company Name</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyNameSection")}</p>
           {editingName ? (
             <div className="flex gap-2">
               <Input
@@ -368,14 +370,14 @@ export default function AdminCompanyPage() {
                 {updateNameMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               </Button>
               <Button variant="outline" size="sm" onClick={() => { setEditingName(false); setCompanyName(company.name); }} className="h-10">
-                Cancel
+                {t("cancel")}
               </Button>
             </div>
           ) : (
             <div className="flex items-center justify-between">
               <p className="text-lg font-bold">{company.name}</p>
               <Button variant="outline" size="sm" onClick={() => { setEditingName(true); setCompanyName(company.name); }}>
-                Edit
+                {t("edit")}
               </Button>
             </div>
           )}
@@ -386,8 +388,8 @@ export default function AdminCompanyPage() {
           {/* Standard work hours */}
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Standard Work Hours / Day</p>
-              <p className="text-xs text-muted-foreground mt-1">Used to calculate overtime in attendance reports</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyWorkHours")}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("companyWorkHoursDesc")}</p>
             </div>
             <div className="flex gap-2 items-center">
               <Input
@@ -397,7 +399,7 @@ export default function AdminCompanyPage() {
                 onChange={(e) => setWorkHours(e.target.value)}
                 className="h-10 flex-1 border-2"
               />
-              <span className="text-sm text-muted-foreground font-bold">hours</span>
+              <span className="text-sm text-muted-foreground font-bold">{t("companyHours")}</span>
               <Button
                 size="sm"
                 onClick={() => {
@@ -418,15 +420,15 @@ export default function AdminCompanyPage() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Shifts</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyWorkShifts")}</p>
             </div>
             <p className="text-xs text-muted-foreground -mt-1">
-              Define your shifts here, then assign each worker their shift in Manage Users. The system auto-closes forgotten clock-outs at the shift end time (+ 2 h grace).
+              {t("companyWorkShiftsDesc")}
             </p>
 
             {/* Add shift form */}
             <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
-              <p className="text-xs font-bold text-muted-foreground">Add Shift</p>
+              <p className="text-xs font-bold text-muted-foreground">{t("companyAddShift")}</p>
               <Input
                 placeholder="Shift name (e.g. Morning, Night)"
                 value={newShiftName}
@@ -462,13 +464,13 @@ export default function AdminCompanyPage() {
                 </Button>
               </div>
               {newShiftStart && newShiftEnd && crossesMidnight(newShiftStart, newShiftEnd) && (
-                <p className="text-[11px] text-amber-600 font-medium">Night shift — ends the following day.</p>
+                <p className="text-[11px] text-amber-600 font-medium">{t("companyNightShift")}</p>
               )}
             </div>
 
             {/* Shift list */}
             {shifts.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-2">No shifts configured yet.</p>
+              <p className="text-xs text-muted-foreground text-center py-2">{t("companyNoShifts")}</p>
             ) : (
               <div className="space-y-1.5">
                 {shifts.map((s) => (
@@ -500,14 +502,14 @@ export default function AdminCompanyPage() {
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Scheduling Rules</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyScheduling")}</p>
           </div>
 
           {/* Weekend overtime toggle */}
           <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
             <div>
-              <p className="font-semibold text-sm">Weekend Overtime</p>
-              <p className="text-xs text-muted-foreground">All hours on Sat/Sun count as overtime</p>
+              <p className="font-semibold text-sm">{t("companyWeekendOT")}</p>
+              <p className="text-xs text-muted-foreground">{t("companyWeekendOTDesc")}</p>
             </div>
             <button
               onClick={() => updateSchedulingMutation.mutate({ weekendOvertimeEnabled: !company.weekendOvertimeEnabled })}
@@ -529,7 +531,7 @@ export default function AdminCompanyPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Country</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("companyCountry")}</p>
               </div>
               <div className="flex gap-2">
                 <select
@@ -557,7 +559,7 @@ export default function AdminCompanyPage() {
             {/* Timezone — select, auto-filled from country */}
             <div className="space-y-1.5">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" /> Timezone
+                <Clock className="h-3.5 w-3.5" /> {t("companyTimezone")}
               </p>
               <div className="flex gap-2">
                 <select
@@ -598,7 +600,7 @@ export default function AdminCompanyPage() {
               ) : (
                 <Download className="h-4 w-4 mr-2" />
               )}
-              Import {importYear} Public Holidays for {COUNTRIES.find(c => c.code === selectedCountry)?.label}
+              {t("companyImportHolidays")} {importYear} {COUNTRIES.find(c => c.code === selectedCountry)?.label}
             </Button>
           )}
         </div>
@@ -607,13 +609,13 @@ export default function AdminCompanyPage() {
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Company Holidays</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyHolidays")}</p>
           </div>
-          <p className="text-xs text-muted-foreground -mt-2">Days listed here are full overtime days — all hours worked count as overtime (zero regular-hours threshold).</p>
+          <p className="text-xs text-muted-foreground -mt-2">{t("companyHolidaysDesc")}</p>
 
           {/* Add holiday form */}
           <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
-            <p className="text-xs font-bold text-muted-foreground">Add Holiday</p>
+            <p className="text-xs font-bold text-muted-foreground">{t("companyAddHoliday")}</p>
             <div className="flex gap-2">
               <input
                 type="date"
@@ -641,7 +643,7 @@ export default function AdminCompanyPage() {
 
           {/* Holiday list */}
           {sortedHolidays.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-3">No holidays configured yet.</p>
+            <p className="text-xs text-muted-foreground text-center py-3">{t("companyNoHolidays")}</p>
           ) : (
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {sortedHolidays.map((h) => (
@@ -665,7 +667,7 @@ export default function AdminCompanyPage() {
 
         {/* Plan — read-only for admins */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Plan</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyPlan")}</p>
           <div className={cn(
             "flex items-center justify-between p-4 rounded-xl border-2",
             company.plan === "pro" ? "border-primary bg-primary/5"
@@ -691,7 +693,7 @@ export default function AdminCompanyPage() {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2.5">
             <Crown className="h-3.5 w-3.5 text-yellow-500 flex-shrink-0" />
-            <span>Plan changes are managed by the account owner.</span>
+            <span>{t("companyPlanManagedByOwner")}</span>
           </div>
         </div>
       </div>
