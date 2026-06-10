@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, CheckCircle2, Clock, Zap, Users, Wrench, Calendar, Flag, UserCheck, BookTemplate } from "lucide-react";
 import { Link } from "wouter";
@@ -49,6 +50,7 @@ async function fetchTasks(): Promise<Task[]> {
 }
 
 export default function AdminDashboardPage() {
+  const { t } = useLang();
   const { user } = useAuth();
   const { data: tasks = [], isLoading, isError, error } = useQuery({
     queryKey: ["/api/tasks/tasks"],
@@ -63,7 +65,7 @@ export default function AdminDashboardPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Admin access required</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("adminOnly")}</div>;
   }
 
   if (isError) {
@@ -71,7 +73,7 @@ export default function AdminDashboardPage() {
       <div className="p-6 text-center">
         <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
           <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-2" />
-          <p className="text-red-700 font-bold">Failed to load dashboard</p>
+          <p className="text-red-700 font-bold">{t("dashFailedLoad")}</p>
           <p className="text-sm text-muted-foreground">{error instanceof Error ? error.message : "Unknown error"}</p>
         </div>
       </div>
@@ -98,7 +100,7 @@ export default function AdminDashboardPage() {
           <div className="bg-card border-2 border-border rounded-lg p-3 cursor-pointer hover:border-primary transition-colors">
             <div className="flex items-center gap-2 mb-1">
               <Zap className="h-4 w-4 text-green-600" />
-              <p className="text-[10px] font-bold uppercase text-muted-foreground">Ready</p>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("dashReady")}</p>
             </div>
             <p className="text-2xl font-black text-green-600">{ready.length}</p>
           </div>
@@ -107,7 +109,7 @@ export default function AdminDashboardPage() {
         <div className="bg-card border-2 border-red-200 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
             <AlertCircle className="h-4 w-4 text-red-600" />
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Blocked</p>
+            <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusBlocked")}</p>
           </div>
           <p className="text-2xl font-black text-red-600">{blocked.length}</p>
         </div>
@@ -115,7 +117,7 @@ export default function AdminDashboardPage() {
         <div className="bg-card border-2 border-orange-200 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
             <Clock className="h-4 w-4 text-orange-600" />
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">In Progress</p>
+            <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusInProgress")}</p>
           </div>
           <p className="text-2xl font-black text-orange-600">{inProgress.length}</p>
         </div>
@@ -123,7 +125,7 @@ export default function AdminDashboardPage() {
         <div className="bg-card border-2 border-green-200 rounded-lg p-3">
           <div className="flex items-center gap-2 mb-1">
             <CheckCircle2 className="h-4 w-4 text-green-700" />
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Completed</p>
+            <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusCompleted")}</p>
           </div>
           <p className="text-2xl font-black text-green-700">{completed.length}</p>
         </div>
@@ -131,7 +133,7 @@ export default function AdminDashboardPage() {
 
       {/* Quick Actions */}
       <div className="bg-card border-2 border-border rounded-lg p-3 space-y-2">
-        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quick Access</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("dashQuickAccess")}</p>
         <div className="grid grid-cols-2 gap-2">
           <Link href="/admin/users">
             <button className="w-full flex items-center justify-center gap-1 p-2 bg-blue-50 border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-colors text-center text-[11px] font-bold">
@@ -167,10 +169,10 @@ export default function AdminDashboardPage() {
           <div className="bg-card border-2 border-border rounded-lg p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <UserCheck className="h-4 w-4" /> Who's In Today
+                <UserCheck className="h-4 w-4" /> {t("dashWhosInToday")}
               </p>
               <Link href="/attendance/live">
-                <button className="text-[10px] font-bold uppercase text-primary hover:underline">View all</button>
+                <button className="text-[10px] font-bold uppercase text-primary hover:underline">{t("dashViewAll")}</button>
               </Link>
             </div>
             <div className="flex gap-2 text-[10px] font-bold flex-wrap">
@@ -200,7 +202,7 @@ export default function AdminDashboardPage() {
         <div className={`border-2 rounded-lg p-3 space-y-2 ${
           blocked.some((t) => t.isOverdue) ? "bg-red-100 border-red-400" : "bg-red-50 border-red-200"
         }`}>
-          <p className="text-xs font-bold uppercase text-red-700">⚠️ Blocked Tasks ({blocked.length})</p>
+          <p className="text-xs font-bold uppercase text-red-700">⚠️ {t("dashBlockedTasks")} ({blocked.length})</p>
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
             {blocked.map((task) => (
               <div

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLang } from "@/contexts/lang";
 import * as XLSX from "xlsx";
 import { Plus, Upload, Download, Search, Trash2, Loader2, PackageOpen, X, CheckCircle2, AlertTriangle, TrendingDown, Pencil, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,7 @@ function MaterialCard({
   onDelete: () => void;
   onUpdateMinStock: (v: number) => void;
 }) {
+  const { t } = useLang();
   const [editingMin, setEditingMin] = useState(false);
   const [minDraft, setMinDraft] = useState(String(m.minStock));
 
@@ -147,12 +149,12 @@ function MaterialCard({
             <p className="font-bold text-sm truncate">{m.name}</p>
             {isOut && (
               <span className="flex items-center gap-0.5 text-[10px] font-bold bg-red-100 text-red-700 border border-red-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                <AlertTriangle className="h-3 w-3" /> OUT
+                <AlertTriangle className="h-3 w-3" /> {t("materialsOutOfStock")}
               </span>
             )}
             {!isOut && isLow && (
               <span className="flex items-center gap-0.5 text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                <TrendingDown className="h-3 w-3" /> LOW
+                <TrendingDown className="h-3 w-3" /> {t("materialsLowStockBadge")}
               </span>
             )}
           </div>
@@ -209,6 +211,7 @@ function MaterialCard({
 
 export default function MaterialsPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -337,20 +340,20 @@ export default function MaterialsPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Materials</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Raw materials &amp; purchased parts</p>
+          <h1 className="text-2xl font-black">{t("materialsTitle")}</h1>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("materialsSubtitle")}</p>
         </div>
         {isAdmin && (
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={downloadTemplate}>
-              <Download className="h-3.5 w-3.5" /> Template
+              <Download className="h-3.5 w-3.5" /> {t("productsTemplate")}
             </Button>
             <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => fileRef.current?.click()}>
-              <Upload className="h-3.5 w-3.5" /> Import
+              <Upload className="h-3.5 w-3.5" /> {t("import")}
             </Button>
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
             <Button size="sm" className="gap-1 text-xs font-bold" onClick={() => setShowAdd(true)}>
-              <Plus className="h-3.5 w-3.5" /> Add
+              <Plus className="h-3.5 w-3.5" /> {t("add")}
             </Button>
           </div>
         )}
@@ -362,7 +365,7 @@ export default function MaterialsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search materials…"
+          placeholder={t("materialsSearchPlaceholder")}
           className="pl-9 h-10 border-2"
         />
         {search && (
@@ -375,7 +378,7 @@ export default function MaterialsPage() {
       {/* Inline add form */}
       {showAdd && (
         <div className="rounded-xl border-2 border-dashed border-primary/40 p-4 space-y-3 bg-primary/5">
-          <p className="text-sm font-bold">New Material</p>
+          <p className="text-sm font-bold">{t("materialsNewMaterial")}</p>
           <Input
             value={addingName}
             onChange={(e) => setAddingName(e.target.value)}
@@ -402,11 +405,11 @@ export default function MaterialsPage() {
             <Button size="sm" className="h-9 font-bold"
               disabled={!addingName.trim() || addMutation.isPending}
               onClick={() => addMutation.mutate({ name: addingName.trim(), category: addingCategory, unit: addingUnit })}>
-              {addMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              {addMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("save")}
             </Button>
             <Button size="sm" variant="outline" className="h-9"
               onClick={() => { setShowAdd(false); setAddingName(""); setAddingCategory(""); setAddingUnit(""); }}>
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </div>
@@ -446,11 +449,11 @@ export default function MaterialsPage() {
 
           <div className="flex gap-2">
             <Button size="sm" className="h-9 font-bold" disabled={validCount === 0 || importing} onClick={runImport}>
-              {importing ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Importing…</> : `Import ${validCount} material${validCount !== 1 ? "s" : ""}`}
+              {importing ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> {t("creating")}</> : `${t("import")} ${validCount} material${validCount !== 1 ? "s" : ""}`}
             </Button>
             <Button size="sm" variant="outline" className="h-9" disabled={importing}
               onClick={() => { setShowImportPreview(false); setImportRows(null); }}>
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </div>
@@ -464,10 +467,10 @@ export default function MaterialsPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <PackageOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">{search ? "No materials match your search" : "No materials yet"}</p>
+          <p className="font-semibold">{search ? "No materials match your search" : t("materialsNoMaterials")}</p>
           {!search && isAdmin && (
             <p className="text-sm text-muted-foreground mt-1">
-              Add one at a time or download the Excel template and import in bulk.
+              {t("materialsNoMaterialsDesc")}
             </p>
           )}
         </div>

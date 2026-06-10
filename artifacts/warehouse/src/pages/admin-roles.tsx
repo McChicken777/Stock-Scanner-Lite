@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,7 @@ async function fetchRoles(): Promise<Role[]> {
 
 export default function AdminRolesPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
@@ -94,24 +96,24 @@ export default function AdminRolesPage() {
   }
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Admin only</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("adminOnly")}</div>;
   }
 
   return (
     <div className="p-4 space-y-4 pb-24">
       <Link href="/admin/company" className="flex items-center gap-2 text-primary hover:opacity-70">
-        <ArrowLeft className="h-4 w-4" /> Back to Admin
+        <ArrowLeft className="h-4 w-4" /> {t("back")}
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold">Production Roles</h1>
+        <h1 className="text-2xl font-bold">{t("usersProductionRoles")}</h1>
         <p className="text-xs text-muted-foreground">Roles like Welding, CNC, Sandblasting — assign them to workers and template steps</p>
       </div>
 
       {isLoading ? (
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="text-muted-foreground">{t("loading")}</div>
       ) : roles.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground text-sm">No roles yet — add one below</div>
+        <div className="text-center py-10 text-muted-foreground text-sm">{t("usersNoRoles")}</div>
       ) : (
         <div className="space-y-2">
           {roles.map((role) =>
@@ -173,7 +175,7 @@ export default function AdminRolesPage() {
           disabled={!newName.trim() || createMutation.isPending}
           className="font-bold gap-1"
         >
-          <Plus className="h-4 w-4" /> Add
+          <Plus className="h-4 w-4" /> {t("add")}
         </Button>
       </div>
     </div>

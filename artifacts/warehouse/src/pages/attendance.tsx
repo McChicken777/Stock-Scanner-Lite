@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,6 +72,7 @@ function tomorrowStr(): string {
 function LeaveRequestForm({ onDone }: { onDone: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { t } = useLang();
   const tomorrow = tomorrowStr();
   const [type, setType] = useState<"sick" | "vacation">("vacation");
   const [startDate, setStartDate] = useState(tomorrow);
@@ -95,32 +97,32 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2">
-        {(["sick", "vacation"] as const).map((t) => (
+        {(["sick", "vacation"] as const).map((ltype) => (
           <button
-            key={t}
-            onClick={() => setType(t)}
+            key={ltype}
+            onClick={() => setType(ltype)}
             className={cn(
               "flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 text-sm font-bold transition-all",
-              type === t
-                ? t === "sick"
+              type === ltype
+                ? ltype === "sick"
                   ? "border-rose-400 bg-rose-50 text-rose-700"
                   : "border-sky-400 bg-sky-50 text-sky-700"
                 : "border-border text-muted-foreground hover:border-muted-foreground/50"
             )}
           >
-            {t === "sick" ? <Heart className="h-5 w-5" /> : <Plane className="h-5 w-5" />}
-            {t === "sick" ? "Sick" : "Vacation"}
+            {ltype === "sick" ? <Heart className="h-5 w-5" /> : <Plane className="h-5 w-5" />}
+            {ltype === "sick" ? t("attendanceSick") : t("attendanceVacation")}
           </button>
         ))}
       </div>
       {type === "sick" && (
         <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-          Sick leave is approved immediately and attendance is recorded for the selected days.
+          {t("attendanceSickLeaveNote")}
         </p>
       )}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">From</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">{t("fieldFrom")}</label>
           <input
             type="date"
             value={startDate}
@@ -130,7 +132,7 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
           />
         </div>
         <div>
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">To</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">{t("fieldTo")}</label>
           <input
             type="date"
             value={endDate}
@@ -141,13 +143,13 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
         </div>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 h-10" onClick={onDone}>Cancel</Button>
+        <Button variant="outline" className="flex-1 h-10" onClick={onDone}>{t("cancel")}</Button>
         <Button
           className={cn("flex-1 h-10 font-bold", type === "sick" ? "bg-rose-600 hover:bg-rose-700" : "bg-sky-600 hover:bg-sky-700")}
           disabled={!isValid || submit.isPending}
           onClick={() => submit.mutate()}
         >
-          {submit.isPending ? "Submitting…" : type === "sick" ? "Record Sick Leave" : "Request Vacation"}
+          {submit.isPending ? t("submitting") : type === "sick" ? "Record Sick Leave" : "Request Vacation"}
         </Button>
       </div>
     </div>
@@ -157,6 +159,7 @@ function LeaveRequestForm({ onDone }: { onDone: () => void }) {
 // ─── Leave Request List ────────────────────────────────────────────────────────
 
 function LeaveRequestList() {
+  const { t } = useLang();
   const { data: requests = [], isLoading } = useQuery<LeaveRequest[]>({
     queryKey: ["/api/leave/mine"],
     queryFn: () => api("/api/leave/mine"),
@@ -164,7 +167,7 @@ function LeaveRequestList() {
 
   if (isLoading) return <Skeleton className="h-20 w-full rounded-xl" />;
   if (requests.length === 0) return (
-    <p className="text-xs text-muted-foreground text-center py-3">No leave requests yet.</p>
+    <p className="text-xs text-muted-foreground text-center py-3">{t("attendanceNoLeaveRequests")}</p>
   );
 
   return (
@@ -206,6 +209,7 @@ interface AttendanceUser { id: number; username: string; role: string; }
 function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { t } = useLang();
 
   const { data: users = [] } = useQuery<AttendanceUser[]>({
     queryKey: ["/api/attendance/users"],
@@ -252,7 +256,7 @@ function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Log Past Time</DialogTitle>
+          <DialogTitle>{t("attendanceLogPastTime")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 pt-1">
           <div>
@@ -308,13 +312,13 @@ function BackdateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
           )}
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1 h-10" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="outline" className="flex-1 h-10" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
             <Button
               className="flex-1 h-10 font-bold"
               disabled={!isValid || submit.isPending}
               onClick={() => submit.mutate()}
             >
-              {submit.isPending ? "Saving…" : "Save"}
+              {submit.isPending ? t("saving") : t("save")}
             </Button>
           </div>
         </div>
@@ -329,6 +333,7 @@ export default function AttendancePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { t } = useLang();
   const [note, setNote] = useState("");
   const [now, setNow] = useState(Date.now());
   const [showLeaveForm, setShowLeaveForm] = useState(false);
@@ -407,13 +412,13 @@ export default function AttendancePage() {
     <div className="p-4 space-y-5 pb-24">
       <div className="pt-2 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black">Attendance</h1>
+          <h1 className="text-2xl font-black">{t("attendanceTitle")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
             Today · {new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}
           </p>
         </div>
         <Link href={`/attendance/report?month=${monthParam}`}>
-          <Button variant="outline" size="sm" className="gap-1.5"><BarChart3 className="h-4 w-4" /> My report</Button>
+          <Button variant="outline" size="sm" className="gap-1.5"><BarChart3 className="h-4 w-4" /> {t("attendanceMyReport")}</Button>
         </Link>
       </div>
 
@@ -422,7 +427,7 @@ export default function AttendancePage() {
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-amber-900">Shift auto-closed</p>
+              <p className="font-bold text-sm text-amber-900">{t("attendanceAutoCloseTitle")}</p>
               <p className="text-xs text-amber-800 mt-0.5">
                 You forgot to clock out on {fmtDate(autoCloseNotice.date)}. We closed the shift at your scheduled end time
                 ({fmtTime(autoCloseNotice.clockOut)}). If that's wrong, ask a manager to fix the time.
@@ -462,7 +467,7 @@ export default function AttendancePage() {
               {fmtHMS(liveSeconds)}
             </div>
             <p className="text-xs uppercase tracking-wider text-muted-foreground mt-1 font-bold">
-              {isClockedIn ? "Working" : today?.clockOut ? "Clocked out" : "Not started"}
+              {isClockedIn ? t("attendanceWorking") : today?.clockOut ? t("attendanceClockedOut") : "Not started"}
             </p>
           </div>
 
@@ -482,12 +487,12 @@ export default function AttendancePage() {
           {isClockedIn ? (
             <Button size="lg" onClick={() => clockOut.mutate()} disabled={clockOut.isPending}
               className="w-full h-14 text-base font-black bg-rose-600 hover:bg-rose-700">
-              <LogOut className="h-5 w-5 mr-2" /> Clock Out
+              <LogOut className="h-5 w-5 mr-2" /> {t("tasksClockOut")}
             </Button>
           ) : (
             <Button size="lg" onClick={() => clockIn.mutate()} disabled={clockIn.isPending}
               className="w-full h-14 text-base font-black bg-green-600 hover:bg-green-700">
-              <LogIn className="h-5 w-5 mr-2" /> {today?.clockOut ? "Resume Clock-In" : "Clock In"}
+              <LogIn className="h-5 w-5 mr-2" /> {today?.clockOut ? "Resume Clock-In" : t("tasksClockIn")}
             </Button>
           )}
         </div>
@@ -498,7 +503,7 @@ export default function AttendancePage() {
         <div className="rounded-2xl border-2 border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Sick today?</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("attendanceSickToday")}</p>
           </div>
           <textarea
             value={note}
@@ -510,13 +515,13 @@ export default function AttendancePage() {
           <Button variant="outline" className="w-full h-12 border-rose-200 text-rose-700 hover:bg-rose-50 font-bold"
             disabled={absence.isPending || !!today?.workSeconds}
             onClick={() => absence.mutate()}>
-            <Heart className="h-4 w-4 mr-1.5" /> Mark Sick Today
+            <Heart className="h-4 w-4 mr-1.5" /> {t("attendanceMarkSick")}
           </Button>
           <p className="text-[11px] text-muted-foreground text-center">
-            For vacation, use "Leave Requests" below — it needs manager approval.
+            {t("attendanceForVacation")}
           </p>
           {today?.workSeconds ? (
-            <p className="text-xs text-muted-foreground text-center">You already worked today; absence cannot be declared.</p>
+            <p className="text-xs text-muted-foreground text-center">{t("attendanceAlreadyWorked")}</p>
           ) : null}
         </div>
       )}
@@ -526,11 +531,11 @@ export default function AttendancePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarPlus className="h-4 w-4 text-muted-foreground" />
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Leave Requests</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("attendanceLeaveSection")}</p>
           </div>
           {!showLeaveForm && (
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowLeaveForm(true)}>
-              + Request
+              {t("attendanceRequestPlus")}
             </Button>
           )}
         </div>
@@ -544,17 +549,17 @@ export default function AttendancePage() {
 
       {(user?.role === "admin" || user?.isSupervisor) && (
         <div className="rounded-2xl border-2 border-blue-200 bg-blue-50 p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Manager tools</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-700">{t("attendanceManagerTools")}</p>
           <div className="grid grid-cols-2 gap-2">
             <Link href="/attendance/live">
               <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
-                <Clock className="h-4 w-4 mr-1.5" /> Who's In
+                <Clock className="h-4 w-4 mr-1.5" /> {t("attendanceWhosIn")}
               </Button>
             </Link>
             {user?.role === "admin" && (
               <Link href={`/attendance/report?month=${monthParam}&userId=all`}>
                 <Button variant="outline" className="w-full h-11 border-blue-300 text-blue-700 font-bold">
-                  <BarChart3 className="h-4 w-4 mr-1.5" /> Reports
+                  <BarChart3 className="h-4 w-4 mr-1.5" /> {t("attendanceReports")}
                 </Button>
               </Link>
             )}
@@ -564,7 +569,7 @@ export default function AttendancePage() {
             className="w-full h-11 border-blue-300 text-blue-700 font-bold"
             onClick={() => setShowBackdateForm(true)}
           >
-            <ClockArrowUp className="h-4 w-4 mr-1.5" /> Log Past Time
+            <ClockArrowUp className="h-4 w-4 mr-1.5" /> {t("attendanceLogPastTime")}
           </Button>
           <LeaveApprovalPanel />
         </div>
@@ -591,6 +596,7 @@ interface PendingLeave {
 function LeaveApprovalPanel() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { t } = useLang();
   const [notes, setNotes] = useState<Record<number, string>>({});
 
   const { data: pending = [], isLoading } = useQuery<PendingLeave[]>({
@@ -618,7 +624,7 @@ function LeaveApprovalPanel() {
   return (
     <div className="space-y-2 pt-1 border-t border-blue-200">
       <p className="text-xs font-bold uppercase tracking-wider text-blue-800 pt-1">
-        Pending approvals ({pending.length})
+        {t("attendancePendingApprovals")} ({pending.length})
       </p>
       {pending.map((r) => (
         <div key={r.id} className="bg-white rounded-lg border border-blue-200 p-3 space-y-2">
@@ -633,7 +639,7 @@ function LeaveApprovalPanel() {
           <textarea
             value={notes[r.id] ?? ""}
             onChange={(e) => setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
-            placeholder="Optional note to worker…"
+            placeholder={t("attendanceOptionalNote")}
             rows={2}
             className="w-full px-2 py-1.5 rounded border border-input bg-background text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
@@ -642,13 +648,13 @@ function LeaveApprovalPanel() {
               className="flex-1 h-8 border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs"
               disabled={resolve.isPending}
               onClick={() => resolve.mutate({ id: r.id, status: "rejected", managerNote: notes[r.id] })}>
-              <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+              <XCircle className="h-3.5 w-3.5 mr-1" /> {t("attendanceReject")}
             </Button>
             <Button size="sm"
               className="flex-1 h-8 bg-green-600 hover:bg-green-700 font-bold text-xs"
               disabled={resolve.isPending}
               onClick={() => resolve.mutate({ id: r.id, status: "approved", managerNote: notes[r.id] })}>
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t("attendanceApprove")}
             </Button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLang } from "@/contexts/lang";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   ChevronLeft, ChevronDown, ChevronUp, Monitor, CheckCircle2,
@@ -82,6 +83,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 function QcCheckModal({ step, onConfirm }: { step: QueueStep; onConfirm: () => void }) {
+  const { t } = useLang();
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto">
@@ -91,7 +93,7 @@ function QcCheckModal({ step, onConfirm }: { step: QueueStep; onConfirm: () => v
               <ShieldCheck className="h-6 w-6 text-amber-600" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-lg leading-tight">Quality Check</h3>
+              <h3 className="font-black text-lg leading-tight">{t("tasksQualityCheck")}</h3>
               <p className="text-sm text-muted-foreground truncate">{step.stepName}</p>
             </div>
           </div>
@@ -103,9 +105,9 @@ function QcCheckModal({ step, onConfirm }: { step: QueueStep; onConfirm: () => v
               <p className="text-sm font-semibold text-amber-900 whitespace-pre-wrap leading-relaxed">{step.qcInstructions}</p>
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Review the requirements above, then confirm the work meets specifications before marking complete.</p>
+          <p className="text-xs text-muted-foreground">{t("tasksQCBody")}</p>
           <Button className="w-full h-13 py-3.5 font-bold gap-2 text-base bg-green-600 hover:bg-green-700" onClick={onConfirm}>
-            <CheckCircle2 className="h-5 w-5" /> Looks Good — Confirm
+            <CheckCircle2 className="h-5 w-5" /> {t("tasksQCConfirm")}
           </Button>
         </div>
       </div>
@@ -130,6 +132,7 @@ function StepRow({
   const claimedByMe = isInProgress && step.claimedByUsername === user?.username;
   const claimedByOther = isInProgress && !claimedByMe && step.claimedByUsername;
   const isAdmin = user?.role === "admin";
+  const { t } = useLang();
   const isCompleting = completing.has(step.stepId);
   const isStarting = starting.has(step.stepId);
 
@@ -173,7 +176,7 @@ function StepRow({
           disabled={isCompleting}
           onClick={() => onRequestComplete(step)}
         >
-          {isCompleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle2 className="h-5 w-5" /> Done</>}
+          {isCompleting ? <Loader2 className="h-5 w-5 animate-spin" /> : <><CheckCircle2 className="h-5 w-5" /> {t("done")}</>}
         </Button>
       </div>
     );
@@ -221,7 +224,7 @@ function StepRow({
           disabled={isStarting}
           onClick={() => onStart(step.stepId)}
         >
-          {isStarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Play className="h-3.5 w-3.5" /> Start</>}
+          {isStarting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Play className="h-3.5 w-3.5" /> {t("tasksStart")}</>}
         </Button>
       )}
 
@@ -233,7 +236,7 @@ function StepRow({
           disabled={isCompleting}
           onClick={() => onRequestComplete(step)}
         >
-          {isCompleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> Done</>}
+          {isCompleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><CheckCircle2 className="h-3.5 w-3.5" /> {t("done")}</>}
         </Button>
       )}
     </div>
@@ -241,6 +244,7 @@ function StepRow({
 }
 
 export default function StationQueuePage() {
+  const { t } = useLang();
   const { typeId } = useParams<{ typeId: string }>();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -367,7 +371,7 @@ export default function StationQueuePage() {
             onClick={() => setMachineFilter("all")}
             className={`flex-shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border-2 transition-colors ${machineFilter === "all" ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:border-primary/40"}`}
           >
-            All
+            {t("all")}
           </button>
           {activeWorkstations.map((ws) => (
             <button
@@ -386,9 +390,9 @@ export default function StationQueuePage() {
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Inbox className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
           <p className="font-semibold">
-            {machineFilter === "all" ? "Nothing pending at this station" : "Nothing assigned to this machine"}
+            {machineFilter === "all" ? t("queuesNothingPending") : t("queuesNothingAssigned")}
           </p>
-          <p className="text-sm text-muted-foreground mt-1">Steps tagged to this station will appear here when projects are active.</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("queuesStepsAppear")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -415,7 +419,7 @@ export default function StationQueuePage() {
                       <Clock className="h-3 w-3 text-muted-foreground" />
                       <span className={`text-xs font-semibold ${uc}`}>
                         {isPast(new Date(proj.projectDeadline))
-                          ? "Overdue"
+                          ? t("statusOverdue")
                           : `${differenceInDays(new Date(proj.projectDeadline), new Date())}d left`}
                         {" · "}{format(new Date(proj.projectDeadline), "dd MMM")}
                       </span>

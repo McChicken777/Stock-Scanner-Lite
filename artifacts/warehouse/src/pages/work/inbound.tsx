@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -70,11 +71,11 @@ async function fetchProjects(): Promise<WorkProject[]> {
   return res.json();
 }
 
-const statusConfig = {
-  expected: { label: "Expected", icon: Clock, color: "text-blue-600 bg-blue-50 border-blue-200" },
-  arrived: { label: "Arrived – Needs Routing", icon: Truck, color: "text-orange-600 bg-orange-50 border-orange-200" },
-  stored: { label: "Stored", icon: Warehouse, color: "text-green-600 bg-green-50 border-green-200" },
-  in_production: { label: "In Production", icon: Factory, color: "text-purple-600 bg-purple-50 border-purple-200" },
+const statusConfigBase = {
+  expected: { icon: Clock, color: "text-blue-600 bg-blue-50 border-blue-200" },
+  arrived: { icon: Truck, color: "text-orange-600 bg-orange-50 border-orange-200" },
+  stored: { icon: Warehouse, color: "text-green-600 bg-green-50 border-green-200" },
+  in_production: { icon: Factory, color: "text-purple-600 bg-purple-50 border-purple-200" },
 };
 
 function InboundCard({
@@ -90,7 +91,15 @@ function InboundCard({
   onDelete: (id: number) => void;
   isAdmin: boolean;
 }) {
-  const cfg = statusConfig[record.status];
+  const { t } = useLang();
+  const statusLabels: Record<string, string> = {
+    expected: t("inboundExpected"),
+    arrived: t("inboundArrived"),
+    stored: t("inboundStored"),
+    in_production: t("inboundInProduction"),
+  };
+  const cfgBase = statusConfigBase[record.status];
+  const cfg = { ...cfgBase, label: statusLabels[record.status] };
   const Icon = cfg.icon;
 
   return (
@@ -135,7 +144,7 @@ function InboundCard({
             className="flex-1 h-10 font-bold bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => onArrive(record.id)}
           >
-            <Truck className="h-4 w-4 mr-1.5" /> Unload Pallet
+            <Truck className="h-4 w-4 mr-1.5" /> {t("inboundUnloadPallet")}
           </Button>
         )}
         {record.status === "arrived" && record.projectId && (
@@ -227,6 +236,7 @@ function Section({
 
 export default function InboundPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin";
@@ -357,8 +367,8 @@ export default function InboundPage() {
     <div className="flex flex-col min-h-full">
       <div className="bg-secondary text-secondary-foreground p-4 sticky top-0 z-20 shadow-sm flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold">Inbound</h1>
-          <p className="text-xs opacity-70">Pallet arrivals &amp; routing</p>
+          <h1 className="text-xl font-bold">{t("inboundTitle")}</h1>
+          <p className="text-xs opacity-70">{t("inboundSubtitle")}</p>
         </div>
         {isAdmin && (
           <Button
@@ -367,7 +377,7 @@ export default function InboundPage() {
             className="font-bold gap-1 bg-secondary-foreground/10 hover:bg-secondary-foreground/20 text-secondary-foreground"
             onClick={() => setCreateOpen(true)}
           >
-            <Plus className="h-4 w-4" /> Add
+            <Plus className="h-4 w-4" /> {t("add")}
           </Button>
         )}
       </div>
@@ -383,7 +393,7 @@ export default function InboundPage() {
               <div className="bg-orange-50 border-2 border-orange-200 rounded-xl p-4 space-y-2">
                 <div className="flex items-center gap-2 mb-1">
                   <Truck className="h-5 w-5 text-orange-600" />
-                  <h2 className="text-sm font-bold text-orange-700 uppercase tracking-wider">Needs Routing</h2>
+                  <h2 className="text-sm font-bold text-orange-700 uppercase tracking-wider">{t("inboundNeedsRouting")}</h2>
                   <span className="ml-auto bg-orange-200 text-orange-800 text-xs font-bold px-2 py-0.5 rounded-full">{arrived.length}</span>
                 </div>
                 {arrived.map((r) => (
@@ -400,25 +410,25 @@ export default function InboundPage() {
             )}
 
             <Section
-              title="Expected"
+              title={t("inboundExpected")}
               icon={Clock}
               records={expected}
               onArrive={arriveMutation.mutate}
               onRoute={setRouteRecord}
               onDelete={deleteMutation.mutate}
               isAdmin={isAdmin}
-              emptyText="No pallets expected"
+              emptyText={t("inboundNoExpected")}
             />
 
             <Section
-              title="Stored / In Production"
+              title={`${t("inboundStored")} / ${t("inboundInProduction")}`}
               icon={PackageCheck}
               records={processed}
               onArrive={arriveMutation.mutate}
               onRoute={setRouteRecord}
               onDelete={deleteMutation.mutate}
               isAdmin={isAdmin}
-              emptyText="No processed pallets"
+              emptyText={t("inboundNoProcessed")}
             />
           </>
         )}
@@ -434,7 +444,7 @@ export default function InboundPage() {
       }}>
         <DialogContent className="w-[90vw] max-w-sm rounded-xl">
           <DialogHeader>
-            <DialogTitle>Route Pallet</DialogTitle>
+            <DialogTitle>{t("inboundRoutePallet")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground font-medium">
@@ -453,7 +463,7 @@ export default function InboundPage() {
                 )}
               >
                 <Warehouse className="h-5 w-5" />
-                Store
+                {t("inboundStore")}
               </button>
               <button
                 type="button"
@@ -466,15 +476,15 @@ export default function InboundPage() {
                 )}
               >
                 <Factory className="h-5 w-5" />
-                Production
+                {t("inboundProduction")}
               </button>
             </div>
 
             {routeDest === "store" && (
               <div className="space-y-2">
-                <label className="text-sm font-bold">Select Location</label>
+                <label className="text-sm font-bold">{t("inboundSelectLocation")}</label>
                 {locations.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No locations configured.</p>
+                  <p className="text-xs text-muted-foreground">{t("inboundNoLocations")}</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {locations.map((loc) => (
@@ -500,9 +510,9 @@ export default function InboundPage() {
 
             {routeDest === "production" && (
               <div className="space-y-2">
-                <label className="text-sm font-bold">Select Procedure</label>
+                <label className="text-sm font-bold">{t("inboundSelectProcedure")}</label>
                 {procedures.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No procedures configured. Add them in Admin → Procedures.</p>
+                  <p className="text-xs text-muted-foreground">{t("inboundNoProcedures")}</p>
                 ) : (
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {procedures.map((proc) => (
@@ -531,7 +541,7 @@ export default function InboundPage() {
               onClick={handleRoute}
               disabled={routeMutation.isPending}
             >
-              {routeMutation.isPending ? "Routing…" : routeDest === "store" ? "Send to Storage" : "Send to Production"}
+              {routeMutation.isPending ? t("saving") : routeDest === "store" ? t("save") : t("inboundProduction")}
             </Button>
           </div>
         </DialogContent>
@@ -542,7 +552,7 @@ export default function InboundPage() {
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogContent className="w-[90vw] max-w-sm rounded-xl">
             <DialogHeader>
-              <DialogTitle>Add Inbound Record</DialogTitle>
+              <DialogTitle>{t("inboundAddRecord")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -573,7 +583,7 @@ export default function InboundPage() {
                 onClick={() => createMutation.mutate()}
                 disabled={createMutation.isPending}
               >
-                <PackageCheck className="h-4 w-4 mr-2" /> Create Inbound Record
+                <PackageCheck className="h-4 w-4 mr-2" /> {t("create")}
               </Button>
             </div>
           </DialogContent>

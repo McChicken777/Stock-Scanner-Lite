@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Link, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,6 +68,7 @@ const TYPE_BADGE: Record<string, { bg: string; label: string }> = {
 
 export default function AttendanceReportPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const search = useSearch();
   const params = useMemo(() => parseQuery(search), [search]);
 
@@ -162,14 +164,14 @@ export default function AttendanceReportPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <BarChart3 className="h-5 w-5" />
-        <h1 className="text-xl font-bold">Monthly Report</h1>
+        <h1 className="text-xl font-bold">{t("attendanceMonthlyReport")}</h1>
       </div>
 
       <div className="p-4 space-y-4 pb-24">
         {/* Filters */}
         <div className="bg-card border-2 border-border rounded-xl p-3 space-y-3">
           <div>
-            <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Month</label>
+            <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">{t("attendanceMonth")}</label>
             <input
               type="month"
               value={month}
@@ -179,11 +181,11 @@ export default function AttendanceReportPage() {
           </div>
           {isAdmin && (
             <div>
-              <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Employee</label>
+              <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">{t("attendanceEmployee")}</label>
               <Select value={userId} onValueChange={setUserId}>
                 <SelectTrigger className="mt-1 h-10 border-2"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All employees</SelectItem>
+                  <SelectItem value="all">{t("attendanceAllEmployees")}</SelectItem>
                   {users.map(u => (
                     <SelectItem key={u.id} value={String(u.id)}>{u.username}</SelectItem>
                   ))}
@@ -193,7 +195,7 @@ export default function AttendanceReportPage() {
           )}
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={downloadCsv} disabled={!data || data.days.length === 0} className="h-11 font-bold">
-              <Download className="h-4 w-4 mr-2" /> Download CSV
+              <Download className="h-4 w-4 mr-2" /> {t("attendanceDownloadCSV")}
             </Button>
             <Button
               onClick={() => {
@@ -204,7 +206,7 @@ export default function AttendanceReportPage() {
               variant="secondary"
               className="h-11 font-bold"
             >
-              <Download className="h-4 w-4 mr-2" /> Download PDF
+              <Download className="h-4 w-4 mr-2" /> {t("attendanceDownloadPDF")}
             </Button>
           </div>
         </div>
@@ -215,7 +217,7 @@ export default function AttendanceReportPage() {
           <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
         ) : !data || data.summaries.length === 0 ? (
           <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed">
-            <p className="text-muted-foreground">No attendance recorded for this period.</p>
+            <p className="text-muted-foreground">{t("attendanceNoRecord")}</p>
           </div>
         ) : (
           <>
@@ -227,20 +229,20 @@ export default function AttendanceReportPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 p-3">
                   <div className="rounded-lg border bg-background p-2">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground"><Briefcase className="h-3 w-3" /> Days worked</div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground"><Briefcase className="h-3 w-3" /> {t("attendanceDaysWorked")}</div>
                     <p className="font-black text-xl mt-0.5">{s.daysWorked}</p>
                   </div>
                   <div className="rounded-lg border bg-background p-2">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground"><Briefcase className="h-3 w-3" /> Total hours</div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground"><Briefcase className="h-3 w-3" /> {t("attendanceTotalHours")}</div>
                     <p className="font-black text-xl mt-0.5">{fmtHours(s.totalWorkSeconds)}</p>
                   </div>
                   <div className="rounded-lg border bg-background p-2">
-                    <div className="flex items-center gap-1 text-xs text-orange-600"><Zap className="h-3 w-3" /> Overtime</div>
+                    <div className="flex items-center gap-1 text-xs text-orange-600"><Zap className="h-3 w-3" /> {t("attendanceOvertime")}</div>
                     <p className="font-black text-xl mt-0.5 text-orange-700">{fmtHours(s.overtimeSeconds)}</p>
                   </div>
                   <div className="rounded-lg border bg-background p-2 grid grid-cols-2 gap-1">
                     <div>
-                      <div className="flex items-center gap-1 text-xs text-rose-600"><Heart className="h-3 w-3" /> Sick</div>
+                      <div className="flex items-center gap-1 text-xs text-rose-600"><Heart className="h-3 w-3" /> {t("attendanceSick")}</div>
                       <p className="font-black text-lg mt-0.5">{s.sickDays}</p>
                     </div>
                     <div>

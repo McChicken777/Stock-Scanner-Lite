@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -126,6 +127,7 @@ function buildMailtoLink(supplierEmail: string, supplierName: string, poId: numb
 // ─── PO Detail View ────────────────────────────────────────────────────────────
 
 function PODetailPage({ poId }: { poId: number }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -261,7 +263,7 @@ function PODetailPage({ poId }: { poId: number }) {
         </div>
         {po.expectedDate && (
           <p className="text-xs text-muted-foreground">
-            Expected: {new Date(po.expectedDate).toLocaleDateString()}
+            {t("posExpected")} {new Date(po.expectedDate).toLocaleDateString()}
           </p>
         )}
         {po.notes && <p className="text-xs text-muted-foreground border-t pt-2">{po.notes}</p>}
@@ -271,16 +273,16 @@ function PODetailPage({ poId }: { poId: number }) {
           <div className="flex gap-2 pt-1">
             {po.status === "draft" && (
               <Button size="sm" className="flex-1 h-9 font-bold" onClick={() => updateStatusMutation.mutate("ordered")}>
-                <Truck className="h-3.5 w-3.5 mr-1" /> Mark Ordered
+                <Truck className="h-3.5 w-3.5 mr-1" /> {t("posMarkOrdered")}
               </Button>
             )}
             {po.status === "ordered" && (
               <Button size="sm" variant="outline" className="h-9 font-bold text-yellow-700 border-yellow-300" onClick={() => updateStatusMutation.mutate("partially_arrived")}>
-                <Package2 className="h-3.5 w-3.5 mr-1" /> Partially Arrived
+                <Package2 className="h-3.5 w-3.5 mr-1" /> {t("posPartiallyArrived")}
               </Button>
             )}
             <Button size="sm" variant="outline" className="h-9 text-destructive border-destructive/30 font-bold" onClick={() => updateStatusMutation.mutate("cancelled")}>
-              Cancel PO
+              {t("posCancelPO")}
             </Button>
           </div>
         )}
@@ -308,10 +310,10 @@ function PODetailPage({ poId }: { poId: number }) {
       {/* Items */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Items ({po.items.length})</h3>
+          <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">{t("posItems")} ({po.items.length})</h3>
           {canEdit && (
             <Button size="sm" variant="outline" className="h-8 font-bold text-xs" onClick={() => setShowAddItem((v) => !v)}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add Item
+              <Plus className="h-3.5 w-3.5 mr-1" /> {t("posAddItem")}
             </Button>
           )}
         </div>
@@ -356,15 +358,15 @@ function PODetailPage({ poId }: { poId: number }) {
                   unitPrice: addPrice ? Math.max(0, Number(addPrice)) : null,
                 })}
               >
-                Add
+                {t("add")}
               </Button>
-              <Button size="sm" variant="outline" className="h-10" onClick={() => setShowAddItem(false)}>Cancel</Button>
+              <Button size="sm" variant="outline" className="h-10" onClick={() => setShowAddItem(false)}>{t("cancel")}</Button>
             </div>
           </div>
         )}
 
         {po.items.length === 0 ? (
-          <div className="text-center py-8 text-sm text-muted-foreground">No items added yet</div>
+          <div className="text-center py-8 text-sm text-muted-foreground">{t("posNoItemsYet")}</div>
         ) : (
           <div className="space-y-2">
             {po.items.map((item) => {
@@ -406,7 +408,7 @@ function PODetailPage({ poId }: { poId: number }) {
                             itemId: item.id,
                             unitPrice: editPriceValue ? Math.max(0, Number(editPriceValue)) : null,
                           })}
-                        >Save</Button>
+                        >{t("save")}</Button>
                         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditPriceItemId(null)}>X</Button>
                       </div>
                     ) : (
@@ -486,9 +488,9 @@ function PODetailPage({ poId }: { poId: number }) {
                                 locationId: arriveLocationId,
                               })}
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirm Arrival
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t("posArriveStock")}
                             </Button>
-                            <Button size="sm" variant="outline" className="h-9" onClick={() => setArriveItemId(null)}>Cancel</Button>
+                            <Button size="sm" variant="outline" className="h-9" onClick={() => setArriveItemId(null)}>{t("cancel")}</Button>
                           </div>
                         </div>
                       ) : (
@@ -498,7 +500,7 @@ function PODetailPage({ poId }: { poId: number }) {
                           className="flex-1 h-9 font-bold text-green-700 border-green-300"
                           onClick={() => { setArriveItemId(item.id); setArriveQty(String(item.quantityOrdered - item.quantityArrived)); setArriveLocationId(""); }}
                         >
-                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Arrive Stock
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t("posArriveStock")}
                         </Button>
                       )}
                       <Button
@@ -513,7 +515,7 @@ function PODetailPage({ poId }: { poId: number }) {
                   )}
                   {fullyArrived && (
                     <div className="flex items-center gap-1 text-xs text-green-700 font-semibold">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Fully received
+                      <CheckCircle2 className="h-3.5 w-3.5" /> {t("posFullyReceived")}
                     </div>
                   )}
                 </div>
@@ -532,7 +534,7 @@ function PODetailPage({ poId }: { poId: number }) {
             className="w-full h-9 font-bold text-destructive border-destructive/30"
             onClick={() => { if (confirm("Delete this purchase order?")) deleteMutation.mutate(); }}
           >
-            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete PO
+            <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {t("posDeletePO")}
           </Button>
         </div>
       )}
@@ -544,6 +546,7 @@ function PODetailPage({ poId }: { poId: number }) {
 
 export default function PurchaseOrdersPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -674,7 +677,7 @@ export default function PurchaseOrdersPage() {
     return (
       <div className="p-6 text-center text-muted-foreground mt-20">
         <ShoppingCart className="h-10 w-10 mx-auto mb-3 opacity-30" />
-        <p className="font-semibold">Admin access required</p>
+        <p className="font-semibold">{t("adminOnly")}</p>
       </div>
     );
   }
@@ -701,7 +704,7 @@ export default function PurchaseOrdersPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">Purchase Orders</h1>
+          <h1 className="text-xl font-bold">{t("posTitle")}</h1>
           <p className="text-xs opacity-70">{pos.length} order{pos.length !== 1 ? "s" : ""}</p>
         </div>
         <Button size="sm" className="font-bold h-9" onClick={() => setShowCreate((v) => !v)}>

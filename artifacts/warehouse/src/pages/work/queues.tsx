@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { ChevronRight, Layers, Settings2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 
 interface StationType {
   id: number;
@@ -25,6 +26,7 @@ async function fetchTypes(): Promise<StationType[]> {
 
 export default function QueuesPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const isAdmin = user?.role === "admin";
   const [showAll, setShowAll] = useState(false);
 
@@ -44,13 +46,13 @@ export default function QueuesPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Queues</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Station work queues</p>
+          <h1 className="text-2xl font-black">{t("queuesTitle")}</h1>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("queuesSubtitle")}</p>
         </div>
         {isAdmin && (
           <Link href="/admin/stations">
             <button className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border rounded-lg px-3 py-2">
-              <Settings2 className="h-3.5 w-3.5" /> Manage
+              <Settings2 className="h-3.5 w-3.5" /> {t("manage")}
             </button>
           </Link>
         )}
@@ -63,10 +65,10 @@ export default function QueuesPage() {
       ) : types.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Layers className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No stations set up yet</p>
+          <p className="font-semibold">{t("queuesNoStations")}</p>
           {isAdmin && (
             <p className="text-sm text-muted-foreground mt-1">
-              Go to <Link href="/admin/stations"><span className="text-primary underline">Production Flow</span></Link> in Settings to add your workstations.
+              {t("queuesNoStationsDesc")}
             </p>
           )}
         </div>
@@ -109,7 +111,7 @@ export default function QueuesPage() {
               onClick={() => setShowAll((v) => !v)}
               className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground py-2"
             >
-              {showAll ? "Show my stations only" : `Show all stations${hiddenCount > 0 ? ` (${hiddenCount} more)` : ""}`}
+              {showAll ? t("queuesShowMine") : `${t("queuesShowAll")}${hiddenCount > 0 ? ` (${hiddenCount})` : ""}`}
             </button>
           )}
         </div>

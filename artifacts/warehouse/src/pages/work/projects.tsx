@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -125,11 +126,11 @@ async function apiFetch(url: string) {
   return res.json();
 }
 
-function urgencyInfo(deadline: string, status: string) {
-  if (status === "completed") return { label: "Completed", color: "text-green-600", bg: "border-green-300", badge: null };
+function urgencyInfo(deadline: string, status: string, t: (key: string) => string) {
+  if (status === "completed") return { label: t("statusCompleted"), color: "text-green-600", bg: "border-green-300", badge: null };
   const days = differenceInDays(new Date(deadline), new Date());
-  if (isPast(new Date(deadline))) return { label: "OVERDUE", color: "text-red-600", bg: "border-red-400 bg-red-50/40", badge: "overdue" };
-  if (days === 0) return { label: "Due today!", color: "text-red-600", bg: "border-red-300 bg-red-50/20", badge: "today" };
+  if (isPast(new Date(deadline))) return { label: t("statusOverdue").toUpperCase(), color: "text-red-600", bg: "border-red-400 bg-red-50/40", badge: "overdue" };
+  if (days === 0) return { label: t("jobsDueTodaySuffix"), color: "text-red-600", bg: "border-red-300 bg-red-50/20", badge: "today" };
   if (days < 3) return { label: `${days}d left`, color: "text-orange-600", bg: "border-orange-300", badge: "soon" };
   if (days < 7) return { label: `${days}d left`, color: "text-amber-600", bg: "border-amber-200", badge: null };
   return { label: `${days}d left`, color: "text-muted-foreground", bg: "border-border", badge: null };
@@ -151,13 +152,13 @@ function sortByUrgency(a: Project, b: Project) {
   return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
 }
 
-function formatDeadline(dateStr: string) {
+function formatDeadline(dateStr: string, t: (key: string) => string) {
   const d = new Date(dateStr);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const diff = Math.round((d.getTime() - today.getTime()) / 86400000);
-  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, overdue: true };
-  if (diff === 0) return { label: "Due today", overdue: false };
-  if (diff === 1) return { label: "Due tomorrow", overdue: false };
+  if (diff < 0) return { label: `${Math.abs(diff)}${t("jobsOverdueSuffix")}`, overdue: true };
+  if (diff === 0) return { label: t("jobsDueTodaySuffix"), overdue: false };
+  if (diff === 1) return { label: t("jobsDueTomorrow"), overdue: false };
   return { label: `Due in ${diff}d`, overdue: false };
 }
 
@@ -166,11 +167,12 @@ const DEFAULT_VISIBLE = 5;
 // ─── Station strip ─────────────────────────────────────────────────────────────
 
 function StationStrip({ stations }: { stations: StationBoard[] }) {
+  const { t } = useLang();
   if (stations.length === 0) return null;
   return (
     <div className="space-y-1.5">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 flex items-center gap-1.5">
-        <Radio className="h-3 w-3 text-green-500" /> Live Stations
+        <Radio className="h-3 w-3 text-green-500" /> {t("jobsLiveStations")}
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
         {stations.map((s) => {
@@ -184,7 +186,7 @@ function StationStrip({ stations }: { stations: StationBoard[] }) {
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${busy ? "bg-green-500 animate-pulse" : "bg-gray-300"}`} />
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {busy ? `${s.activeSteps} active` : "Idle"}{s.pendingSteps > 0 ? ` · ${s.pendingSteps} queued` : ""}
+                  {busy ? `${s.activeSteps} ${t("statusActive")}` : t("statusIdle")}{s.pendingSteps > 0 ? ` · ${s.pendingSteps} queued` : ""}
                 </p>
                 {s.activeWorkers.length > 0 && (
                   <p className="text-[10px] font-semibold truncate" style={{ color: s.color }}>
@@ -203,7 +205,8 @@ function StationStrip({ stations }: { stations: StationBoard[] }) {
 // ─── Board card ────────────────────────────────────────────────────────────────
 
 function BoardCard({ project }: { project: Project }) {
-  const urgency = urgencyInfo(project.deadline, project.status);
+  const { t } = useLang();
+  const urgency = urgencyInfo(project.deadline, project.status, t);
   const priorityBorderColors: Record<string, string> = {
     urgent: "border-l-red-500", high: "border-l-orange-400",
     normal: "border-l-blue-400", low: "border-l-gray-300",
@@ -251,6 +254,7 @@ function JobGroup({
   expandedSections: Set<string>;
   onToggle: (key: string) => void;
 }) {
+  const { t } = useLang();
   if (items.length === 0) return null;
   const expanded = expandedSections.has(sectionKey);
   const visible = expanded ? items : items.slice(0, DEFAULT_VISIBLE);
@@ -267,7 +271,7 @@ function JobGroup({
           onClick={() => onToggle(sectionKey)}
           className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors"
         >
-          <ChevronDown className="h-3.5 w-3.5" /> Show {hiddenCount} more
+          <ChevronDown className="h-3.5 w-3.5" /> {t("jobsShowMore")} ({hiddenCount})
         </button>
       )}
       {expanded && items.length > DEFAULT_VISIBLE && (
@@ -275,7 +279,7 @@ function JobGroup({
           onClick={() => onToggle(sectionKey)}
           className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors"
         >
-          <ChevronUp className="h-3.5 w-3.5" /> Show less
+          <ChevronUp className="h-3.5 w-3.5" /> {t("jobsShowLess")}
         </button>
       )}
     </div>
@@ -289,6 +293,7 @@ function StepActionsMenu({ step, roles, projectPriority }: {
   roles: RoleOption[];
   projectPriority: string;
 }) {
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -360,7 +365,7 @@ function StepActionsMenu({ step, roles, projectPriority }: {
         <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <UserCog className="h-4 w-4 mr-2" /> Change role
+            <UserCog className="h-4 w-4 mr-2" /> {t("supervisorChangeRole")}
           </DropdownMenuSubTrigger>
           <DropdownMenuPortal>
             <DropdownMenuSubContent className="max-h-72 overflow-auto">
@@ -368,10 +373,10 @@ function StepActionsMenu({ step, roles, projectPriority }: {
                 disabled={reassignMutation.isPending || step.roleId === null}
                 onClick={() => reassignMutation.mutate(null)}
               >
-                Unassigned {step.roleId === null && "✓"}
+                {t("supervisorUnassigned")} {step.roleId === null && "✓"}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              {roles.length === 0 && <DropdownMenuItem disabled>No roles defined</DropdownMenuItem>}
+              {roles.length === 0 && <DropdownMenuItem disabled>{t("supervisorNoRoles")}</DropdownMenuItem>}
               {roles.map((r) => (
                 <DropdownMenuItem
                   key={r.id}
@@ -389,7 +394,7 @@ function StepActionsMenu({ step, roles, projectPriority }: {
           onClick={() => urgentMutation.mutate()}
         >
           <Zap className="h-4 w-4 mr-2 text-rose-500" />
-          Mark urgent {projectPriority === "urgent" && "✓"}
+          {t("supervisorMarkUrgent")} {projectPriority === "urgent" && "✓"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -401,7 +406,7 @@ function StepActionsMenu({ step, roles, projectPriority }: {
           }}
           className="text-amber-700 focus:text-amber-700"
         >
-          <SkipForward className="h-4 w-4 mr-2" /> Skip step
+          <SkipForward className="h-4 w-4 mr-2" /> {t("supervisorSkipStep")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -411,13 +416,14 @@ function StepActionsMenu({ step, roles, projectPriority }: {
 // ─── Supervisor: daily plan ────────────────────────────────────────────────────
 
 function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[] }) {
+  const { t } = useLang();
   const [, navigate] = useLocation();
 
   if (plan.totalReady + plan.totalInProgress === 0) {
     return (
       <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed">
         <CheckSquare className="h-8 w-8 text-green-500 mx-auto mb-2" />
-        <p className="font-semibold text-muted-foreground">All clear — no pending steps</p>
+        <p className="font-semibold text-muted-foreground">{t("supervisorAllClear")}</p>
       </div>
     );
   }
@@ -429,7 +435,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
           <div className="flex items-center justify-between">
             <h3 className={`text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${group.overCapacity ? "text-red-600" : "text-foreground"}`}>
               <User className="h-3.5 w-3.5 text-blue-500" />
-              {group.roleName ?? "Unassigned"}
+              {group.roleName ?? t("supervisorUnassigned")}
               {group.overCapacity && <Zap className="h-3.5 w-3.5 text-red-500" />}
             </h3>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -449,7 +455,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
           )}
           <div className="space-y-1.5">
             {group.steps.map((step) => {
-              const dl = formatDeadline(step.deadline);
+              const dl = formatDeadline(step.deadline, t);
               return (
                 <div
                   key={step.id}
@@ -470,7 +476,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
                     <div className="flex items-center gap-1 flex-shrink-0">
                       {step.status === "in_progress" && (
                         <span className="flex items-center gap-0.5 text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" /> Active
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" /> {t("statusActive")}
                         </span>
                       )}
                       <StepActionsMenu step={step} roles={roles} projectPriority={step.priority} />
@@ -502,6 +508,7 @@ function DailyPlanSection({ plan, roles }: { plan: DailyPlan; roles: RoleOption[
 // ─── Supervisor: bottlenecks ───────────────────────────────────────────────────
 
 function BottlenecksSection({ report }: { report: BottleneckReport }) {
+  const { t } = useLang();
   const [, navigate] = useLocation();
   const hasIssues = report.roleBottlenecks.length > 0 || report.overdueProjects.length > 0
     || report.allBlockedItems.length > 0 || (report.inboundDelays?.length ?? 0) > 0;
@@ -509,8 +516,8 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
   if (!hasIssues) {
     return (
       <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
-        <p className="font-semibold text-green-700">No bottlenecks detected</p>
-        <p className="text-xs text-green-600 mt-1">All projects are flowing normally.</p>
+        <p className="font-semibold text-green-700">{t("supervisorNoBottlenecks")}</p>
+        <p className="text-xs text-green-600 mt-1">{t("supervisorAllFlowing")}</p>
       </div>
     );
   }
@@ -520,11 +527,11 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.overdueProjects.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-red-600 flex items-center gap-1.5">
-            <Flag className="h-3.5 w-3.5" /> Overdue Projects ({report.overdueProjects.length})
+            <Flag className="h-3.5 w-3.5" /> {t("supervisorOverProjects")} ({report.overdueProjects.length})
           </h3>
           <div className="space-y-1.5">
             {report.overdueProjects.map((p) => {
-              const dl = formatDeadline(p.deadline);
+              const dl = formatDeadline(p.deadline, t);
               return (
                 <div key={p.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 flex items-center justify-between gap-2">
                   <div>
@@ -544,13 +551,13 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.roleBottlenecks.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> Role Queue Pressure
+            <AlertTriangle className="h-3.5 w-3.5" /> {t("supervisorRoleQueuePressure")}
           </h3>
           <div className="space-y-1.5">
             {report.roleBottlenecks.map((b) => (
               <div key={b.roleId ?? "unassigned"} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{b.roleName ?? "Unassigned"}</p>
+                  <p className="text-sm font-semibold">{b.roleName ?? t("supervisorUnassigned")}</p>
                   <div className="flex gap-2 text-xs">
                     <span className="font-bold text-green-700">{b.readyCount} ready</span>
                     <span className="font-bold text-red-600">{b.blockedCount} blocked</span>
@@ -571,9 +578,9 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {report.allBlockedItems.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" /> All-Blocked Items ({report.allBlockedItems.length})
+            <AlertTriangle className="h-3.5 w-3.5" /> {t("supervisorAllBlockedItems")} ({report.allBlockedItems.length})
           </h3>
-          <p className="text-xs text-muted-foreground">Items where every remaining step is blocked</p>
+          <p className="text-xs text-muted-foreground">{t("supervisorAllBlockedDesc")}</p>
           <div className="space-y-1.5">
             {report.allBlockedItems.map((item) => (
               <div key={item.id} className="rounded-lg border px-3 py-2.5 bg-card">
@@ -589,9 +596,9 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
       {(report.inboundDelays?.length ?? 0) > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-bold uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
-            <Truck className="h-3.5 w-3.5" /> Stalled Inbound ({report.inboundDelays.length})
+            <Truck className="h-3.5 w-3.5" /> {t("supervisorStalledInbound")} ({report.inboundDelays.length})
           </h3>
-          <p className="text-xs text-muted-foreground">Pallets unrouted for 2+ days</p>
+          <p className="text-xs text-muted-foreground">{t("supervisorStalledDesc")}</p>
           <div className="space-y-1.5">
             {report.inboundDelays.map((d) => (
               <button
@@ -621,6 +628,7 @@ function BottlenecksSection({ report }: { report: BottleneckReport }) {
 // ─── Supervisor: unlogged parts ────────────────────────────────────────────────
 
 function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
+  const { t } = useLang();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -637,8 +645,8 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   if (parts.length === 0) {
     return (
       <div className="text-center py-10 bg-green-50 rounded-xl border border-green-200">
-        <p className="font-semibold text-green-700">All parts have locations logged</p>
-        <p className="text-xs text-green-600 mt-1">No completed steps are missing a WIP location in the last 7 days.</p>
+        <p className="font-semibold text-green-700">{t("supervisorAllPartsLogged")}</p>
+        <p className="text-xs text-green-600 mt-1">{t("supervisorNoUnlogged")}</p>
       </div>
     );
   }
@@ -646,7 +654,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground">
-        Steps completed in the last 7 days without a stored location. Tap a card to go to the project, or tap "Remind" to copy a message for the worker.
+        {t("supervisorUnloggedDesc")}
       </p>
       {parts.map((part) => {
         const completedAgo = part.completedAt
@@ -683,7 +691,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
                 onClick={(e) => copyReminder(part, e)}
                 className="text-[11px] font-bold text-amber-700 border border-amber-300 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-colors"
               >
-                Remind worker
+                {t("supervisorRemindWorker")}
               </button>
             </div>
           </div>
@@ -696,6 +704,7 @@ function UnloggedPartsSection({ parts }: { parts: UnloggedPart[] }) {
 // ─── Embedded supervisor section ───────────────────────────────────────────────
 
 function EmbeddedSupervisorSection() {
+  const { t } = useLang();
   const { user } = useAuth();
   const [tab, setTab] = useState<"plan" | "bottlenecks" | "unlogged">("plan");
 
@@ -732,9 +741,9 @@ function EmbeddedSupervisorSection() {
   return (
     <div className="space-y-4 border-t-2 border-border pt-5">
       <div>
-        <h2 className="text-xl font-black">Supervisor View</h2>
+        <h2 className="text-xl font-black">{t("supervisorTitle")}</h2>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          Daily plan &amp; bottleneck alerts
+          {t("supervisorSubtitle")}
         </p>
       </div>
 
@@ -745,7 +754,7 @@ function EmbeddedSupervisorSection() {
             tab === "plan" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Daily Plan
+          {t("jobsDailyPlan")}
           {plan && (plan.totalReady + plan.totalInProgress) > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold">
               {plan.totalReady + plan.totalInProgress}
@@ -758,7 +767,7 @@ function EmbeddedSupervisorSection() {
             tab === "bottlenecks" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Bottlenecks
+          {t("jobsBottlenecks")}
           {(overdueCount + bottleneckCount) > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold">
               {overdueCount + bottleneckCount}
@@ -771,7 +780,7 @@ function EmbeddedSupervisorSection() {
             tab === "unlogged" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Unlogged
+          {t("jobsUnlogged")}
           {unloggedParts.length > 0 && (
             <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
               {unloggedParts.length}
@@ -800,6 +809,7 @@ function EmbeddedSupervisorSection() {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function WorkProjectsPage() {
+  const { t } = useLang();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
@@ -833,7 +843,7 @@ export default function WorkProjectsPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Work Orders</h1>
+          <h1 className="text-2xl font-black">{t("jobsWorkOrders")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Projects</p>
         </div>
         {isAdmin && (
@@ -847,7 +857,7 @@ export default function WorkProjectsPage() {
 
       <input
         type="search"
-        placeholder="Search jobs…"
+        placeholder={t("jobsSearchPlaceholder")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full h-10 px-3 rounded-xl border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -869,9 +879,9 @@ export default function WorkProjectsPage() {
             const blocked = active.filter((p) => p.blockedCount > 0);
             return (
               <div className="flex gap-2 flex-wrap">
-                <span className="text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">{active.length} active</span>
-                {overdue.length > 0 && <span className="text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-full px-2.5 py-1">{overdue.length} overdue</span>}
-                {blocked.length > 0 && <span className="text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2.5 py-1">{blocked.length} blocked</span>}
+                <span className="text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200 rounded-full px-2.5 py-1">{active.length} {t("statusActive")}</span>
+                {overdue.length > 0 && <span className="text-xs font-semibold bg-red-100 text-red-700 border border-red-200 rounded-full px-2.5 py-1">{overdue.length} {t("statusOverdue")}</span>}
+                {blocked.length > 0 && <span className="text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2.5 py-1">{blocked.length} {t("statusBlocked")}</span>}
               </div>
             );
           })()}
@@ -889,7 +899,7 @@ export default function WorkProjectsPage() {
               <div className="space-y-4">
                 <JobGroup
                   sectionKey="overdue"
-                  label="Overdue"
+                  label={t("jobsGroupOverdue")}
                   labelClass="text-red-600"
                   icon={<Flame className="h-3 w-3" />}
                   items={overdue}
@@ -898,7 +908,7 @@ export default function WorkProjectsPage() {
                 />
                 <JobGroup
                   sectionKey="today"
-                  label="Due Today / Tomorrow"
+                  label={t("jobsGroupDueToday")}
                   labelClass="text-orange-600"
                   icon={<AlertTriangle className="h-3 w-3" />}
                   items={today}
@@ -907,7 +917,7 @@ export default function WorkProjectsPage() {
                 />
                 <JobGroup
                   sectionKey="week"
-                  label="Due This Week"
+                  label={t("jobsGroupThisWeek")}
                   labelClass="text-amber-600"
                   icon={<Clock className="h-3 w-3" />}
                   items={soon}
@@ -916,7 +926,7 @@ export default function WorkProjectsPage() {
                 />
                 <JobGroup
                   sectionKey="progress"
-                  label="In Progress"
+                  label={t("jobsGroupInProgress")}
                   labelClass="text-muted-foreground"
                   icon={null}
                   items={normal}
@@ -925,7 +935,7 @@ export default function WorkProjectsPage() {
                 />
                 {done.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1">Completed</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1">{t("jobsGroupCompleted")}</p>
                     {(expandedSections.has("completed") ? done : done.slice(0, DEFAULT_VISIBLE)).map((p) => (
                       <Link key={p.id} href={`/work/projects/${p.id}`}>
                         <div className="bg-card border border-border rounded-xl p-3 opacity-60 flex items-center justify-between">
@@ -939,7 +949,7 @@ export default function WorkProjectsPage() {
                         onClick={() => toggleSection("completed")}
                         className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors"
                       >
-                        <ChevronDown className="h-3.5 w-3.5" /> Show {done.length - DEFAULT_VISIBLE} more
+                        <ChevronDown className="h-3.5 w-3.5" /> {t("jobsShowMore")} ({done.length - DEFAULT_VISIBLE})
                       </button>
                     )}
                     {expandedSections.has("completed") && done.length > DEFAULT_VISIBLE && (
@@ -947,7 +957,7 @@ export default function WorkProjectsPage() {
                         onClick={() => toggleSection("completed")}
                         className="w-full text-xs font-semibold text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5 flex items-center justify-center gap-1 transition-colors"
                       >
-                        <ChevronUp className="h-3.5 w-3.5" /> Show less
+                        <ChevronUp className="h-3.5 w-3.5" /> {t("jobsShowLess")}
                       </button>
                     )}
                   </div>
@@ -961,8 +971,8 @@ export default function WorkProjectsPage() {
       ) : (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Clock className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No projects yet</p>
-          {isAdmin && <p className="text-sm text-muted-foreground mt-1">Create your first work order to get started.</p>}
+          <p className="font-semibold">{t("jobsNoProjectsYet")}</p>
+          {isAdmin && <p className="text-sm text-muted-foreground mt-1">{t("jobsCreateFirst")}</p>}
         </div>
       )}
     </div>

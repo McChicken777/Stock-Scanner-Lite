@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRoute, Link, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -159,9 +160,10 @@ function BatchModeBadge({ mode }: { mode: string }) {
 }
 
 function RoleBadge({ name }: { name: string | null }) {
+  const { t } = useLang();
   if (!name) return (
     <span className="text-[10px] font-bold bg-muted text-muted-foreground border border-border rounded px-1.5 py-0.5 flex items-center gap-0.5">
-      <User className="h-2.5 w-2.5" /> Unassigned
+      <User className="h-2.5 w-2.5" /> {t("supervisorUnassigned")}
     </span>
   );
   return (
@@ -185,6 +187,7 @@ function ProcedureRow({
   hasAnyActiveTimer: boolean; projectId: number;
   inboundStatus?: string | null;
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isActive = activeTimerProcedureId === proc.id;
@@ -290,7 +293,7 @@ function ProcedureRow({
               inboundBlocked ? "bg-muted text-muted-foreground cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
             )}>
             {dagBlocked ? <Lock className="h-3.5 w-3.5" /> : inboundBlocked ? <PackageCheck className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {dagBlocked ? "Blocked" : inboundBlocked ? "Waiting" : "Start"}
+            {dagBlocked ? t("statusBlocked") : inboundBlocked ? "Waiting" : t("start")}
           </Button>
         ) : isAdmin ? (
           <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => resetMutation.mutate()} title="Reset procedure">
@@ -309,6 +312,7 @@ function ItemCard({
   projectId: number; editMode: boolean; onDelete: () => void; onColorChange: (color: string | null) => void;
   inboundStatus?: string | null;
 }) {
+  const { t } = useLang();
   const [expanded, setExpanded] = useState(false);
   const [editingColor, setEditingColor] = useState(false);
   const [colorDraft, setColorDraft] = useState(item.paintColor ?? "");
@@ -381,7 +385,7 @@ function ItemCard({
               <span className="font-bold uppercase tracking-wide text-[10px] mr-1">
                 {item.nextUp.status === "in_progress" ? "Now:" : "Next up:"}
               </span>
-              <span className="font-bold">{item.nextUp.roleName ?? "Unassigned"}</span>
+              <span className="font-bold">{item.nextUp.roleName ?? t("supervisorUnassigned")}</span>
               <span className="text-orange-600 mx-1">—</span>
               <span>{item.nextUp.name}</span>
             </p>
@@ -413,9 +417,9 @@ function ItemCard({
               );
             return (
               <>
-                <Section title="In progress" color="text-orange-600" items={inProgress} />
-                <Section title="Not started" color="text-muted-foreground" items={notStarted} />
-                <Section title="Completed" color="text-green-600" items={completed} />
+                <Section title={t("statusInProgress")} color="text-orange-600" items={inProgress} />
+                <Section title={t("statusNotStarted")} color="text-muted-foreground" items={notStarted} />
+                <Section title={t("statusCompleted")} color="text-green-600" items={completed} />
               </>
             );
           })()}
@@ -430,6 +434,7 @@ function AddItemsModal({
 }: {
   projectId: number; templates: Template[]; onClose: () => void;
 }) {
+  const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
@@ -460,7 +465,7 @@ function AddItemsModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card rounded-t-3xl w-full max-w-md p-5 space-y-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold">Add Items</h2>
+          <h2 className="text-lg font-bold">{t("jobsAddItems")}</h2>
           <button onClick={onClose}><X className="h-5 w-5" /></button>
         </div>
 
@@ -492,7 +497,7 @@ function AddItemsModal({
         </div>
 
         <Button className="w-full h-12 font-bold" disabled={!selectedTemplateId || addMutation.isPending} onClick={() => addMutation.mutate()}>
-          {addMutation.isPending ? "Adding…" : `Add ${quantity} item${quantity !== 1 ? "s" : ""}`}
+          {addMutation.isPending ? t("creating") : `${t("add")} ${quantity} item${quantity !== 1 ? "s" : ""}`}
         </Button>
       </div>
     </div>
@@ -500,6 +505,7 @@ function AddItemsModal({
 }
 
 export default function WorkProjectDetailPage() {
+  const { t } = useLang();
   const [, params] = useRoute("/work/projects/:id");
   const projectId = Number(params?.id);
   const search = useSearch();
@@ -682,9 +688,9 @@ export default function WorkProjectDetailPage() {
 
       {editMode && (
         <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center justify-between gap-3">
-          <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">Edit Mode — tap 🗑 to remove items</p>
+          <p className="text-xs font-bold text-orange-700 uppercase tracking-wide">{t("jobsEditMode")}</p>
           <Button size="sm" variant="outline" className="h-8 border-orange-400 text-orange-700" onClick={() => setShowAddItems(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Items
+            <Plus className="h-3.5 w-3.5 mr-1" /> {t("jobsAddItems")}
           </Button>
         </div>
       )}
@@ -698,12 +704,12 @@ export default function WorkProjectDetailPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-3xl font-black">{project.progress}%</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">complete</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">{t("statusCompleted")}</p>
             </div>
             <div className="text-right">
               <p className="font-bold text-sm">{format(new Date(project.deadline), "dd MMM yyyy")}</p>
               <p className={cn("text-xs font-semibold", isOverdue ? "text-red-600" : daysLeft < 5 ? "text-orange-600" : "text-green-600")}>
-                {project.status === "completed" ? "Completed ✓" : isOverdue ? "Overdue!" : `${daysLeft} days left`}
+                {project.status === "completed" ? `${t("statusCompleted")} ✓` : isOverdue ? t("statusOverdue") : `${daysLeft} days left`}
               </p>
             </div>
           </div>
@@ -790,7 +796,7 @@ export default function WorkProjectDetailPage() {
 
         {/* Items — rendered as BOM tree (top-level items, children indented beneath) */}
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Items</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("jobsItemsSection")}</p>
           {project.items.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed rounded-xl">
               {editMode ? "No items — tap + Add Items above" : "No items in this project."}

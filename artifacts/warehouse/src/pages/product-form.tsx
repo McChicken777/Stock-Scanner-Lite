@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 
 const ITEM_TYPES = [
   {
@@ -89,6 +90,7 @@ export default function ProductFormPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { t } = useLang();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const categoryListId = useRef(`cat-list-${Math.random().toString(36).slice(2)}`).current;
 
@@ -197,8 +199,8 @@ export default function ProductFormPage() {
   if (!isAdmin) {
     return (
       <div className="p-6 text-center text-muted-foreground mt-20">
-        <p className="font-semibold">Access restricted</p>
-        <p className="text-sm mt-1">Only admins can manage products.</p>
+        <p className="font-semibold">{t("accessDenied")}</p>
+        <p className="text-sm mt-1">{t("adminOnly")}</p>
       </div>
     );
   }
@@ -222,7 +224,7 @@ export default function ProductFormPage() {
         <Link href="/products" className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
           <ArrowLeft className="h-6 w-6" />
         </Link>
-        <h1 className="text-xl font-bold">{isEdit ? "Edit Product" : "New Product"}</h1>
+        <h1 className="text-xl font-bold">{isEdit ? t("productsEditTitle") : t("productsNewTitle")}</h1>
       </div>
 
       <div className="p-4 flex-1">
@@ -234,7 +236,7 @@ export default function ProductFormPage() {
               name="itemType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Item Type</FormLabel>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsItemType")}</FormLabel>
                   <div className="grid grid-cols-1 gap-2">
                     {ITEM_TYPES.map((type) => {
                       const Icon = type.icon;
@@ -250,7 +252,7 @@ export default function ProductFormPage() {
                         >
                           <Icon className="h-5 w-5 flex-shrink-0" />
                           <div>
-                            <p className="font-bold text-sm">{type.label}</p>
+                            <p className="font-bold text-sm">{type.value === "purchased_part" ? t("productsPurchased") : type.value === "manufactured_part" ? t("productsManufactured") : t("productsFinalProduct")}</p>
                             <p className="text-xs opacity-80">{type.description}</p>
                           </div>
                         </button>
@@ -281,7 +283,7 @@ export default function ProductFormPage() {
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Category</FormLabel>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsCategory")}</FormLabel>
                   <datalist id={categoryListId}>
                     {categories.map((c) => <option key={c} value={c} />)}
                   </datalist>
@@ -305,7 +307,7 @@ export default function ProductFormPage() {
                 name="minStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Reorder At</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsReorderAt")}</FormLabel>
                     <FormControl>
                       <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
@@ -319,7 +321,7 @@ export default function ProductFormPage() {
                 name="bufferStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Alert At</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsAlertAt")}</FormLabel>
                     <FormControl>
                       <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
@@ -333,7 +335,7 @@ export default function ProductFormPage() {
                 name="targetStock"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Target</FormLabel>
+                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsTarget")}</FormLabel>
                     <FormControl>
                       <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
                     </FormControl>
@@ -353,7 +355,7 @@ export default function ProductFormPage() {
                   name="supplierId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier</FormLabel>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">{t("productsSupplier")}</FormLabel>
                       <FormControl>
                         <select className="w-full h-12 px-3 border-2 rounded-lg text-base shadow-sm bg-background" {...field}>
                           <option value="">No supplier linked</option>
@@ -405,7 +407,7 @@ export default function ProductFormPage() {
                 name="unitCost"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Unit Cost</FormLabel>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsUnitCost")}</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -426,7 +428,7 @@ export default function ProductFormPage() {
                 name="salePrice"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Sale Price</FormLabel>
+                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsSalePrice")}</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -477,9 +479,9 @@ export default function ProductFormPage() {
 
             <div className="pt-6 pb-8">
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={isPending}>
-                {isPending ? "Saving..." : (
+                {isPending ? t("saving") : (
                   <>
-                    <Save className="mr-2 h-5 w-5" /> Save Product
+                    <Save className="mr-2 h-5 w-5" /> {t("save")}
                   </>
                 )}
               </Button>

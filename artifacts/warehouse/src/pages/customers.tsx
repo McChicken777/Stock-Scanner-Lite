@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +30,7 @@ async function fetchCustomers(): Promise<Customer[]> {
 export default function CustomersPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const { t } = useLang();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -69,7 +71,7 @@ export default function CustomersPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Customers</h1>
+          <h1 className="text-2xl font-black">{t("customersTitle")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
             {customers.length} total
           </p>
@@ -83,7 +85,7 @@ export default function CustomersPage() {
           {isAdmin && (
             <Button size="sm" className="font-bold gap-1" onClick={() => setShowForm((v) => !v)}>
               {showForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {showForm ? "Cancel" : "New"}
+              {showForm ? t("cancel") : t("new")}
             </Button>
           )}
         </div>
@@ -92,29 +94,29 @@ export default function CustomersPage() {
       {showForm && (
         <div className="bg-card border-2 border-primary/30 rounded-xl p-4 space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Name *</Label>
+            <Label className="text-xs font-bold">{t("fieldName")} *</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-10 border-2" placeholder="Acme Corp" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Contact</Label>
+              <Label className="text-xs font-bold">{t("fieldContact")}</Label>
               <Input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="h-10 border-2" placeholder="John Doe" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Phone</Label>
+              <Label className="text-xs font-bold">{t("fieldPhone")}</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-10 border-2" placeholder="555-1234" />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Email</Label>
+            <Label className="text-xs font-bold">{t("fieldEmail")}</Label>
             <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-10 border-2" placeholder="contact@acme.com" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Address</Label>
+            <Label className="text-xs font-bold">{t("fieldAddress")}</Label>
             <Textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="border-2 min-h-[60px]" placeholder="123 Main St, City" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Notes</Label>
+            <Label className="text-xs font-bold">{t("fieldNotes")}</Label>
             <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="border-2 min-h-[60px]" />
           </div>
           <Button
@@ -122,7 +124,7 @@ export default function CustomersPage() {
             onClick={() => createMut.mutate(form)}
             className="w-full h-11 font-bold"
           >
-            {createMut.isPending ? "Saving…" : "Save Customer"}
+            {createMut.isPending ? t("saving") : t("customersSaveCustomer")}
           </Button>
         </div>
       )}
@@ -132,7 +134,7 @@ export default function CustomersPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search customers…"
+          placeholder={t("customersSearchPlaceholder")}
           className="pl-9 h-10 border-2"
         />
       </div>
@@ -144,8 +146,8 @@ export default function CustomersPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No customers</p>
-          {isAdmin && <p className="text-sm text-muted-foreground mt-1">Add your first customer to get started.</p>}
+          <p className="font-semibold">{t("customersNoCustomers")}</p>
+          {isAdmin && <p className="text-sm text-muted-foreground mt-1">{t("customersAddFirst")}</p>}
         </div>
       ) : (
         <div className="space-y-2">

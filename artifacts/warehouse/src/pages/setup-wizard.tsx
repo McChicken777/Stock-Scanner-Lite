@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus, Loader2, ChevronLeft, CheckCircle2 } from "lucide-react";
@@ -118,11 +119,12 @@ async function apiFetch(url: string, opts?: RequestInit) {
 // ── Sub-step components ───────────────────────────────────────────────────────
 
 function StepIndustry({ onSelect, onCustom }: { onSelect: (id: string) => void; onCustom: () => void }) {
+  const { t } = useLang();
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-1">What kind of shop are you?</h2>
+      <h2 className="text-lg font-semibold mb-1">{t("wizardIndustryQ")}</h2>
       <p className="text-sm text-muted-foreground mb-5">
-        We'll pre-configure workstations and roles — you can edit everything next.
+        {t("wizardIndustryHint")}
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {INDUSTRIES.map((ind) => (
@@ -144,8 +146,8 @@ function StepIndustry({ onSelect, onCustom }: { onSelect: (id: string) => void; 
         >
           <span className="text-2xl">✏️</span>
           <div>
-            <p className="font-medium text-sm">Custom</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Start from scratch</p>
+            <p className="font-medium text-sm">{t("wizardCustomOption")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("wizardCustomDesc")}</p>
           </div>
         </button>
       </div>
@@ -163,16 +165,17 @@ function StepStations({
   onRemove: (i: number) => void;
   onColorChange: (i: number, color: string) => void;
 }) {
+  const { t } = useLang();
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-1">Workstations / Processes</h2>
+      <h2 className="text-lg font-semibold mb-1">{t("wizardWorkstationsH")}</h2>
       <p className="text-sm text-muted-foreground mb-5">
-        These are the stations on your shop floor. Workers will pick up jobs at these queues.
+        {t("wizardWorkstationsDesc")}
       </p>
 
       <div className="space-y-2 mb-4">
         {stations.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">No stations yet — add one below.</p>
+          <p className="text-sm text-muted-foreground italic">{t("wizardWorkstationsEmpty")}</p>
         )}
         {stations.map((s, i) => (
           <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
@@ -206,14 +209,14 @@ function StepStations({
 
       <div className="flex gap-2">
         <Input
-          placeholder="Add a workstation..."
+          placeholder={t("wizardWorkstationsPlaceholder")}
           value={newStation}
           onChange={(e) => setNewStation(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onAdd()}
           className="flex-1"
         />
         <Button variant="outline" onClick={onAdd} size="sm">
-          <Plus className="h-4 w-4 mr-1" /> Add
+          <Plus className="h-4 w-4 mr-1" /> {t("add")}
         </Button>
       </div>
     </div>
@@ -229,16 +232,17 @@ function StepRoles({
   onAdd: () => void;
   onRemove: (i: number) => void;
 }) {
+  const { t } = useLang();
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-1">Worker Roles</h2>
+      <h2 className="text-lg font-semibold mb-1">{t("wizardRolesH")}</h2>
       <p className="text-sm text-muted-foreground mb-5">
-        Roles let you assign workers to stations and control who sees what jobs.
+        {t("wizardRolesDesc")}
       </p>
 
       <div className="space-y-2 mb-4">
         {roles.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">No roles yet — add one below.</p>
+          <p className="text-sm text-muted-foreground italic">{t("wizardRolesEmpty")}</p>
         )}
         {roles.map((r, i) => (
           <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
@@ -255,14 +259,14 @@ function StepRoles({
 
       <div className="flex gap-2">
         <Input
-          placeholder="Add a role (e.g. Welder, Painter...)"
+          placeholder={t("wizardRolesPlaceholder")}
           value={newRole}
           onChange={(e) => setNewRole(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onAdd()}
           className="flex-1"
         />
         <Button variant="outline" onClick={onAdd} size="sm">
-          <Plus className="h-4 w-4 mr-1" /> Add
+          <Plus className="h-4 w-4 mr-1" /> {t("add")}
         </Button>
       </div>
     </div>
@@ -270,21 +274,21 @@ function StepRoles({
 }
 
 function StepTemplate({ templateName, onChange }: { templateName: string; onChange: (v: string) => void }) {
+  const { t } = useLang();
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-1">Create your first job template</h2>
+      <h2 className="text-lg font-semibold mb-1">{t("wizardTemplateH")}</h2>
       <p className="text-sm text-muted-foreground mb-5">
-        Templates define the steps for a type of job — e.g. "Steel Bracket" or "Custom Cabinet".
-        You'll add step details in the Templates page. Skip if you want to set this up later.
+        {t("wizardTemplateDesc")}
       </p>
       <Input
-        placeholder="Template name (e.g. Steel Bracket, Custom Cabinet...)"
+        placeholder={t("wizardTemplatePlaceholder")}
         value={templateName}
         onChange={(e) => onChange(e.target.value)}
         className="text-base"
         autoFocus
       />
-      <p className="text-xs text-muted-foreground mt-2">Leave blank to skip</p>
+      <p className="text-xs text-muted-foreground mt-2">{t("wizardTemplateHint")}</p>
     </div>
   );
 }
@@ -294,24 +298,25 @@ function StepCustomer({ name, email, onNameChange, onEmailChange }: {
   onNameChange: (v: string) => void;
   onEmailChange: (v: string) => void;
 }) {
+  const { t } = useLang();
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-1">Add your first customer</h2>
+      <h2 className="text-lg font-semibold mb-1">{t("wizardCustomerH")}</h2>
       <p className="text-sm text-muted-foreground mb-5">
-        Customers are linked to jobs and quotes. Skip if you want to set this up later.
+        {t("wizardCustomerDesc")}
       </p>
       <div className="space-y-3">
         <div>
-          <label className="text-sm font-medium mb-1 block">Company / Customer name</label>
+          <label className="text-sm font-medium mb-1 block">{t("wizardCustomerLabel")}</label>
           <Input
-            placeholder="e.g. Acme Engineering"
+            placeholder={t("wizardCustomerPlaceholder")}
             value={name}
             onChange={(e) => onNameChange(e.target.value)}
             autoFocus
           />
         </div>
         <div>
-          <label className="text-sm font-medium mb-1 block">Email <span className="text-muted-foreground font-normal">(optional)</span></label>
+          <label className="text-sm font-medium mb-1 block">Email <span className="text-muted-foreground font-normal">{t("wizardCustomerEmailLabel")}</span></label>
           <Input
             type="email"
             placeholder="contact@acme.com"
@@ -320,7 +325,7 @@ function StepCustomer({ name, email, onNameChange, onEmailChange }: {
           />
         </div>
       </div>
-      <p className="text-xs text-muted-foreground mt-3">Leave blank to skip</p>
+      <p className="text-xs text-muted-foreground mt-3">{t("wizardCustomerHint")}</p>
     </div>
   );
 }
@@ -331,6 +336,7 @@ interface Props { onComplete: () => void; onDismiss: () => void; }
 
 export function SetupWizard({ onComplete, onDismiss }: Props) {
   const { toast } = useToast();
+  const { t } = useLang();
   const qc = useQueryClient();
 
   const [step, setStep] = useState(0);
@@ -406,16 +412,16 @@ export function SetupWizard({ onComplete, onDismiss }: Props) {
         });
       }
       await qc.invalidateQueries();
-      toast({ title: "Workspace ready!", description: "You're all set. Start creating jobs." });
+      toast({ title: t("wizardSetupDone"), description: t("wizardSetupDoneDesc") });
       onComplete();
     } catch (err: any) {
-      toast({ title: "Setup failed", description: err.message, variant: "destructive" });
+      toast({ title: t("wizardSetupFailed"), description: err.message, variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   }
 
-  const stepLabels = ["Industry", "Workstations", "Roles", "Template", "Customer"];
+  const stepLabels = [t("wizardStepIndustry"), t("wizardStepStations"), t("wizardStepRoles"), t("wizardStepTemplate"), t("wizardStepCustomer")];
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
@@ -424,7 +430,7 @@ export function SetupWizard({ onComplete, onDismiss }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
           <div>
-            <h1 className="text-xl font-semibold">Quick Setup</h1>
+            <h1 className="text-xl font-semibold">{t("wizardTitle")}</h1>
             <p className="text-sm text-muted-foreground">
               {step + 1} / {TOTAL} — {stepLabels[step]}
             </p>
@@ -496,17 +502,17 @@ export function SetupWizard({ onComplete, onDismiss }: Props) {
         {step > 0 && (
           <div className="flex items-center justify-between px-6 py-4 border-t shrink-0 bg-muted/20">
             <Button variant="ghost" size="sm" onClick={() => setStep((s) => s - 1)}>
-              <ChevronLeft className="h-4 w-4 mr-1" /> Back
+              <ChevronLeft className="h-4 w-4 mr-1" /> {t("back")}
             </Button>
             {step < TOTAL - 1 ? (
               <Button onClick={() => setStep((s) => s + 1)}>
-                Continue →
+                {t("wizardContinue")}
               </Button>
             ) : (
               <Button onClick={finish} disabled={submitting}>
                 {submitting
-                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Setting up...</>
-                  : <><CheckCircle2 className="h-4 w-4 mr-2" /> Finish Setup</>}
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("creating")}</>
+                  : <><CheckCircle2 className="h-4 w-4 mr-2" /> {t("finishSetup")}</>}
               </Button>
             )}
           </div>

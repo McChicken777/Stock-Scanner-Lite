@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Clock, Heart, Plane, LogIn, LogOut, UserX, AlertTriangle } from "lucide-react";
@@ -35,16 +36,26 @@ function fmtHours(seconds: number) {
   return `${h}h ${m}m`;
 }
 
-const STATUS_STYLES: Record<string, { bg: string; text: string; label: string; Icon: typeof Clock }> = {
-  clocked_in: { bg: "bg-green-50 border-green-200", text: "text-green-700", label: "Working", Icon: LogIn },
-  clocked_out: { bg: "bg-gray-50 border-gray-200", text: "text-gray-600", label: "Done for day", Icon: LogOut },
-  sick: { bg: "bg-rose-50 border-rose-200", text: "text-rose-700", label: "Sick", Icon: Heart },
-  vacation: { bg: "bg-sky-50 border-sky-200", text: "text-sky-700", label: "Vacation", Icon: Plane },
-  absent: { bg: "bg-muted/30 border-border", text: "text-muted-foreground", label: "Not checked in", Icon: UserX },
+const STATUS_STYLES_BASE: Record<string, { bg: string; text: string; Icon: typeof Clock }> = {
+  clocked_in: { bg: "bg-green-50 border-green-200", text: "text-green-700", Icon: LogIn },
+  clocked_out: { bg: "bg-gray-50 border-gray-200", text: "text-gray-600", Icon: LogOut },
+  sick: { bg: "bg-rose-50 border-rose-200", text: "text-rose-700", Icon: Heart },
+  vacation: { bg: "bg-sky-50 border-sky-200", text: "text-sky-700", Icon: Plane },
+  absent: { bg: "bg-muted/30 border-border", text: "text-muted-foreground", Icon: UserX },
 };
 
 export default function AttendanceLivePage() {
   const { user } = useAuth();
+  const { t } = useLang();
+
+  const STATUS_STYLES = {
+    clocked_in: { ...STATUS_STYLES_BASE.clocked_in, label: t("attendanceWorking") },
+    clocked_out: { ...STATUS_STYLES_BASE.clocked_out, label: t("attendanceSummaryDone") },
+    sick: { ...STATUS_STYLES_BASE.sick, label: t("attendanceSick") },
+    vacation: { ...STATUS_STYLES_BASE.vacation, label: t("attendanceVacation") },
+    absent: { ...STATUS_STYLES_BASE.absent, label: t("attendanceNotCheckedIn") },
+  } as Record<string, { bg: string; text: string; label: string; Icon: typeof Clock }>;
+
   const { data: rows = [], isLoading } = useQuery<LiveRow[]>({
     queryKey: ["/api/attendance/live"],
     queryFn: () => api("/api/attendance/live"),
@@ -52,7 +63,7 @@ export default function AttendanceLivePage() {
   });
 
   if (user?.role !== "admin" && !user?.isSupervisor) {
-    return <div className="p-6 text-center text-muted-foreground">Manager access only.</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("adminOnly")}</div>;
   }
 
   const counts = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] ?? 0) + 1; return acc; }, {} as Record<string, number>);
@@ -65,7 +76,7 @@ export default function AttendanceLivePage() {
         </Link>
         <Clock className="h-5 w-5" />
         <div>
-          <h1 className="text-xl font-bold">Who's In Today</h1>
+          <h1 className="text-xl font-bold">{t("dashWhosInToday")}</h1>
           <p className="text-xs opacity-80">{new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}</p>
         </div>
       </div>
@@ -73,10 +84,10 @@ export default function AttendanceLivePage() {
       <div className="p-4 space-y-4 pb-24">
         <div className="grid grid-cols-4 gap-2 text-center">
           {[
-            { key: "clocked_in", label: "Working", color: "text-green-700", bg: "bg-green-50 border-green-200" },
-            { key: "clocked_out", label: "Done", color: "text-gray-600", bg: "bg-gray-50 border-gray-200" },
-            { key: "sick", label: "Sick", color: "text-rose-700", bg: "bg-rose-50 border-rose-200" },
-            { key: "vacation", label: "Vacation", color: "text-sky-700", bg: "bg-sky-50 border-sky-200" },
+            { key: "clocked_in", label: t("attendanceSummaryWorking"), color: "text-green-700", bg: "bg-green-50 border-green-200" },
+            { key: "clocked_out", label: t("attendanceSummaryDone"), color: "text-gray-600", bg: "bg-gray-50 border-gray-200" },
+            { key: "sick", label: t("attendanceSick"), color: "text-rose-700", bg: "bg-rose-50 border-rose-200" },
+            { key: "vacation", label: t("attendanceVacation"), color: "text-sky-700", bg: "bg-sky-50 border-sky-200" },
           ].map(s => (
             <div key={s.key} className={`rounded-lg border-2 p-2 ${s.bg}`}>
               <p className={`text-2xl font-black ${s.color}`}>{counts[s.key] ?? 0}</p>
@@ -107,13 +118,13 @@ export default function AttendanceLivePage() {
                     </div>
                     {r.status === "clocked_in" && (
                       <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Since</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("attendanceSince")}</p>
                         <p className="font-bold text-sm">{fmtTime(r.clockIn)}</p>
                       </div>
                     )}
                     {r.status === "clocked_out" && (
                       <div className="text-right flex-shrink-0">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Worked</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("attendanceWorkedHours")}</p>
                         <p className="font-bold text-sm">{fmtHours(r.workSeconds)}</p>
                       </div>
                     )}

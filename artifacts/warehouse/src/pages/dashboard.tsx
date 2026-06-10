@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 
 
 interface AttendanceLiveRow {
@@ -63,6 +64,7 @@ function fmtDate(dateStr: string): string {
 }
 
 export default function Dashboard() {
+  const { t } = useLang();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -123,7 +125,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="p-4 space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight px-1 pt-2">Overview</h1>
+        <h1 className="text-2xl font-bold tracking-tight px-1 pt-2">{t("dashOverview")}</h1>
         <div className="grid grid-cols-2 gap-3">
           <Skeleton className="h-24 rounded-xl" />
           <Skeleton className="h-24 rounded-xl" />
@@ -138,7 +140,7 @@ export default function Dashboard() {
     return (
       <div className="p-4 flex flex-col items-center justify-center h-64 text-center">
         <AlertTriangle className="h-10 w-10 text-destructive mb-4" />
-        <h2 className="text-lg font-semibold">Failed to load dashboard</h2>
+        <h2 className="text-lg font-semibold">{t("dashFailedLoad")}</h2>
         <p className="text-muted-foreground text-sm">Please try again later</p>
       </div>
     );
@@ -153,7 +155,7 @@ export default function Dashboard() {
   return (
     <div className="p-4 space-y-6 pb-24">
       <div className="px-1 pt-2 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t("dashOverview")}</h1>
       </div>
 
       {/* ── Stock metrics ── */}
@@ -164,7 +166,7 @@ export default function Dashboard() {
               <MapPin className="h-5 w-5 text-primary" />
               <div className="space-y-0.5">
                 <p className="text-3xl font-black">{summary.totalLocations}</p>
-                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">Locations</p>
+                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">{t("dashLocations")}</p>
               </div>
             </CardContent>
           </Card>
@@ -175,7 +177,7 @@ export default function Dashboard() {
               <Package className="h-5 w-5 text-primary" />
               <div className="space-y-0.5">
                 <p className="text-3xl font-black">{summary.totalProducts}</p>
-                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">Products</p>
+                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">{t("dashProducts")}</p>
               </div>
             </CardContent>
           </Card>
@@ -186,7 +188,7 @@ export default function Dashboard() {
         <Card className="border-2 border-purple-200 bg-purple-50/40">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-purple-800">
-              <FileText className="h-4 w-4" /> Quotes Pipeline
+              <FileText className="h-4 w-4" /> {t("dashQuotesPipeline")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -227,7 +229,7 @@ export default function Dashboard() {
                     <FolderKanban className="h-5 w-5 text-primary" />
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-xs font-medium uppercase tracking-wider text-secondary-foreground/70">Open Projects</p>
+                    <p className="text-xs font-medium uppercase tracking-wider text-secondary-foreground/70">{t("dashOpenProjects")}</p>
                     <p className="text-3xl font-black leading-tight">{openProjects.length}</p>
                   </div>
                 </div>
@@ -243,7 +245,7 @@ export default function Dashboard() {
 
           {/* Task Overview */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">Production Tasks</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">{t("dashProductionTasks")}</p>
             {tasksLoading ? (
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
@@ -254,7 +256,7 @@ export default function Dashboard() {
                   <div className="bg-card border-2 border-green-200 rounded-xl p-3 cursor-pointer hover:border-green-400 transition-colors">
                     <div className="flex items-center gap-2 mb-1">
                       <Zap className="h-4 w-4 text-green-600" />
-                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Ready</p>
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("dashReady")}</p>
                     </div>
                     <p className="text-2xl font-black text-green-600">{ready.length}</p>
                   </div>
@@ -262,21 +264,21 @@ export default function Dashboard() {
                 <div className="bg-card border-2 border-red-200 rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <AlertCircle className="h-4 w-4 text-red-600" />
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Blocked</p>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusBlocked")}</p>
                   </div>
                   <p className="text-2xl font-black text-red-600">{blocked.length}</p>
                 </div>
                 <div className="bg-card border-2 border-orange-200 rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <Clock className="h-4 w-4 text-orange-600" />
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">In Progress</p>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusInProgress")}</p>
                   </div>
                   <p className="text-2xl font-black text-orange-600">{inProgress.length}</p>
                 </div>
                 <div className="bg-card border-2 border-border rounded-xl p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <CheckCircle2 className="h-4 w-4 text-green-700" />
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">Completed</p>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("statusCompleted")}</p>
                   </div>
                   <p className="text-2xl font-black text-green-700">{completed.length}</p>
                 </div>
@@ -294,10 +296,10 @@ export default function Dashboard() {
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-bold flex items-center justify-between">
                     <span className="flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-primary" /> Who's In Today
+                      <UserCheck className="h-4 w-4 text-primary" /> {t("dashWhosInToday")}
                     </span>
                     <Link href="/attendance/live">
-                      <span className="text-[10px] font-bold uppercase text-primary hover:underline">View all</span>
+                      <span className="text-[10px] font-bold uppercase text-primary hover:underline">{t("dashViewAll")}</span>
                     </Link>
                   </CardTitle>
                 </CardHeader>
@@ -359,7 +361,7 @@ export default function Dashboard() {
             <Card className={`border-2 ${blocked.some((t) => t.isOverdue) ? "border-red-400 bg-red-50" : "border-red-200 bg-red-50/50"}`}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold text-red-700 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" /> Blocked Tasks ({blocked.length})
+                  <AlertCircle className="h-4 w-4" /> {t("dashBlockedTasks")} ({blocked.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -397,7 +399,7 @@ export default function Dashboard() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-4 w-4" />
-              Low Stock Alerts
+              {t("dashLowStockAlerts")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -428,7 +430,7 @@ export default function Dashboard() {
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-bold flex items-center gap-2">
             <Activity className="h-4 w-4 text-primary" />
-            Recent Activity
+            {t("dashRecentActivity")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -455,12 +457,12 @@ export default function Dashboard() {
               </div>
             ))}
             {summary.recentActivity.length === 0 && (
-              <p className="text-sm text-muted-foreground py-2 text-center">No recent activity</p>
+              <p className="text-sm text-muted-foreground py-2 text-center">{t("dashNoRecentActivity")}</p>
             )}
           </div>
           {summary.recentActivity.length > 0 && (
             <Link href="/history" className="text-xs font-semibold text-primary block text-center mt-4">
-              View full history
+              {t("dashViewFullHistory")}
             </Link>
           )}
         </CardContent>

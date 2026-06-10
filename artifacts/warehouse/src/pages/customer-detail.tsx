@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRoute } from "wouter";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +47,7 @@ const statusColor: Record<string, string> = {
 export default function CustomerDetailPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const { t } = useLang();
   const [, params] = useRoute("/customers/:id");
   const id = params ? Number(params.id) : 0;
   const [, setLocation] = useLocation();
@@ -137,37 +139,37 @@ export default function CustomerDetailPage() {
       <div className="p-4 space-y-4 pb-24">
         {/* Edit form */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Customer Info</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("customersInfo")}</p>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Name</Label>
+            <Label className="text-xs font-bold">{t("fieldName")}</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-10 border-2" disabled={!isAdmin} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Contact</Label>
+              <Label className="text-xs font-bold">{t("fieldContact")}</Label>
               <Input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="h-10 border-2" disabled={!isAdmin} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Phone</Label>
+              <Label className="text-xs font-bold">{t("fieldPhone")}</Label>
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-10 border-2" disabled={!isAdmin} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Email</Label>
+            <Label className="text-xs font-bold">{t("fieldEmail")}</Label>
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-10 border-2" disabled={!isAdmin} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Address</Label>
+            <Label className="text-xs font-bold">{t("fieldAddress")}</Label>
             <Textarea value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="border-2 min-h-[60px]" disabled={!isAdmin} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-bold">Notes</Label>
+            <Label className="text-xs font-bold">{t("fieldNotes")}</Label>
             <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="border-2 min-h-[60px]" disabled={!isAdmin} />
           </div>
           {isAdmin && (
             <div className="flex gap-2">
               <Button onClick={() => updateMut.mutate()} disabled={updateMut.isPending} className="flex-1 h-10 font-bold gap-1">
-                <Save className="h-4 w-4" /> {updateMut.isPending ? "Saving…" : "Save"}
+                <Save className="h-4 w-4" /> {updateMut.isPending ? t("saving") : t("save")}
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -177,12 +179,12 @@ export default function CustomerDetailPage() {
                 </AlertDialogTrigger>
                 <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this customer?</AlertDialogTitle>
-                    <AlertDialogDescription>Their quotes will keep their snapshot details but lose the link.</AlertDialogDescription>
+                    <AlertDialogTitle>{t("customersDeleteQ")}</AlertDialogTitle>
+                    <AlertDialogDescription>{t("customersDeleteDesc")}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => deleteMut.mutate()} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                    <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteMut.mutate()} className="bg-destructive text-destructive-foreground">{t("delete")}</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -212,13 +214,13 @@ export default function CustomerDetailPage() {
         {/* Quote history */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">Quote History</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">{t("customersQuoteHistory")}</p>
             <span className="text-xs text-muted-foreground">{quotes.length} quote{quotes.length !== 1 ? "s" : ""}</span>
           </div>
           {quotes.length === 0 ? (
             <div className="text-center py-8 bg-muted/30 rounded-xl border border-dashed">
               <FileText className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm font-semibold">No quotes yet</p>
+              <p className="text-sm font-semibold">{t("customersNoQuotes")}</p>
             </div>
           ) : (
             <div className="space-y-2">

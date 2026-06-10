@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Warehouse, AlertCircle } from "lucide-react";
+import { useLang } from "@/contexts/lang";
 
 export default function LoginPage() {
+  const { t } = useLang();
   const { login } = useAuth();
   const [, setLocation] = useLocation();
   const [username, setUsername] = useState("");
@@ -22,7 +24,7 @@ export default function LoginPage() {
       await login(username, password);
       setLocation("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : t("loginFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -37,8 +39,8 @@ export default function LoginPage() {
               <Warehouse className="h-9 w-9 text-primary-foreground" strokeWidth={2} />
             </div>
           </div>
-          <h1 className="text-2xl font-black tracking-tight">Stock Manager</h1>
-          <p className="text-sm text-muted-foreground">Sign in to continue</p>
+          <h1 className="text-2xl font-black tracking-tight">{t("loginTitle")}</h1>
+          <p className="text-sm text-muted-foreground">{t("loginSubtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -51,7 +53,7 @@ export default function LoginPage() {
 
           <div className="space-y-2">
             <Label htmlFor="username" className="text-sm font-semibold">
-              Username
+              {t("loginUsername")}
             </Label>
             <Input
               id="username"
@@ -61,14 +63,14 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="h-12 text-base border-2"
-              placeholder="Enter username"
+              placeholder={t("loginUsernamePlaceholder")}
               required
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password" className="text-sm font-semibold">
-              Password
+              {t("loginPassword")}
             </Label>
             <Input
               id="password"
@@ -77,7 +79,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-12 text-base border-2"
-              placeholder="Enter password"
+              placeholder={t("loginPasswordPlaceholder")}
               required
             />
           </div>
@@ -89,10 +91,10 @@ export default function LoginPage() {
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in…
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("loginSigningIn")}
               </>
             ) : (
-              "Sign In"
+              t("loginSignIn")
             )}
           </Button>
         </form>
