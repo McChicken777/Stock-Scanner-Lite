@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Package, Plus, Trash2, Send } from "lucide-react";
@@ -80,6 +81,7 @@ export default function OrdersPage() {
   const { user } = useAuth();
   const canManage = user?.role === "admin" || user?.role === "owner";
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [selectedOrder, setSelectedOrder] = useState<number | null>(null);
 
@@ -151,14 +153,14 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col gap-4 p-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Orders</h1>
+        <h1 className="text-2xl font-bold">{t("ordersTitle")}</h1>
         {canManage && (
           <Button
             onClick={() => generateMutation.mutate()}
             disabled={generateMutation.isPending}
             className="gap-2"
           >
-            <Plus className="h-4 w-4" /> Generate Drafts
+            <Plus className="h-4 w-4" /> {t("ordersGenerateDrafts")}
           </Button>
         )}
       </div>
@@ -183,7 +185,7 @@ export default function OrdersPage() {
                 <div>
                   <p className="font-bold">{order.supplier}</p>
                   <p className="text-xs text-muted-foreground">
-                    {order.itemCount || 0} items
+                    {order.itemCount || 0} {t("ordersItems")}
                   </p>
                 </div>
                 <span
@@ -205,7 +207,7 @@ export default function OrdersPage() {
       ) : (
         <div className="text-center py-8 text-muted-foreground">
           <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p>No orders yet</p>
+          <p>{t("ordersNone")}</p>
         </div>
       )}
 
@@ -219,7 +221,7 @@ export default function OrdersPage() {
                 disabled={sendMutation.isPending}
                 className="gap-2 bg-green-600 hover:bg-green-700"
               >
-                <Send className="h-4 w-4" /> Mark as Sent
+                <Send className="h-4 w-4" /> {t("ordersMarkSent")}
               </Button>
             )}
           </div>
@@ -235,15 +237,15 @@ export default function OrdersPage() {
                 return (
                   <div className="grid grid-cols-3 gap-2 mb-1">
                     <div className="bg-white p-2 rounded border-2 border-blue-200 text-center">
-                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Cost</p>
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("ordersCost")}</p>
                       <p className="font-mono font-bold text-sm">${totalCost.toFixed(2)}</p>
                     </div>
                     <div className="bg-white p-2 rounded border-2 border-blue-200 text-center">
-                      <p className="text-[10px] font-bold uppercase text-muted-foreground">Revenue</p>
+                      <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("ordersRevenue")}</p>
                       <p className="font-mono font-bold text-sm">${totalRevenue.toFixed(2)}</p>
                     </div>
                     <div className="bg-emerald-50 p-2 rounded border-2 border-emerald-200 text-center">
-                      <p className="text-[10px] font-bold uppercase text-emerald-700">Margin</p>
+                      <p className="text-[10px] font-bold uppercase text-emerald-700">{t("ordersMargin")}</p>
                       <p className="font-mono font-bold text-sm text-emerald-700">${totalMargin.toFixed(2)}</p>
                     </div>
                   </div>
@@ -332,7 +334,7 @@ export default function OrdersPage() {
               })}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No items in this order</p>
+            <p className="text-sm text-muted-foreground">{t("ordersNoItems")}</p>
           )}
         </div>
       )}

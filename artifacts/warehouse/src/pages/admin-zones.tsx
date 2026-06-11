@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { useToast } from "@/hooks/use-toast";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 export default function AdminZonesPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -59,35 +61,35 @@ export default function AdminZonesPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Access restricted to admins.</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("accessDenied")}</div>;
   }
 
   return (
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Production Zones</h1>
+          <h1 className="text-2xl font-black">{t("zonesTitle")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            Named areas on the shop floor
+            {t("zonesSubtitle")}
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="font-bold gap-2">
-              <Plus className="h-4 w-4" /> Add Zone
+              <Plus className="h-4 w-4" /> {t("zonesAdd")}
             </Button>
           </DialogTrigger>
           <DialogContent className="w-[90vw] max-w-sm rounded-xl">
             <DialogHeader>
-              <DialogTitle>New Production Zone</DialogTitle>
+              <DialogTitle>{t("zonesNewDialog")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Zone Name</Label>
+                <Label>{t("zonesNameLabel")}</Label>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. CNC Bay, Paint Booth"
+                  placeholder={t("zonesNamePlaceholder")}
                   className="h-12 border-2"
                   onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) createMutation.mutate(name.trim()); }}
                 />
@@ -98,7 +100,7 @@ export default function AdminZonesPage() {
                 onClick={() => createMutation.mutate(name.trim())}
               >
                 {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Create Zone
+                {t("zonesCreate")}
               </Button>
             </div>
           </DialogContent>
@@ -112,8 +114,8 @@ export default function AdminZonesPage() {
       ) : zones.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <MapPin className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-          <p className="font-semibold text-muted-foreground">No production zones yet</p>
-          <p className="text-sm text-muted-foreground mt-1">Add zones like "CNC Bay" or "Paint Booth" to track where work-in-progress items live.</p>
+          <p className="font-semibold text-muted-foreground">{t("zonesNone")}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("zonesNoneDesc")}</p>
         </div>
       ) : (
         <div className="space-y-2">

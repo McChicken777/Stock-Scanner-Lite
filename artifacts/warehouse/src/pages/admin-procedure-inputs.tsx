@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +60,7 @@ async function fetchInputs(procId: number): Promise<ProcedureInput[]> {
 export default function AdminProcedureInputsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [, params] = useRoute("/admin/procedure-inputs/:procId");
   const procId = Number(params?.procId || 0);
@@ -120,30 +122,30 @@ export default function AdminProcedureInputsPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Admin only</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("adminOnly")}</div>;
   }
 
   if (!procId || procLoading) {
-    return <div className="p-6 text-muted-foreground">Loading...</div>;
+    return <div className="p-6 text-muted-foreground">{t("loading")}</div>;
   }
 
   return (
     <div className="p-4 space-y-4 pb-24">
       <Link href="/admin/procedures" className="flex items-center gap-2 text-primary hover:opacity-70">
-        <ArrowLeft className="h-4 w-4" /> Back to Procedures
+        <ArrowLeft className="h-4 w-4" /> {t("procedureInputsBack")}
       </Link>
 
       <div>
         <h1 className="text-2xl font-bold">{procedure?.name}</h1>
-        <p className="text-xs text-muted-foreground">Define required inputs for this procedure</p>
+        <p className="text-xs text-muted-foreground">{t("procedureInputsDesc")}</p>
       </div>
 
       {inputsLoading ? (
-        <div className="text-muted-foreground">Loading inputs...</div>
+        <div className="text-muted-foreground">{t("procedureInputsLoading")}</div>
       ) : (
         <div className="space-y-2">
           {inputs.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">No inputs defined yet</p>
+            <p className="text-sm text-muted-foreground py-4">{t("procedureInputsNone")}</p>
           ) : (
             inputs.map((input) => (
               <div
@@ -173,10 +175,10 @@ export default function AdminProcedureInputsPage() {
       )}
 
       <div className="space-y-2 pt-4 border-t">
-        <p className="text-sm font-bold">Add Required Input:</p>
+        <p className="text-sm font-bold">{t("procedureInputsAdd")}</p>
         <Select value={selectedItemId} onValueChange={setSelectedItemId}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Select item" />
+            <SelectValue placeholder={t("procedureInputsSelectItem")} />
           </SelectTrigger>
           <SelectContent>
             {products.map((p) => (
@@ -190,7 +192,7 @@ export default function AdminProcedureInputsPage() {
           type="number"
           value={quantityRequired}
           onChange={(e) => setQuantityRequired(e.target.value)}
-          placeholder="Quantity required"
+          placeholder={t("procedureInputsQuantityPlaceholder")}
           className="h-12"
           min="1"
         />
@@ -199,7 +201,7 @@ export default function AdminProcedureInputsPage() {
           disabled={!selectedItemId || addMutation.isPending}
           className="w-full h-12 font-bold gap-1"
         >
-          <Plus className="h-4 w-4" /> Add Input
+          <Plus className="h-4 w-4" /> {t("procedureInputsAddBtn")}
         </Button>
       </div>
     </div>

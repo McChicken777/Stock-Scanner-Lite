@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -60,8 +61,8 @@ function formatDeadline(dateStr: string) {
   return { label: `${days}d left`, overdue: false };
 }
 
-function ColorSwatch({ color }: { color: string | null }) {
-  if (!color) return <span className="text-xs text-muted-foreground italic">No color</span>;
+function ColorSwatch({ color, noColorLabel }: { color: string | null; noColorLabel?: string }) {
+  if (!color) return <span className="text-xs text-muted-foreground italic">{noColorLabel ?? "No color"}</span>;
   return (
     <div className="flex items-center gap-1.5">
       <div
@@ -96,6 +97,7 @@ function BatchCompleteDialog({
   onCancel: () => void;
   isPending: boolean;
 }) {
+  const { t } = useLang();
   const [entries, setEntries] = useState<LocationEntry[]>(
     items.map((item) => ({ stepId: item.id, itemName: item.itemName, locationType: "warehouse", locationValue: "", sizeNote: "" }))
   );
@@ -108,8 +110,8 @@ function BatchCompleteDialog({
       <div className="w-full max-w-sm bg-background rounded-2xl border-2 shadow-xl p-5 space-y-4 animate-in slide-in-from-bottom-4 max-h-[85dvh] flex flex-col">
         <div className="flex items-center justify-between flex-shrink-0">
           <div>
-            <p className="font-black text-base">Log Storage Locations</p>
-            <p className="text-xs text-muted-foreground">Where did you put each painted part?</p>
+            <p className="font-black text-base">{t("paintLogLocations")}</p>
+            <p className="text-xs text-muted-foreground">{t("paintLogLocationsDesc")}</p>
           </div>
           <button onClick={onCancel} className="text-muted-foreground hover:text-foreground p-1">
             <X className="h-5 w-5" />
@@ -122,7 +124,7 @@ function BatchCompleteDialog({
               <p className="text-sm font-semibold truncate">{entry.itemName}</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {(["warehouse", "zone", "with_worker"] as const).map((type) => {
-                  const labels = { warehouse: "Shelf/Rack", zone: "Zone", with_worker: "With me" };
+                  const labels = { warehouse: t("paintShelf"), zone: t("paintZone"), with_worker: t("paintWithMe") };
                   return (
                     <button
                       key={type}
@@ -141,7 +143,7 @@ function BatchCompleteDialog({
               {entry.locationType === "zone" && zones.length > 0 && (
                 <Select value={entry.locationValue} onValueChange={(v) => update(idx, { locationValue: v })}>
                   <SelectTrigger className="h-9 border-2 text-xs">
-                    <SelectValue placeholder="Pick zone…" />
+                    <SelectValue placeholder={t("paintPickZone")} />
                   </SelectTrigger>
                   <SelectContent>
                     {zones.map((z) => <SelectItem key={z.id} value={z.name}>{z.name}</SelectItem>)}
@@ -151,7 +153,7 @@ function BatchCompleteDialog({
               {entry.locationType === "warehouse" && (
                 <input
                   type="text"
-                  placeholder="Shelf, rack, area (e.g. A-03)"
+                  placeholder={t("paintShelfPlaceholder")}
                   value={entry.locationValue}
                   onChange={(e) => update(idx, { locationValue: e.target.value })}
                   className="w-full h-9 px-3 rounded-lg border-2 border-input bg-background text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
@@ -159,7 +161,7 @@ function BatchCompleteDialog({
               )}
               <input
                 type="text"
-                placeholder="Size/weight note (e.g. large panel, 12 kg) — optional"
+                placeholder={t("paintSizePlaceholder")}
                 value={entry.sizeNote}
                 onChange={(e) => update(idx, { sizeNote: e.target.value })}
                 className="w-full h-9 px-3 rounded-lg border border-input bg-muted/50 text-xs text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background"
@@ -175,7 +177,7 @@ function BatchCompleteDialog({
             onClick={() => onConfirm(entries)}
           >
             <CheckCircle2 className="h-4 w-4 mr-1.5" />
-            {isPending ? "Saving…" : "Log Locations & Mark Complete"}
+            {isPending ? "…" : t("paintLogComplete")}
           </Button>
         </div>
       </div>
@@ -188,6 +190,7 @@ function BatchCompleteDialog({
 export default function PaintQueuePage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
@@ -294,7 +297,7 @@ export default function PaintQueuePage() {
       <div className="p-4 space-y-3 pb-24">
         <div className="pt-2">
           <h1 className="text-2xl font-black">Paint Shop</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Paint queue</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("paintSubtitle")}</p>
         </div>
         {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
       </div>
@@ -310,17 +313,17 @@ export default function PaintQueuePage() {
         <Palette className="h-12 w-12 mx-auto text-muted-foreground" />
         {isPro ? (
           <>
-            <h2 className="font-bold text-lg">Paint Queue is a Pro feature</h2>
-            <p className="text-sm text-muted-foreground">Upgrade your plan to access the Paint Shop view with batch tracking and color grouping.</p>
+            <h2 className="font-bold text-lg">{t("paintProFeature")}</h2>
+            <p className="text-sm text-muted-foreground">{t("paintProDesc")}</p>
           </>
         ) : isRole ? (
           <>
-            <h2 className="font-bold text-lg">Access Restricted</h2>
-            <p className="text-sm text-muted-foreground">Paint Shop is available to admins, supervisors, and workers with a Painter role. Contact your admin to request access.</p>
+            <h2 className="font-bold text-lg">{t("accessDenied")}</h2>
+            <p className="text-sm text-muted-foreground">{t("paintRoleDesc")}</p>
           </>
         ) : (
           <>
-            <h2 className="font-bold text-lg">Failed to load paint queue</h2>
+            <h2 className="font-bold text-lg">{t("paintFailed")}</h2>
             <p className="text-sm text-muted-foreground">{msg}</p>
           </>
         )}
@@ -336,7 +339,7 @@ export default function PaintQueuePage() {
             <Palette className="h-6 w-6 text-primary" /> Paint Shop
           </h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-            {items.length} item{items.length !== 1 ? "s" : ""} in queue
+            {items.length} {t("paintItemsInQueue")}
           </p>
         </div>
       </div>
@@ -344,8 +347,8 @@ export default function PaintQueuePage() {
       {items.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <CheckCircle2 className="h-10 w-10 mx-auto mb-3 text-green-500" />
-          <p className="font-semibold">All clear — nothing to paint</p>
-          <p className="text-sm text-muted-foreground mt-1">Items appear here once all upstream steps are complete.</p>
+          <p className="font-semibold">{t("paintAllClear")}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("paintAllClearDesc")}</p>
         </div>
       ) : (
         <>
@@ -360,7 +363,7 @@ export default function PaintQueuePage() {
                   onClick={handleStartBatch}
                 >
                   <Play className="h-3.5 w-3.5" />
-                  {selectedCount > 0 ? `Start (${selectedCount})` : `Start All Ready (${ready.filter(i => selectedIds.size === 0 || selectedIds.has(i.id)).length})`}
+                  {selectedCount > 0 ? `Start (${selectedCount})` : `${t("paintStartAll")} (${ready.filter(i => selectedIds.size === 0 || selectedIds.has(i.id)).length})`}
                 </Button>
               )}
               {inProgress.length > 0 && (
@@ -371,7 +374,7 @@ export default function PaintQueuePage() {
                   onClick={handleCompleteRequest}
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  {selectedCount > 0 ? `Done (${selectedCount})` : `Finish All (${inProgress.length})`}
+                  {selectedCount > 0 ? `Done (${selectedCount})` : `${t("paintFinishAll")} (${inProgress.length})`}
                 </Button>
               )}
             </div>
@@ -382,7 +385,7 @@ export default function PaintQueuePage() {
             <div className="space-y-2">
               <h2 className="text-sm font-bold uppercase tracking-wider text-orange-600 flex items-center gap-1.5">
                 <span className="inline-block w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-                In Painting ({inProgress.length})
+                {t("paintInPainting")} ({inProgress.length})
               </h2>
               <div className="space-y-1.5">
                 {inProgress.map((item) => {
@@ -406,7 +409,7 @@ export default function PaintQueuePage() {
                           <p className="font-bold text-sm leading-tight">{item.itemName}</p>
                           <p className="text-xs text-muted-foreground truncate">{item.projectName} · {item.stepName}</p>
                         </div>
-                        <ColorSwatch color={item.paintColor} />
+                        <ColorSwatch color={item.paintColor} noColorLabel={t("paintNoColor")} />
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold capitalize border ${priorityColors[item.priority] ?? "bg-gray-100 text-gray-600"}`}>
@@ -437,7 +440,7 @@ export default function PaintQueuePage() {
           {ready.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-green-700">
-                Ready to Paint ({ready.length})
+                {t("paintReadyToPaint")} ({ready.length})
               </h2>
               {[...readyColorGroups.entries()].map(([color, colorItems]) => {
                 const allIds = colorItems.map((i) => i.id);
@@ -459,7 +462,7 @@ export default function PaintQueuePage() {
                         onClick={() => toggleAll(allIds)}
                         className="text-[11px] text-primary font-bold hover:underline"
                       >
-                        {allSelected ? "Deselect all" : "Select all"}
+                        {allSelected ? t("paintDeselectAll") : t("paintSelectAll")}
                       </button>
                     </div>
                     {colorItems.map((item) => {

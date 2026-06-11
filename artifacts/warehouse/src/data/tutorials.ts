@@ -1,3 +1,5 @@
+import type { Lang } from "@/i18n/translations";
+
 export type TutorialKey =
   | "jobs" | "tasks" | "templates" | "stations" | "materials"
   | "products" | "locations" | "suppliers" | "purchasing" | "reorder"
@@ -546,6 +548,228 @@ export const TUTORIALS: Record<TutorialKey, Tutorial> = {
     ],
   },
 };
+
+const TUTORIALS_SL: Record<TutorialKey, Tutorial> = {
+  jobs: {
+    title: "Nalogi in delovni nalogi",
+    subtitle: "Vaša producijska tabla — vse na enem mestu",
+    steps: [
+      { heading: "Vaša producijska tabla", body: "Vsi aktivni nalogi so prikazani tukaj, razvrščeni po nujnosti. Zamujeni nalogi so rdeči, tisti z rokom danes/jutri so oranžni, tisti ta teden so jantarni. Dokončani nalogi so na dnu." },
+      { heading: "Ustvarjanje delovnega naloga", body: "Tapnite Novo za ustvarjanje naloga. Izberite predlogo iz Predlog nalogov, nastavite rok, prioriteto in število kosov. Sistem samodejno ustvari vse korake.", tip: "Nastavite prioriteto Nujno za rush naloge — delavci jih vidijo na vrhu svojega seznama nalog." },
+      { heading: "Branje kartic table", body: "Vsaka kartica prikazuje: ime naloga, odštevalnik roka, vrstico napredka, število blokiranih korakov (ikona ščita) in imena delavcev, ki trenutno delajo na njej." },
+      { heading: "Prikaži več nalogov", body: "Vsaka sekcija privzeto prikazuje 5 nalogov. Tapnite 'Prikaži X več' za razširitev. Tapnite 'Prikaži manj' za skrčitev." },
+      { heading: "Pogled nadzornika", body: "Pomaknite se na dno za vgrajeno ploščo nadzornika s tremi zavihki: Dnevni načrt, Ozka grla in Nezabeleženo.", tip: "Plošča nadzornika se prikazuje samo za administratorje in nadzornike — delavci vidijo samo tablo nalogov." },
+    ],
+  },
+  tasks: {
+    title: "Moje naloge",
+    subtitle: "Vaš dnevni seznam del — začnite tukaj vsako jutro",
+    steps: [
+      { heading: "Koraki, dodeljeni vam", body: "Ta stran prikazuje vse producijske korake za vašo vlogo, ki so pripravljeni za začetek. Zelena značka pomeni pripravljeno. Ikona ključavnice pomeni, da predhodni korak še ni končan." },
+      { heading: "Začetek koraka", body: "Tapnite Začni na kateremkoli koraku. To samodejno zabeleži vaš prihod pri prisotnosti. Začne se odštevanje vašega delovnega časa." },
+      { heading: "Dokončanje koraka", body: "Tapnite Ustavi, nato Dokončaj. Vprašani boste, kje ste pustili del: lokacija skladišča, producijska cona ali 'pri delavcu'.", tip: "Vedno beležite lokacijo — nadzornik jo uporablja za sledenje vsakemu delu na tlorisu." },
+      { heading: "Skupinski koraki", body: "Nekateri koraki so nastavljeni na skupinski način. Gumb Skupinsko se prikaže, ko je mogoče več elementov združiti — npr. variti 5 okvirjev naenkrat z enim časovnim vnosom." },
+    ],
+  },
+  templates: {
+    title: "Predloge nalogov",
+    subtitle: "Producijski načrt — sestavite to pred ustvarjanjem nalogov",
+    steps: [
+      { heading: "Kaj predloge naredijo", body: "Predloge določajo, kako se izdela produkt. Vsak delovni nalog je ustvarjen iz predloge. Koraki, vloge in dodelitve postaj postanejo naloge, ki jih vidijo delavci.", tip: "Nastavite predloge pred ustvarjanjem uporabnikov — naloge se pojavijo samodejno ob ustvarjanju naloga." },
+      { heading: "Ustvarjanje predloge", body: "Kliknite Nova predloga, dajte ji ime (npr. 'Jekleni okvir 2m'). Po želji jo povežite s produktom iz kataloga — to omogoča preverjanje materialne zaloge pri ustvarjanju nalogov." },
+      { heading: "Dodajanje korakov", body: "Koraki tečejo v vrstnem redu, razen če nastavite odvisnosti. Za vsak korak nastavite: Vlogo, Vrsto postaje, Način serije in oceno trajanja v minutah." },
+      { heading: "Odvisnosti korakov", body: "Kliknite ikono ključavnice za določitev, kaj mora biti končano, preden se korak začne. Delavci vidijo samo odklenjene korake.", tip: "Verige odvisnosti preprečujejo napačen vrstni red — sistem samodejno uveljavlja vaš producijski tok." },
+      { heading: "Poraba materialov", body: "Če korak porabi surovino, nastavite 'Porabi produkt' in količino. Sistem preveri zalogo pri ustvarjanju naloga in opozori ob primanjkljaju." },
+      { heading: "Prednastavitve in AI urejanje", body: "Shranite nabor korakov kot prednastavitev za enkratno aplikacijo. Ali uporabite AI polje za naravnojezično urejanje: 'Dodaj korak praimerom po brušenju'." },
+    ],
+  },
+  stations: {
+    title: "Producijski tok",
+    subtitle: "Narišite vaš fizični tloris — postaje in stroji",
+    steps: [
+      { heading: "Dvonivojska struktura", body: "Vrste postaj predstavljajo vrste dela (Rezanje, Varjenje, CNC, Barva). Delovne postaje so posamezni stroji znotraj vsake vrste (Tračna žaga 1, MIG varilnik 2)." },
+      { heading: "Ustvarjanje vrst postaj", body: "Vsaka vrsta postaje potrebuje ime, barvo in po želji privzeto vlogo. Povlecite kartice za prerazvrstitev — vrstni red se odraža v pogledih čakalnih vrst.", tip: "Ustvarite vrste postaj pred gradnjo predlog nalogov." },
+      { heading: "Dodajanje delovnih postaj", body: "Pod vsako vrsto postaje dodajte vsak fizični stroj. Nastavite isActive na false za opremo v vzdrževanju." },
+      { heading: "Živa čakalna vrsta", body: "Kliknite puščico na vrsti postaje za odprtje žive čakalne vrste. Delavci prevzamejo korak, ga začnejo in označijo kot dokončanega.", tip: "Zelena utripajoča pika pomeni, da nekdo trenutno aktivno dela tam." },
+    ],
+  },
+  materials: {
+    title: "Materiali",
+    subtitle: "Surovine in kupljeni deli — uvoz v množici",
+    steps: [
+      { heading: "Kaj spada sem", body: "Materiali prikazuje kupljene in proizvedene dele — surove vhode v produkciji. Usmerjen pogled kataloga, filtriran na ti dve vrsti." },
+      { heading: "Uvoz v množici", body: "Kliknite Prenesi predlogo za Excel/CSV predlogo. Izpolnite jo in jo povlecite v območje uvoza. Sprejema .csv in .xlsx datoteke." },
+      { heading: "Stolpci predloge", body: "ime (obvezno), kategorija, enota (kos / kg / m / mm / L), buffer_stock, target_stock. Vrstice z # so komentarji.", tip: "Kategorije: Spojni elementi, Hidravlika, Elektrika, Varilni material, CNC deli, Surovine, Pnevmatika, Ležaji in tesnila, Okovje, Potrošni material." },
+      { heading: "Urejanje v vrstici", body: "Kliknite katero koli vrstico za neposredno urejanje ime, kategorije ali enote. Ni treba odpirati obrazcev — samo kliknite in tipkajte." },
+    ],
+  },
+  products: {
+    title: "Produkti in zaloga",
+    subtitle: "Vaš celoten katalog produktov z živimi ravnmi zaloge",
+    steps: [
+      { heading: "Celoten katalog", body: "Ta stran prikazuje vse: kupljene dele, proizvedene dele in končne produkte. Sledi skupni zalogi, opozorilom in dobaviteljem." },
+      { heading: "Uvoz prek CSV", body: "Kliknite Uvoz in naložite CSV. Obvezni stolpci: ime, vrsta. Neobvezni: kategorija, min_stock, target_stock, supplier_name, supplier_sku.", tip: "supplier_name mora točno ujemati obstoječemu dobavitelju — uvoz jih samodejno poveže." },
+      { heading: "Vrste produktov", body: "purchased_part — surovine in kupljene komponente. manufactured_part — interno proizvedeni podsklopovi. final_product — kar prodajate strankam." },
+      { heading: "Ravni zaloge", body: "Barvna vrstica prikazuje zalogo glede na cilj. Rdeča = pod puferjem (opozorilo). Jantarna = pod ciljem. Zelena = zdravo." },
+      { heading: "Prilagajanje zaloge", body: "Kliknite produkt za zalogo po lokacijah. Tapnite lokacijo za prilagoditev. Vnesite pozitivno ali negativno število — vsaka sprememba je zabeležena v Zgodovini." },
+    ],
+  },
+  locations: {
+    title: "Lokacije skladišča",
+    subtitle: "Kosi, police in regali — skenirajte QR kode za posodabljanje zaloge",
+    steps: [
+      { heading: "Kaj so lokacije", body: "Lokacije so fizična mesta shranjevanja: regali, kosi, police. Vsaka dobi unikaten ID in QR kodo za natis." },
+      { heading: "Izbira ID-jev", body: "Izberite jasno konvencijo in se je držite. Priporočeno: A1-R01-S2-B3 ali POLICA-A1. ID-ji so z velikimi črkami in trajni.", tip: "Ohranite ID-je kratke — delavci jih vtipkavajo kot rezervo, ko skener ne deluje." },
+      { heading: "Tiskanje QR etiket", body: "Kliknite ikono QR za odprtje natisljive etikete. Natisnite, zalaminirajte in prilepite na fizično polico." },
+      { heading: "Skeniranje zaloge", body: "Delavci odprejo zavihek Skeniraj, umerijo kamero na QR kodo in pristanejo na strani zaloge te lokacije. Posodobitve od kjerkoli na tlorisu." },
+      { heading: "Vnos začetne zaloge", body: "Po nastavitvi obiščite vsako lokacijo in vnesite trenutne količine. Vsaka prilagoditev je zabeležena za čisto revizijsko zgodovino." },
+    ],
+  },
+  suppliers: {
+    title: "Dobavitelji",
+    subtitle: "Vaš imenik dobaviteljev — povezan s produkti in naročilnicami",
+    steps: [
+      { heading: "Zakaj so dobavitelji pomembni", body: "Dobavitelji se povežejo s produkti, naročilnicami in čakalno vrsto. Dobavitelju z e-pošto so lahko poslana avtomatizirana naročilna sporočila.", tip: "Ustvarite dobavitelje pred uvozom produktov prek CSV — stolpec supplier_name se samodejno poveže." },
+      { heading: "Dodajanje dobavitelja", body: "Ime (obvezno), e-pošta, telefon in opombe. Polje Opombe uporabite za roke dobave, plačilne pogoje ali minimalne vrednosti naročil." },
+      { heading: "Povezovanje produktov", body: "Razširite kartico dobavitelja in kliknite Dodaj produkt. Izberite produkt tipa purchased_part, vnesite SKU in ceno. Ti podatki se samodejno pojavijo na naročilnicah." },
+    ],
+  },
+  purchasing: {
+    title: "Naročilnice",
+    subtitle: "Naročajte materiale, sledite dostavam, prejemlajte zalogo",
+    steps: [
+      { heading: "Tok nakupa", body: "Naročilnice sledijo naročenemu, prispelemu in nameščenemu. Status: Osnutek → Naročeno → Delno prišlo → Prišlo." },
+      { heading: "Ustvarjanje naročilnice", body: "Izberite dobavitelja, nastavite datum dostave in dodajte postavke. Naročilnice lahko ustvarite tudi iz Čakalne vrste za naročilo.", tip: "V spustnem meniju dobavitelja se njihovi povezani produkti prikažejo razvrščeni po kategoriji." },
+      { heading: "Prejemanje zaloge", body: "Za vsako postavko kliknite Prejmi. Vnesite količino in izberite lokacijo. Zaloga se takoj posodobi in status naročilnice samodejno napreduje." },
+      { heading: "E-pošta dobavitelju", body: "Ko je naročilnica naročena, gumb E-pošta ustvari vnaprej napisano sporočilo z vsemi postavkami, SKU-ji in cenami." },
+      { heading: "Čakajoči projekti", body: "Vsaka postavka prikazuje aktivne projekte, ki potrebujejo ta produkt — da veste o vplivu zapoznele dostave." },
+    ],
+  },
+  reorder: {
+    title: "Čakalna vrsta za naročilo",
+    subtitle: "Samodejna opozorila o dopolnjevanju — vaš dnevni seznam nakupov",
+    steps: [
+      { heading: "Samodejna opozorila", body: "Produkti se tu prikažejo, ko zaloga pade pod min_stock. Razvrščeni so po dobavitelju za naročilo vsega z eno naročilnico.", tip: "Nastavite min_stock za vsak kritičen material — ta stran postane vaš samodejni seznam dopolnjevanja." },
+      { heading: "Ustvarjanje naročilnice", body: "Kliknite Ustvari naročilnico poleg skupiny dobavitelja. Osnutek se takoj ustvari z vsemi produkti z nizko zalogo." },
+      { heading: "Zastavice pomanjkanja", body: "Delavci dvignejo zastavice, ko jim zmanjka materiala. Pojavijo se tukaj s kontekstom projekta." },
+      { heading: "Filter čakajočih naročilnic", body: "Preklop za skrivanje elementov s čakajočimi naročilnicami preprečuje podvojena naročila." },
+    ],
+  },
+  customers: {
+    title: "Stranke",
+    subtitle: "Vaš imenik strank — povezan s ponudbami in delovnimi nalogi",
+    steps: [
+      { heading: "Evidence strank", body: "Tu so vsa podjetja ali osebe, ki jim ponujate. Stranke so povezane s ponudbami; odobrene ponudbe se pretvorijo v delovne naloge.", tip: "Dodajte stranko pred ustvarjanjem ponudbe — prihranite si ponovnega tipkanja." },
+      { heading: "Dodajanje stranke", body: "Ime je obvezno. Dodajte kontaktno osebo, telefon, e-pošto in naslov — samodejno se izpolnijo v ponudbah." },
+      { heading: "Podrobnosti stranke", body: "Kliknite katero koli stranko za ogled vseh ponudb in zgodovine nalogov. Neposredno ustvarite novo ponudbo z vnaprej izpolnjenimi podatki." },
+    ],
+  },
+  quotes: {
+    title: "Ponudbe",
+    subtitle: "Ustvarjajte ponudbe, pridobite odobritev, pretvorite v delovne naloge",
+    steps: [
+      { heading: "Življenjski cikel ponudbe", body: "Ponudbe tečejo: Osnutek → Poslano → Odobreno → Pretvorjeno. Zavrnjene ponudbe ostanejo v evidenci." },
+      { heading: "Ustvarjanje ponudbe", body: "Izberite stranko ali vnesite podatke ročno. Dodajte postavke iz kataloga ali ročno. Nastavite cene, popust in davčno stopnjo." },
+      { heading: "Pretvorba v delovni nalog", body: "Ko je ponudba Odobrena, kliknite Pretvori. Samodejno se ustvari povezan delovni projekt.", tip: "Nastavite datum veljavnosti na vsako ponudbo — pretečene so označene za sledenje." },
+      { heading: "Zgodovina revizij", body: "Ob vsakem urejanju shranite revizijo z opombo. Celotna zgodovina različic je shranjena za primerjavo med verzijami." },
+    ],
+  },
+  users: {
+    title: "Upravljanje uporabnikov",
+    subtitle: "Ustvarite račune delavcev in dodelite producijske vloge",
+    steps: [
+      { heading: "Dve vrsti uporabnikov", body: "Delavci vidijo samo svoje naloge, prisotnost in vstopno blago. Administratorji imajo popoln dostop. Ustvarite admin račune samo za vodje.", tip: "Pred dodajanjem uporabnikov ustvarite producijske vloge v Producijskem toku." },
+      { heading: "Ustvarjanje uporabnika", body: "Uporabniško ime (za prijavo), geslo (povejte ustno — admin ga ponastavi) in vloga." },
+      { heading: "Dodeljevanje vlog", body: "Kliknite ikono vlog na kartici. Dodelite vloge: Primarna, Sekundarna, Nadomeščanje. Delavci vidijo samo korake, ki ustrezajo njihovim vlogam." },
+      { heading: "Nadzorniki", body: "Zastavica Nadzornik da delavcu Pogled nadzornika, dostop do table Projektov in zmožnost preskočiti ali prerazporediti korake." },
+    ],
+  },
+  attendance: {
+    title: "Prisotnost",
+    subtitle: "Prijava, odjava in upravljanje dopustov",
+    steps: [
+      { heading: "Prijava in odjava", body: "Tapnite Prijava na začetku izmene in Odjava na koncu. Sistem samodejno izračuna redne ure in nadure." },
+      { heading: "Samodejna prijava", body: "Če delavec začne nalogo brez prijave, ga sistem samodejno prijavi. Na koncu dneva se mora ročno odjaviti.", tip: "Če izmena ne zaključi do polnoči, se samodejno zaključi. Tapnite značko za potrditev." },
+      { heading: "Zahtevki za dopust", body: "Oddajte zahtevke za bolniški ali počitnice na dnu strani. Izberite vrsto, datume začetka in konca. Zahtevek gre administratorju za odobritev." },
+      { heading: "Zgodovina izmen", body: "Stran prikazuje zadnjih 14 dni evidenc. Samodejno zaprte izmene so označene. Odobreni/zavrnjeni zahtevki za dopust so prav tako vidni." },
+    ],
+  },
+  leave: {
+    title: "Zahtevki za dopust",
+    subtitle: "Odobritev ali zavrnitev zahtevkov za prosti čas",
+    steps: [
+      { heading: "Prispeli zahtevki", body: "Vsi zahtevki pristanejo tukaj. Število na bočni vrstici prikazuje čakajoče. Vidijo se ime, vrsta, datumi in čas oddaje.", tip: "Čakajoči zahtevki prikažejo značko na navigaci — počisti se ob obravnavi vseh." },
+      { heading: "Odobritev ali zavrnitev", body: "Kliknite Odobri ali Zavrni. Dodajte neobvezno opombo — delavec jo vidi v Prisotnosti ob potrditvi." },
+      { heading: "Filtriranje", body: "Filtrirajte po stanju (Čakanje / Odobreno / Zavrnjeno) in po uporabniku. Filtrirajte po Čakanju za hitro obdelavo zaostankov." },
+    ],
+  },
+  report: {
+    title: "Poročilo o prisotnosti",
+    subtitle: "Mesečni pregledi in CSV izvoz za obračun plač",
+    steps: [
+      { heading: "Mesečni pregled", body: "Izberite mesec in po želji uporabnika za dnevni pregled: vrsta izmene, ure prijave/odjave, redne ure, nadure, oznake praznikov.", tip: "Nastavite državo in uvozite praznike v Nastavitvah podjetja pred poročili." },
+      { heading: "Izračun nadur", body: "Nadure so samodejne glede na delovne ure na dan. Državni in podjetniški prazniki so polne nadure." },
+      { heading: "Izvoz v CSV", body: "Kliknite Prenesi za CSV datoteko. Vključuje vse stolpce za obračun plač, računovodstvo ali HR." },
+    ],
+  },
+  supervisor: {
+    title: "Pogled nadzornika",
+    subtitle: "Pregled produkcije v realnem času — odkrijte težave zgodaj",
+    steps: [
+      { heading: "Zavihek Dnevni načrt", body: "Prikazuje vse današnje pripravljene/aktivne korake po vlogi. Rdeča strela = vloga ima 8+ ur v čakalni vrsti — razmislite o prerazporeditvi." },
+      { heading: "Zavihek Ozka grla", body: "Zamujeni projekti, vloge z visokim razmerjem blokiranih korakov, elementi kjer so vsi koraki blokirani, dostave zastale 2+ dni.", tip: "Preverite Ozka grla vsako jutro — vse potrebno pozornosti v enem pogledu." },
+      { heading: "Zavihek Nezabeleženo", body: "Koraki iz zadnjih 7 dni, kjer delavec ni zabeležil lokacije. Tapnite Opomni za kopiranje sporočila v odložišče." },
+      { heading: "Ukrepanje", body: "Na kateremkoli koraku v Dnevnem načrtu tapnite meni ⋮ za dodelitev drugi vlogi, preskočitev ali označitev projekta kot Nujno." },
+    ],
+  },
+  company: {
+    title: "Nastavitve podjetja",
+    subtitle: "Delovne ure, pravila nadur in prazniki",
+    steps: [
+      { heading: "Ime podjetja", body: "Ime se prikazuje po celotni aplikaciji. Kliknite Uredi za kadarkoli spremembo." },
+      { heading: "Delovne ure na dan", body: "Vnesite standardne ure (npr. 8). Ure nad tem pragom se štejejo kot nadure v poročilih." },
+      { heading: "Nadure ob vikendih", body: "Vklopite, če se vse sobotne in nedeljske ure štejejo kot nadure — pogosto v izmenskem delu." },
+      { heading: "Državni prazniki", body: "Izberite državo in kliknite Uvoz za nalaganje praznikov. Vse ure na te dni so nadure. Ponovite vsako leto.", tip: "Ročno dodajte zaprta dneve podjetja (ustavitve, lokalni dogodki) z obrazcem Dodaj praznik." },
+      { heading: "Načrt", body: "Vaš trenutni načrt je prikazan tukaj. Nadgradnje upravlja lastnik računa — obrnite se nanje za Pro funkcije." },
+    ],
+  },
+  analytics: {
+    title: "AI Analitika",
+    subtitle: "Producijski uvidi iz vaših dejanskih podatkov",
+    steps: [
+      { heading: "Kaj analizira", body: "Analitika obdela dokončane naloge, časovne dnevnike in korake za iskanje vzorcev, ozkih grl in trendov.", tip: "Potrebuje vsaj nekaj dokončanih nalogov. Več podatkov, boljši uvidi." },
+      { heading: "Graf učinkovitosti", body: "Povprečen čas dokončanja na vrsto koraka skozi čas. Padajoče linije = ekipa postaja hitrejša. Ravne/naraščajoče = ponavljajoče ozko grlo." },
+      { heading: "Toplotni zemljevid ozkih grl", body: "Kateri koraki imajo najdaljše čakalne čase. Rdeče polje = vaša producijska omejitev. Izboljšave najprej tu." },
+      { heading: "Točnost rokov", body: "Odstotek nalogov, dokončanih pravočasno na mesec. Padajoča točnost = preveč optimistične ocene — kalibrirajte roke." },
+      { heading: "AI uvidi", body: "Opažanja: dobički učinkovitosti, ozka grla, vzorci rokov, opombe delavcev. Zavrzite, na kar ste ukrepali — novi se ustvarijo ob osveževanju." },
+    ],
+  },
+  inbound: {
+    title: "Dohodne dostave",
+    subtitle: "Sledite materialom od prihoda do tlorisa",
+    steps: [
+      { heading: "Kaj inbound sledi", body: "Vsaka dostava zunanjih materialov dobi evidenco. Sledi elementu od 'pričakovanega' do 'v produkciji'." },
+      { heading: "Štiri stanja", body: "Pričakovano → Prišlo → Shranjeno → V produkciji. Ustvarite evidenco ob napovedani dostavi. Označite ob prihodu. Usmerite ob odlaganju.", tip: "Dostave 2+ dni v stanju 'Pričakovano' se prikažejo v Ozkih grlih nadzornika." },
+      { heading: "Ustvarjanje evidence", body: "Tapnite +, po želji povežite z aktivnim projektom in dodajte opombe (referenca, številka naročilnice)." },
+      { heading: "Označevanje prihoda", body: "Ob dostavi tapnite Prišlo. To lahko stori kateri koli delavec brez admin dostopa." },
+      { heading: "Usmerjanje (admin)", body: "Administratorji tapnejo Usmeri za dodelitev lokacije in po želji koraka postopka. Status preide na Shranjeno.", tip: "Tapnite ikono tiskanja za etiketo palete ali škatle." },
+    ],
+  },
+  paintqueue: {
+    title: "Lakirnica",
+    subtitle: "Čakalna vrsta lakiranje — razvrstitev po barvi in roku",
+    steps: [
+      { heading: "Kaj vidite tukaj", body: "Lakirnica prikazuje vse producijske korake za postajo lakiranje. Vsaka kartica prikazuje kodo RAL, ime dela, projekt, nujnost roka in stanje." },
+      { heading: "Kode barv RAL", body: "Kodo barve nastavi administrator pri ustvarjanju naloga. Prikazuje se na kartici, da veste, katero barvo zmešati.", tip: "Dele z isto kodo RAL pogosto lakirate v eni seriji — poiščite ujemajoče kode pred nastavitvijo." },
+      { heading: "Začetek dela", body: "Tapnite Začni na kartici. Sistem zabeleži čas začetka. Če lakirate več delov iste barve, jih vse začnite pred dvigom pištole." },
+      { heading: "Označevanje dokončanega", body: "Tapnite Dokončano, ko je del posušen. Vprašani boste, kam gre del — lokacija, cona ali pri delavcu." },
+    ],
+  },
+};
+
+export function getTutorials(lang: Lang): Record<TutorialKey, Tutorial> {
+  return lang === "sl" ? TUTORIALS_SL : TUTORIALS;
+}
 
 export function getTutorialKey(path: string): TutorialKey | null {
   if (path === "/work/projects") return "jobs";

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp } from "lucide-react";
@@ -47,6 +48,7 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 
 function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [addProductId, setAddProductId] = useState("");
@@ -104,13 +106,13 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
   return (
     <div className="border-t pt-2 mt-1 space-y-2">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-        <Package2 className="h-3 w-3" /> Products supplied ({links.length})
+        <Package2 className="h-3 w-3" /> {t("suppliersProductsSupplied")} ({links.length})
       </p>
 
       {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading...</p>
+        <p className="text-xs text-muted-foreground">{t("loading")}</p>
       ) : links.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No products linked yet.</p>
+        <p className="text-xs text-muted-foreground">{t("suppliersNoProductsLinked")}</p>
       ) : (
         <div className="space-y-2">
           {Object.entries(byCategory).map(([cat, items]) => (
@@ -149,7 +151,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
             onChange={(e) => setAddProductId(e.target.value)}
             className="w-full h-8 px-2 rounded border border-input bg-background text-xs"
           >
-            <option value="">Select product…</option>
+            <option value="">{t("suppliersSelectProduct")}</option>
             {purchasedProducts.map((p) => (
               <option key={p.id} value={p.id}>{p.name}{p.category ? ` (${p.category})` : ""}</option>
             ))}
@@ -157,7 +159,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
           <div className="flex gap-1.5">
             <input
               type="text"
-              placeholder="Supplier SKU (optional)"
+              placeholder={t("suppliersSkuPlaceholder")}
               value={addSku}
               onChange={(e) => setAddSku(e.target.value)}
               className="flex-1 h-8 px-2 rounded border border-input bg-background text-xs"
@@ -166,7 +168,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
               type="number"
               min={0}
               step="0.01"
-              placeholder="Unit price"
+              placeholder={t("suppliersUnitPrice")}
               value={addPrice}
               onChange={(e) => setAddPrice(e.target.value)}
               className="w-24 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
@@ -183,7 +185,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
                 unitPrice: addPrice ? Number(addPrice) : null,
               })}
             >
-              Link Product
+              {t("suppliersLinkProduct")}
             </Button>
             <Button
               size="sm"
@@ -191,7 +193,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
               className="h-7 text-xs"
               onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); }}
             >
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </div>
@@ -202,7 +204,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
           className="h-7 text-xs font-bold w-full"
           onClick={() => setShowAdd(true)}
         >
-          <Plus className="h-3 w-3 mr-1" /> Add Product
+          <Plus className="h-3 w-3 mr-1" /> {t("suppliersAddProduct")}
         </Button>
       )}
     </div>
@@ -213,6 +215,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
 
 export default function AdminSuppliersPage() {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -285,7 +288,7 @@ export default function AdminSuppliersPage() {
   return (
     <div className="flex flex-col gap-4 p-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Suppliers</h1>
+        <h1 className="text-2xl font-bold">{t("navSuppliers")}</h1>
         <Button
           onClick={() => {
             setEditing(null);
@@ -294,7 +297,7 @@ export default function AdminSuppliersPage() {
           }}
           className="gap-2"
         >
-          <Plus className="h-4 w-4" /> Add Supplier
+          <Plus className="h-4 w-4" /> {t("suppliersAdd")}
         </Button>
       </div>
 
@@ -302,7 +305,7 @@ export default function AdminSuppliersPage() {
         <form onSubmit={handleSubmit} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 space-y-3">
           <input
             type="text"
-            placeholder="Supplier name *"
+            placeholder={t("suppliersNamePlaceholder")}
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -310,7 +313,7 @@ export default function AdminSuppliersPage() {
           />
           <input
             type="email"
-            placeholder="Email"
+            placeholder={t("fieldEmail")}
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -318,14 +321,14 @@ export default function AdminSuppliersPage() {
           />
           <input
             type="tel"
-            placeholder="Phone"
+            placeholder={t("fieldPhone")}
             value={formData.phone}
             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg text-sm"
             disabled={createMutation.isPending || updateMutation.isPending}
           />
           <textarea
-            placeholder="Notes"
+            placeholder={t("fieldNotes")}
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -334,10 +337,10 @@ export default function AdminSuppliersPage() {
           />
           <div className="flex gap-2">
             <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
-              {editing ? "Update" : "Create"}
+              {editing ? t("suppliersUpdate") : t("create")}
             </Button>
             <Button type="button" onClick={() => { setShowForm(false); setEditing(null); }} variant="outline">
-              Cancel
+              {t("cancel")}
             </Button>
           </div>
         </form>
@@ -398,7 +401,7 @@ export default function AdminSuppliersPage() {
         </div>
       ) : (
         <div className="text-center py-8 text-muted-foreground">
-          <p>No suppliers yet</p>
+          <p>{t("suppliersNone")}</p>
         </div>
       )}
     </div>

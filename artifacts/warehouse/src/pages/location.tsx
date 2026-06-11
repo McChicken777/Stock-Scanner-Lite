@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useRoute } from "wouter";
+import { useLang } from "@/contexts/lang";
 import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2 } from "lucide-react";
 import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -32,6 +33,7 @@ function StockItem({
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
   
   // Ref for debouncing rapidly tapped buttons
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -56,8 +58,8 @@ function StockItem({
             // Revert on error
             setOptimisticQty(quantity);
             toast({
-              title: "Update failed",
-              description: "Could not update stock quantity.",
+              title: t("locationUpdateFailed"),
+              description: t("locationUpdateFailedDesc"),
               variant: "destructive",
             });
           }
@@ -159,6 +161,7 @@ function AddProductDialog({ locationId }: { locationId: string }) {
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
 
   const filteredProducts = products?.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -171,7 +174,7 @@ function AddProductDialog({ locationId }: { locationId: string }) {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });
-          toast({ title: "Product added", description: "Set initial quantity to 1." });
+          toast({ title: t("locationProductAdded"), description: t("locationProductAddedDesc") });
           setOpen(false);
         }
       }
@@ -182,7 +185,7 @@ function AddProductDialog({ locationId }: { locationId: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="lg" className="w-full h-14 text-lg font-bold">
-          <Plus className="mr-2 h-6 w-6" /> Add Product to Location
+          <Plus className="mr-2 h-6 w-6" /> {t("locationAddProduct")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0">
@@ -233,6 +236,7 @@ function AddProductDialog({ locationId }: { locationId: string }) {
 export default function LocationPage() {
   const [, params] = useRoute("/location/:id");
   const id = params?.id ? decodeURIComponent(params.id) : "";
+  const { t } = useLang();
   
   const { data: location, isLoading, isError } = useGetLocation(id, {
     query: { 
@@ -263,11 +267,11 @@ export default function LocationPage() {
           <MapPin className="h-8 w-8 text-muted-foreground" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold">Location Not Found</h2>
+          <h2 className="text-2xl font-bold">{t("locationNotFound")}</h2>
           <p className="text-muted-foreground mt-1">ID: {id}</p>
         </div>
         <Link href="/scan">
-          <Button size="lg" className="mt-4">Back to Scanner</Button>
+          <Button size="lg" className="mt-4">{t("locationBackToScanner")}</Button>
         </Link>
       </div>
     );
@@ -282,7 +286,7 @@ export default function LocationPage() {
               <ArrowLeft className="h-6 w-6" />
             </Link>
             <div>
-              <p className="text-xs font-bold text-secondary-foreground/60 uppercase tracking-widest mb-0.5">Location</p>
+              <p className="text-xs font-bold text-secondary-foreground/60 uppercase tracking-widest mb-0.5">{t("locationLabel")}</p>
               <h1 className="text-2xl font-black leading-none">{location.id}</h1>
             </div>
           </div>
@@ -295,7 +299,7 @@ export default function LocationPage() {
       <div className="p-4 space-y-4">
         {location.stock.length === 0 ? (
           <div className="bg-muted/30 border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 text-center">
-            <p className="text-muted-foreground font-medium mb-4">No products at this location</p>
+            <p className="text-muted-foreground font-medium mb-4">{t("locationNoProducts")}</p>
             <AddProductDialog locationId={location.id} />
           </div>
         ) : (

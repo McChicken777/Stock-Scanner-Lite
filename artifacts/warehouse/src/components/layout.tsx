@@ -35,6 +35,7 @@ import {
 
 function UserMenu() {
   const { user, logout } = useAuth();
+  const { t } = useLang();
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
@@ -63,7 +64,7 @@ function UserMenu() {
         {user.role === "owner" && (
           <Link href="/owner">
             <DropdownMenuItem className="cursor-pointer font-semibold text-yellow-600 focus:text-yellow-600">
-              <Crown className="mr-2 h-4 w-4 text-yellow-500" /> Owner Panel
+              <Crown className="mr-2 h-4 w-4 text-yellow-500" /> {t("ownerPanel")}
             </DropdownMenuItem>
           </Link>
         )}
@@ -72,7 +73,7 @@ function UserMenu() {
           className="text-destructive focus:text-destructive cursor-pointer"
           onClick={logout}
         >
-          <LogOut className="mr-2 h-4 w-4" /> Sign Out
+          <LogOut className="mr-2 h-4 w-4" /> {t("signOut")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -82,17 +83,17 @@ function UserMenu() {
 // ─── Language Picker ─────────────────────────────────────────────────────────
 
 function LangToggle() {
-  const { lang, setLang } = useLang();
+  const { lang, setLang, t } = useLang();
   const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center gap-1 px-2 py-1 rounded-full border border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          {current.flag} {current.code.toUpperCase()}
+          {current.flag} {current.label}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Language</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">{t("langLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {LANGUAGES.map((l) => (
           <DropdownMenuItem
@@ -114,6 +115,7 @@ function LangToggle() {
 
 function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
   const workOrdersEnabled = useFeature("work_orders");
+  const { t } = useLang();
   return (
     <div className="flex items-center gap-1 bg-muted/50 border border-border rounded-full p-0.5">
       <Link href="/">
@@ -126,7 +128,7 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
           )}
         >
           <Package2 className="h-3.5 w-3.5" />
-          Inventory
+          {t("navInventory")}
         </button>
       </Link>
       {workOrdersEnabled && (
@@ -140,7 +142,7 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
             )}
           >
             <FolderKanban className="h-3.5 w-3.5" />
-            Work Orders
+            {t("jobsWorkOrders")}
           </button>
         </Link>
       )}
@@ -422,7 +424,7 @@ function AdminBottomNav() {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-medium tracking-wide uppercase">Settings</span>
+              <span className="text-[10px] font-medium tracking-wide uppercase">{t("navSettings")}</span>
             </div>
           </button>
         </div>
@@ -431,7 +433,7 @@ function AdminBottomNav() {
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-0 max-h-[85dvh] flex flex-col">
           <SheetHeader className="pb-2 flex-shrink-0">
-            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Settings</SheetTitle>
+            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("navSettings")}</SheetTitle>
           </SheetHeader>
 
           <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
@@ -603,12 +605,13 @@ function SupervisorBottomNav() {
 
 function InventoryBottomNav() {
   const [location] = useLocation();
+  const { t } = useLang();
 
   const navItems = [
-    { href: "/", icon: LayoutDashboard, label: "Dashboard" },
-    { href: "/scan", icon: ScanLine, label: "Scan" },
-    { href: "/products", icon: Package2, label: "Products" },
-    { href: "/history", icon: History, label: "History" },
+    { href: "/", icon: LayoutDashboard, label: t("navDashboard") },
+    { href: "/scan", icon: ScanLine, label: t("navScan") },
+    { href: "/products", icon: Package2, label: t("productsTitle") },
+    { href: "/history", icon: History, label: t("navHistory") },
   ];
 
   return (
@@ -649,12 +652,13 @@ function InventoryBottomNav() {
 
 function WorkOrdersBottomNav() {
   const [location] = useLocation();
+  const { t } = useLang();
 
   const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: "Tasks" },
-    { href: "/work/projects", icon: FolderKanban, label: "Projects" },
-    { href: "/work/inbound", icon: PackageCheck, label: "Inbound" },
-    { href: "/orders", icon: Truck, label: "Orders" },
+    { href: "/tasks", icon: CheckSquare, label: t("navTasks") },
+    { href: "/work/projects", icon: FolderKanban, label: t("navProjects") },
+    { href: "/work/inbound", icon: PackageCheck, label: t("navInbound") },
+    { href: "/orders", icon: Truck, label: t("navOrders") },
   ];
 
   return (
@@ -777,6 +781,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: health } = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), refetchInterval: 60000 } });
   const [location] = useLocation();
   const { user } = useAuth();
+  const { t } = useLang();
   const isHealthy = health?.status === "ok";
   const isOwner = user?.role === "owner";
   const isAdmin = user?.role === "admin";
@@ -800,7 +805,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex items-center gap-2">
           <Crown className="h-4 w-4 text-yellow-500" />
-          <span className="text-xs font-bold uppercase tracking-wider text-yellow-600">Owner Panel</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-yellow-600">{t("ownerPanel")}</span>
         </div>
       );
     }
@@ -818,7 +823,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-indigo-500/10 border border-indigo-300/30 text-[11px] font-bold uppercase tracking-wider text-indigo-600">
           <Eye className="h-3.5 w-3.5" />
-          Supervisor
+          {t("navSupervisor")}
         </div>
       );
     }
@@ -826,7 +831,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/60 border text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
           <CheckSquare className="h-3.5 w-3.5" />
-          My Tasks
+          {t("navMyTasks")}
         </div>
       );
     }

@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Printer, ArrowLeft } from "lucide-react";
+import { useLang } from "@/contexts/lang";
 
 interface ItemStep {
   id: number;
@@ -33,6 +34,7 @@ async function apiFetch(url: string) {
 export default function PrintTagPage() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const { t } = useLang();
 
   const { data, isLoading, isError } = useQuery<ProjectWithItems>({
     queryKey: [`/api/work/projects/${id}`],
@@ -59,11 +61,11 @@ export default function PrintTagPage() {
     <div className="min-h-screen bg-background">
       <div className="no-print flex items-center gap-3 px-4 py-3 border-b bg-muted/30 sticky top-0 z-10">
         <Button variant="ghost" size="sm" onClick={() => navigate(`/work/projects/${id}`)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t("back")}
         </Button>
-        <span className="text-sm font-semibold flex-1">Job Tags — {project.name}</span>
+        <span className="text-sm font-semibold flex-1">{t("printTagsTitle")} — {project.name}</span>
         <Button size="sm" onClick={() => window.print()}>
-          <Printer className="h-4 w-4 mr-1.5" /> Print
+          <Printer className="h-4 w-4 mr-1.5" /> {t("printPrint")}
         </Button>
       </div>
 
@@ -94,7 +96,7 @@ export default function PrintTagPage() {
           return (
             <div key={item.id} className="tag space-y-3">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Job Tag</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">{t("printTagLabel")}</p>
                 <p className="text-base font-black leading-snug mt-0.5">{item.name}</p>
                 <p className="text-xs text-muted-foreground">{project.name}</p>
                 {item.paintColor && (
@@ -107,7 +109,7 @@ export default function PrintTagPage() {
               {currentStep && (
                 <div className="rounded border border-dashed border-gray-400 px-2 py-1.5">
                   <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                    {activeStep ? "Current step (active)" : "Next step"}
+                    {activeStep ? t("printCurrentStep") : t("printNextStep")}
                   </p>
                   <p className="text-xs font-bold leading-snug">{currentStep.name}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -118,7 +120,7 @@ export default function PrintTagPage() {
               )}
               {!currentStep && totalCount > 0 && (
                 <div className="rounded border border-dashed border-green-400 px-2 py-1.5 text-center">
-                  <p className="text-xs font-bold text-green-700">All {totalCount} steps complete</p>
+                  <p className="text-xs font-bold text-green-700">{t("printAllComplete")} ({totalCount})</p>
                 </div>
               )}
 
@@ -130,12 +132,12 @@ export default function PrintTagPage() {
                   style={{ flexShrink: 0 }}
                 />
                 <div className="text-[10px] text-muted-foreground break-all leading-relaxed">
-                  <p className="font-semibold mb-0.5">Scan to open work order</p>
+                  <p className="font-semibold mb-0.5">{t("printScanDesc")}</p>
                   <p>{deepLinkUrl}</p>
                 </div>
               </div>
               <div className="border-t pt-2 grid grid-cols-3 text-[10px] text-muted-foreground gap-1">
-                <span>Due: <strong>{deadlineStr}</strong></span>
+                <span>{t("printDue")} <strong>{deadlineStr}</strong></span>
                 <span className="text-center capitalize">
                   <strong>{project.priority}</strong>
                 </span>

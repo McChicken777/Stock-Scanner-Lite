@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useLang } from "@/contexts/lang";
 import jsQR from "jsqr";
 import { Scan, Keyboard, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function ScanPage() {
   const [, setLocation] = useLocation();
+  const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [hasCamera, setHasCamera] = useState(true);
@@ -37,7 +39,7 @@ export default function ScanPage() {
         console.error("Error accessing camera:", err);
         setHasCamera(false);
         setManualMode(true);
-        setError("Could not access camera. Please enter location ID manually.");
+        setError(t("scanCameraError"));
       }
     };
 
@@ -100,9 +102,9 @@ export default function ScanPage() {
           <div className="absolute top-0 left-0 w-full p-4 z-10 bg-gradient-to-b from-black/80 to-transparent">
             <h1 className="text-white font-bold text-xl flex items-center gap-2">
               <Scan className="h-5 w-5" />
-              Scan Location QR
+              {t("scanTitle")}
             </h1>
-            <p className="text-white/70 text-sm mt-1">Point camera at a location label</p>
+            <p className="text-white/70 text-sm mt-1">{t("scanDesc")}</p>
           </div>
 
           <div className="flex-1 relative flex items-center justify-center overflow-hidden">
@@ -132,15 +134,15 @@ export default function ScanPage() {
               className="w-full max-w-xs h-14 font-bold uppercase tracking-wider"
             >
               <Keyboard className="mr-2 h-5 w-5" />
-              Manual Entry
+              {t("scanManualEntry")}
             </Button>
           </div>
         </>
       ) : (
         <div className="flex-1 bg-background p-4 flex flex-col pt-12">
           <div className="mb-8">
-            <h1 className="text-2xl font-bold tracking-tight">Manual Entry</h1>
-            <p className="text-muted-foreground mt-1">Enter the location ID found on the label</p>
+            <h1 className="text-2xl font-bold tracking-tight">{t("scanManualEntry")}</h1>
+            <p className="text-muted-foreground mt-1">{t("scanManualDesc")}</p>
           </div>
 
           {error && (
@@ -153,7 +155,7 @@ export default function ScanPage() {
           <form onSubmit={handleManualSubmit} className="space-y-6 flex-1">
             <div className="space-y-2">
               <label htmlFor="locationId" className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Location ID
+                {t("scanLocationId")}
               </label>
               <Input
                 id="locationId"
@@ -167,7 +169,7 @@ export default function ScanPage() {
               />
             </div>
             <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={!manualId.trim()}>
-              Open Location
+              {t("scanOpenLocation")}
             </Button>
           </form>
 
@@ -180,7 +182,7 @@ export default function ScanPage() {
                 onClick={() => setManualMode(false)}
               >
                 <Scan className="mr-2 h-5 w-5" />
-                Back to Camera
+                {t("scanBackToCamera")}
               </Button>
             </div>
           )}

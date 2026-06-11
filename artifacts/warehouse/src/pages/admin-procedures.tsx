@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +45,7 @@ async function fetchProcedures(): Promise<Procedure[]> {
 export default function AdminProceduresPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [newName, setNewName] = useState("");
   const [newRoleId, setNewRoleId] = useState<string>("");
@@ -104,35 +106,35 @@ export default function AdminProceduresPage() {
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground">Admin only</div>;
+    return <div className="p-6 text-center text-muted-foreground">{t("adminOnly")}</div>;
   }
 
   return (
     <div className="p-4 space-y-4">
       <Link href="/admin/company" className="flex items-center gap-2 text-primary hover:opacity-70">
-        <ArrowLeft className="h-4 w-4" /> Back to Admin
+        <ArrowLeft className="h-4 w-4" /> {t("proceduresBackToAdmin")}
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold">Production Procedures</h1>
-        <p className="text-xs text-muted-foreground">Define procedures and assign roles. Toggle flags to configure blocking logic.</p>
+        <h1 className="text-2xl font-bold">{t("proceduresTitle")}</h1>
+        <p className="text-xs text-muted-foreground">{t("proceduresDesc")}</p>
       </div>
 
       {isLoading ? (
-        <div className="text-muted-foreground">Loading...</div>
+        <div className="text-muted-foreground">{t("loading")}</div>
       ) : (
         <div className="space-y-2">
           {procedures.map((proc) => (
             <div key={proc.id} className="flex items-center justify-between bg-card p-3 rounded-lg border">
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{proc.name}</p>
-                <p className="text-xs text-muted-foreground">Role: {proc.roleName}</p>
+                <p className="text-xs text-muted-foreground">{t("proceduresRole")} {proc.roleName}</p>
                 <div className="flex gap-2 mt-1">
                   {proc.requiresInbound && (
-                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase">Inbound</span>
+                    <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold uppercase">{t("proceduresInboundBadge")}</span>
                   )}
                   {proc.requiresComponents && (
-                    <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold uppercase">Components</span>
+                    <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold uppercase">{t("proceduresComponentsBadge")}</span>
                   )}
                 </div>
               </div>
@@ -181,12 +183,12 @@ export default function AdminProceduresPage() {
         <Input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="Procedure name"
+          placeholder={t("proceduresNamePlaceholder")}
           className="h-12"
         />
         <Select value={newRoleId} onValueChange={setNewRoleId}>
           <SelectTrigger className="h-12">
-            <SelectValue placeholder="Select role" />
+            <SelectValue placeholder={t("usersSelectRole")} />
           </SelectTrigger>
           <SelectContent>
             {roles.map((r) => (
@@ -208,7 +210,7 @@ export default function AdminProceduresPage() {
           }`}
         >
           <Boxes className="h-4 w-4" />
-          {newRequiresComponents ? "Requires component stock check" : "No component check (click to enable)"}
+          {newRequiresComponents ? t("proceduresRequiresComponents") : t("proceduresNoComponents")}
         </button>
 
         <Button
@@ -216,14 +218,14 @@ export default function AdminProceduresPage() {
           disabled={!newName.trim() || !newRoleId || createMutation.isPending}
           className="w-full h-12 font-bold gap-1"
         >
-          <Plus className="h-4 w-4" /> Add Procedure
+          <Plus className="h-4 w-4" /> {t("proceduresAdd")}
         </Button>
       </div>
 
       <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 space-y-1">
-        <p className="font-bold">Flag meanings:</p>
-        <p><span className="text-orange-600 font-bold">Inbound</span> — task is BLOCKED until the linked inbound pallet has arrived</p>
-        <p><span className="text-purple-600 font-bold">Components</span> — task is BLOCKED until all required component stock is available</p>
+        <p className="font-bold">{t("proceduresFlagMeanings")}</p>
+        <p><span className="text-orange-600 font-bold">{t("proceduresInboundBadge")}</span> — {t("proceduresFlagInboundDesc")}</p>
+        <p><span className="text-purple-600 font-bold">{t("proceduresComponentsBadge")}</span> — {t("proceduresFlagComponentsDesc")}</p>
       </div>
     </div>
   );

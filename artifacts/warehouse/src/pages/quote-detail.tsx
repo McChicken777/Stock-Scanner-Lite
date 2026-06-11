@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRoute } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
+import type { TranslationKey } from "@/i18n/translations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -55,8 +57,24 @@ const statusBadge: Record<string, string> = {
   converted: "bg-purple-100 text-purple-700 border-purple-300",
 };
 
+const statusLabel: Record<string, TranslationKey> = {
+  draft: "statusDraft",
+  sent: "statusSent",
+  approved: "statusApproved",
+  rejected: "statusRejected",
+  converted: "statusConverted",
+};
+
+const priorityLabel: Record<string, TranslationKey> = {
+  low: "priorityLow",
+  normal: "priorityNormal",
+  high: "priorityHigh",
+  urgent: "priorityUrgent",
+};
+
 export default function QuoteDetailPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const isAdmin = user?.role === "admin";
   const [, params] = useRoute("/quotes/:id");
   const id = params ? Number(params.id) : 0;
@@ -92,7 +110,7 @@ export default function QuoteDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/quotes"] });
       qc.invalidateQueries({ queryKey: ["/api/quotes", id] });
-      toast({ title: "Status updated" });
+      toast({ title: t("quoteStatusUpdated") });
     },
     onError: (e) => toast({ title: e instanceof Error ? e.message : "Failed", variant: "destructive" }),
   });
@@ -104,7 +122,7 @@ export default function QuoteDetailPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/quotes"] });
-      toast({ title: "Quote deleted" });
+      toast({ title: t("quoteDeleted") });
       setLocation("/quotes");
     },
   });
@@ -121,7 +139,7 @@ export default function QuoteDetailPage() {
     },
     onSuccess: (d) => {
       qc.invalidateQueries({ queryKey: ["/api/quotes"] });
-      toast({ title: "Sent to production!" });
+      toast({ title: t("quoteSentToProduction") });
       setConvertOpen(false);
       setLocation(`/work/projects/${d.project.id}`);
     },
@@ -144,7 +162,7 @@ export default function QuoteDetailPage() {
   );
 
   if (isLoading) return <div className="p-4"><Skeleton className="h-64 w-full rounded-xl" /></div>;
-  if (!quote) return <div className="p-6 text-center text-muted-foreground">Not found</div>;
+  if (!quote) return <div className="p-6 text-center text-muted-foreground">{t("quoteNotFound")}</div>;
 
   const itemsWithoutTemplate = quote.items.filter(
     (it) => it.productId == null || !templateProductIds.has(it.productId),
@@ -162,13 +180,13 @@ export default function QuoteDetailPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold truncate">{quote.quoteNumber}</h1>
         </div>
-        <Badge className={cn("text-[10px] uppercase font-bold", statusBadge[quote.status])}>{quote.status}</Badge>
+        <Badge className={cn("text-[10px] uppercase font-bold", statusBadge[quote.status])}>{t(statusLabel[quote.status])}</Badge>
       </div>
 
       <div className="p-4 space-y-4 pb-24">
         {/* Customer block */}
         <div className="bg-card border-2 border-border rounded-xl p-4">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Customer</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{t("quoteCustomer")}</p>
           {quote.customerId ? (
             <Link href={`/customers/${quote.customerId}`}>
               <p className="font-bold text-lg hover:underline">{customerDisplay}</p>
@@ -190,11 +208,11 @@ export default function QuoteDetailPage() {
         {/* Meta */}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="border-2 border-border rounded-lg p-2">
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Created</p>
+            <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("quoteCreated")}</p>
             <p className="font-semibold">{format(new Date(quote.createdAt), "dd MMM yyyy")}</p>
           </div>
           <div className="border-2 border-border rounded-lg p-2">
-            <p className="text-[10px] font-bold uppercase text-muted-foreground">Valid Until</p>
+            <p className="text-[10px] font-bold uppercase text-muted-foreground">{t("quoteValidUntil")}</p>
             <p className="font-semibold">{quote.validUntil ? format(new Date(quote.validUntil), "dd MMM yyyy") : "—"}</p>
           </div>
         </div>
@@ -217,23 +235,23 @@ export default function QuoteDetailPage() {
 
         {/* Totals */}
         <div className="bg-muted/30 border-2 border-border rounded-xl p-3 space-y-1.5 text-sm">
-          <div className="flex justify-between"><span>Subtotal</span><span className="font-mono">${Number(quote.subtotal).toFixed(2)}</span></div>
-          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>Discount</span><span className="font-mono">-${Number(quote.discount).toFixed(2)}</span></div>}
-          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({Number(quote.taxRate)}%)</span><span className="font-mono">${Number(quote.taxAmount).toFixed(2)}</span></div>}
+          <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="font-mono">${Number(quote.subtotal).toFixed(2)}</span></div>
+          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")}</span><span className="font-mono">-${Number(quote.discount).toFixed(2)}</span></div>}
+          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="font-mono">${Number(quote.taxAmount).toFixed(2)}</span></div>}
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
-            <span>Total</span><span className="font-mono">${Number(quote.total).toFixed(2)}</span>
+            <span>{t("quoteTotal")}</span><span className="font-mono">${Number(quote.total).toFixed(2)}</span>
           </div>
         </div>
 
         {quote.notes && (
           <div className="bg-card border-2 border-border rounded-xl p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Notes</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{t("fieldNotes")}</p>
             <p className="text-sm whitespace-pre-line">{quote.notes}</p>
           </div>
         )}
         {quote.terms && (
           <div className="bg-card border-2 border-border rounded-xl p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Terms</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{t("quoteTerms")}</p>
             <p className="text-sm whitespace-pre-line">{quote.terms}</p>
           </div>
         )}
@@ -243,8 +261,8 @@ export default function QuoteDetailPage() {
             <div className="bg-purple-50 border-2 border-purple-300 rounded-xl p-3 flex items-center gap-2 hover:bg-purple-100 cursor-pointer">
               <Briefcase className="h-5 w-5 text-purple-600" />
               <div className="flex-1">
-                <p className="font-bold text-sm text-purple-800">Linked Work Order</p>
-                <p className="text-xs text-purple-600">Tap to open #{quote.workProjectId}</p>
+                <p className="font-bold text-sm text-purple-800">{t("quoteLinkedWorkOrder")}</p>
+                <p className="text-xs text-purple-600">{t("quoteTapToOpen")}{quote.workProjectId}</p>
               </div>
             </div>
           </Link>
@@ -254,7 +272,7 @@ export default function QuoteDetailPage() {
           <div className="bg-card border-2 border-border rounded-xl p-3">
             <div className="flex items-center gap-2 mb-2">
               <History className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Revision History</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("quoteRevisionHistory")}</p>
             </div>
             <div className="space-y-2">
               {quote.revisions.map((r) => {
@@ -267,7 +285,7 @@ export default function QuoteDetailPage() {
                       onClick={() => setOpenRevisionId(isOpen ? null : r.id)}
                       className="w-full flex items-center justify-between text-xs px-3 py-2 hover:bg-muted/50 transition-colors"
                     >
-                      <span className="font-semibold text-left">v{r.revisionNumber} · {r.note ?? "Edited"}</span>
+                      <span className="font-semibold text-left">v{r.revisionNumber} · {r.note ?? t("quoteRevisionEdited")}</span>
                       <span className="text-muted-foreground flex items-center gap-2">
                         {snapTotal != null && <span className="font-mono">${Number(snapTotal).toFixed(2)}</span>}
                         {format(new Date(r.createdAt), "dd MMM HH:mm")}
@@ -284,7 +302,7 @@ export default function QuoteDetailPage() {
                             </div>
                           ))
                         ) : (
-                          <p className="text-[11px] text-muted-foreground">No item snapshot.</p>
+                          <p className="text-[11px] text-muted-foreground">{t("quoteNoSnapshot")}</p>
                         )}
                       </div>
                     )}
@@ -300,36 +318,36 @@ export default function QuoteDetailPage() {
           <div className="space-y-2">
             <a href={`/api/quotes/${id}/pdf`} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="w-full h-11 gap-2 font-bold border-2">
-                <Download className="h-4 w-4" /> Download PDF
+                <Download className="h-4 w-4" /> {t("quoteDownloadPdf")}
               </Button>
             </a>
 
             {editable && (
               <Link href={`/quotes/${id}/edit`}>
                 <Button variant="outline" className="w-full h-11 gap-2 font-bold border-2">
-                  <Edit2 className="h-4 w-4" /> Edit Quote
+                  <Edit2 className="h-4 w-4" /> {t("quoteEditQuote")}
                 </Button>
               </Link>
             )}
 
             {quote.status === "draft" && (
               <Button onClick={() => statusMut.mutate("sent")} disabled={statusMut.isPending} className="w-full h-11 gap-2 font-bold bg-blue-600 hover:bg-blue-700">
-                <Send className="h-4 w-4" /> Mark as Sent
+                <Send className="h-4 w-4" /> {t("quoteMarkAsSent")}
               </Button>
             )}
             {quote.status === "sent" && (
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={() => statusMut.mutate("approved")} disabled={statusMut.isPending} className="h-11 gap-1 font-bold bg-green-600 hover:bg-green-700">
-                  <Check className="h-4 w-4" /> Approved
+                  <Check className="h-4 w-4" /> {t("statusApproved")}
                 </Button>
                 <Button onClick={() => statusMut.mutate("rejected")} disabled={statusMut.isPending} variant="outline" className="h-11 gap-1 font-bold border-2 border-red-300 text-red-700 hover:bg-red-50">
-                  <X className="h-4 w-4" /> Rejected
+                  <X className="h-4 w-4" /> {t("statusRejected")}
                 </Button>
               </div>
             )}
             {quote.status === "approved" && !quote.workProjectId && (
               <Button onClick={() => setConvertOpen(true)} className="w-full h-12 gap-2 font-bold bg-purple-600 hover:bg-purple-700 text-base">
-                <Rocket className="h-5 w-5" /> Send to Production
+                <Rocket className="h-5 w-5" /> {t("quoteSendToProduction")}
               </Button>
             )}
 
@@ -337,17 +355,17 @@ export default function QuoteDetailPage() {
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button variant="outline" className="w-full h-10 gap-2 text-destructive border-destructive/30">
-                    <Trash2 className="h-4 w-4" /> Delete Quote
+                    <Trash2 className="h-4 w-4" /> {t("quoteDeleteQuote")}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Delete this quote?</AlertDialogTitle>
-                    <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+                    <AlertDialogTitle>{t("quoteDeleteTitle")}</AlertDialogTitle>
+                    <AlertDialogDescription>{t("quoteDeleteDesc")}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => deleteMut.mutate()} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+                    <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteMut.mutate()} className="bg-destructive text-destructive-foreground">{t("delete")}</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -361,18 +379,18 @@ export default function QuoteDetailPage() {
         <DialogContent className="w-[90vw] max-w-md rounded-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Rocket className="h-5 w-5 text-purple-600" /> Send to Production
+              <Rocket className="h-5 w-5 text-purple-600" /> {t("quoteSendToProduction")}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Review the items below, then create the work order. Items with a matching template get their production steps; others come in empty for you to fill in.
+              {t("quoteReviewItems")}
             </p>
 
             {/* Item preview — lets the boss check the order before confirming */}
             <div className="rounded-xl border-2 border-border bg-muted/20 p-3 space-y-1.5 max-h-56 overflow-y-auto">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {quote.items.length} item{quote.items.length !== 1 ? "s" : ""} going to production
+                {quote.items.length} {t("quoteItemsGoingToProduction")}
               </p>
               {quote.items.map((it) => {
                 const hasTemplate = it.productId != null && templateProductIds.has(it.productId);
@@ -385,11 +403,11 @@ export default function QuoteDetailPage() {
                     </span>
                     {hasTemplate ? (
                       <span className="flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                        <Check className="h-3 w-3" /> has steps
+                        <Check className="h-3 w-3" /> {t("quoteHasSteps")}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                        <X className="h-3 w-3" /> no template
+                        <X className="h-3 w-3" /> {t("quoteNoTemplate")}
                       </span>
                     )}
                   </div>
@@ -399,16 +417,16 @@ export default function QuoteDetailPage() {
 
             {itemsWithoutTemplate.length > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                {itemsWithoutTemplate.length} item{itemsWithoutTemplate.length !== 1 ? "s" : ""} ha{itemsWithoutTemplate.length !== 1 ? "ve" : "s"} no matching template and will be created empty — you can add steps after, or set up a template first.
+                {itemsWithoutTemplate.length} {t("quoteNoTemplateWarning")}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label className="text-sm font-bold">Deadline</Label>
+              <Label className="text-sm font-bold">{t("fieldDeadline")}</Label>
               <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="h-11 border-2" min={new Date().toISOString().split("T")[0]} />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm font-bold">Priority</Label>
+              <Label className="text-sm font-bold">{t("fieldPriority")}</Label>
               <div className="grid grid-cols-4 gap-1.5">
                 {(["low", "normal", "high", "urgent"] as const).map((p) => (
                   <button
@@ -417,7 +435,7 @@ export default function QuoteDetailPage() {
                     className={cn("h-10 rounded-lg border-2 font-bold text-xs uppercase",
                       priority === p ? "border-purple-500 bg-purple-50 text-purple-700" : "border-border bg-muted/30 text-muted-foreground"
                     )}
-                  >{p}</button>
+                  >{t(priorityLabel[p])}</button>
                 ))}
               </div>
             </div>
@@ -426,7 +444,7 @@ export default function QuoteDetailPage() {
               disabled={!deadline || convertMut.isPending}
               className="w-full h-12 font-bold bg-purple-600 hover:bg-purple-700"
             >
-              {convertMut.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating…</> : "Create Work Order"}
+              {convertMut.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("quoteCreating")}</> : t("quoteCreateWorkOrder")}
             </Button>
           </div>
         </DialogContent>

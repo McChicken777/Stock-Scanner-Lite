@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTutorial } from "@/contexts/tutorial";
 import { useLang } from "@/contexts/lang";
-import { TUTORIALS } from "@/data/tutorials";
+import { getTutorials } from "@/data/tutorials";
 import {
   Dialog,
   DialogContent,
@@ -13,10 +13,10 @@ import { ChevronLeft, ChevronRight, Lightbulb, GraduationCap } from "lucide-reac
 
 export function TutorialModal() {
   const { isOpen, activeKey, closeTutorial } = useTutorial();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [step, setStep] = useState(0);
 
-  const tutorial = activeKey ? TUTORIALS[activeKey] : null;
+  const tutorial = activeKey ? getTutorials(lang)[activeKey] : null;
 
   // Reset to first step whenever a new tutorial opens
   useEffect(() => {

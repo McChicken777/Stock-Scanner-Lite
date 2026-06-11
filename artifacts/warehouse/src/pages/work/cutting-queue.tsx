@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -70,6 +71,7 @@ function slotColor(slot: number) {
 
 export default function CuttingQueuePage() {
   const { toast } = useToast();
+  const { t } = useLang();
   const qc = useQueryClient();
   const [expandedBatch, setExpandedBatch] = useState<number | null>(null);
 
@@ -98,19 +100,19 @@ export default function CuttingQueuePage() {
     <div className="p-4 space-y-4 pb-24 max-w-2xl mx-auto">
       <div className="pt-2">
         <h1 className="text-2xl font-black flex items-center gap-2">
-          <Scissors className="h-6 w-6" /> Cutting Queue
+          <Scissors className="h-6 w-6" /> {t("cuttingTitle")}
         </h1>
-        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Bandsaw · Batch by material</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("cuttingSubtitle")}</p>
       </div>
 
       {/* Slot legend */}
       {slots.length > 0 && (
         <div className="bg-card border-2 rounded-xl p-3 space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Job Boxes</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("cuttingJobBoxes")}</p>
           <div className="flex flex-wrap gap-1.5">
             {slots.map((s) => (
               <span key={s.slot} className={`inline-flex items-center gap-1 text-xs font-bold border-2 rounded-full px-2.5 py-0.5 ${slotColor(s.slot)}`}>
-                <PackageOpen className="h-3 w-3" /> Box {s.slot} — {s.projectName}
+                <PackageOpen className="h-3 w-3" /> {t("cuttingBox")} {s.slot} — {s.projectName}
               </span>
             ))}
           </div>
@@ -124,8 +126,8 @@ export default function CuttingQueuePage() {
       ) : batches.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Scissors className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No cuts pending</p>
-          <p className="text-sm text-muted-foreground mt-1">All cutting steps are done or no steps have materials assigned.</p>
+          <p className="font-semibold">{t("cuttingNoPending")}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("cuttingNoPendingDesc")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -141,7 +143,7 @@ export default function CuttingQueuePage() {
                   <div>
                     <p className="font-black text-lg">{batch.materialName}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {pendingCount} cut{pendingCount !== 1 ? "s" : ""} pending · {batch.cuts.length} total
+                      {pendingCount} {t("cuttingCutsPending")} · {batch.cuts.length} {t("cuttingTotal")}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -162,7 +164,7 @@ export default function CuttingQueuePage() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-xl leading-none">{cut.consumesQuantity} mm</span>
                               <span className={`text-xs font-bold border-2 rounded-full px-2 py-0.5 flex-shrink-0 ${slotColor(cut.slot)}`}>
-                                Box {cut.slot}
+                                {t("cuttingBox")} {cut.slot}
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground truncate mt-0.5">{cut.stepName} · {cut.itemName}</p>

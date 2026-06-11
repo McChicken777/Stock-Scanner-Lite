@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, ClipboardList, AlertTriangle, Loader2, RotateCcw } from "lucide-react";
@@ -24,6 +25,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 export default function StocktakePage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const [counts, setCounts] = useState<Record<number, string>>({});
   const [saved, setSaved] = useState(false);
 
@@ -51,7 +53,7 @@ export default function StocktakePage() {
   });
 
   if (user?.role !== "admin" && !user?.isSupervisor) {
-    return <div className="p-6 text-center text-muted-foreground mt-20"><p>Supervisor or admin only</p></div>;
+    return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("stocktakeAdminOnly")}</p></div>;
   }
 
   const changedCount = Object.values(counts).filter((v) => v !== "").length;
@@ -65,7 +67,7 @@ export default function StocktakePage() {
       <div className="flex items-center justify-between pt-2">
         <div>
           <h1 className="text-2xl font-black">Stock-Take</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Physical count</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("stocktakeSubtitle")}</p>
         </div>
         {changedCount > 0 && !saved && (
           <Button
@@ -79,7 +81,7 @@ export default function StocktakePage() {
         )}
         {saved && (
           <Button variant="outline" className="gap-1.5" onClick={() => { setCounts({}); setSaved(false); }}>
-            <RotateCcw className="h-4 w-4" /> New count
+            <RotateCcw className="h-4 w-4" /> {t("stocktakeNewCount")}
           </Button>
         )}
       </div>
@@ -87,7 +89,7 @@ export default function StocktakePage() {
       {discrepancies.length > 0 && (
         <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
           <p className="text-sm font-bold text-orange-700 flex items-center gap-1.5">
-            <AlertTriangle className="h-4 w-4" /> {discrepancies.length} discrepanc{discrepancies.length === 1 ? "y" : "ies"} found
+            <AlertTriangle className="h-4 w-4" /> {discrepancies.length} {t("stocktakeDiscrepanciesFound")}
           </p>
           <ul className="mt-1 space-y-0.5">
             {discrepancies.map((m) => {
@@ -109,9 +111,9 @@ export default function StocktakePage() {
       {saved && (
         <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-3 text-center">
           <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-1" />
-          <p className="font-bold text-green-800">Stock-take complete</p>
+          <p className="font-bold text-green-800">{t("stocktakeComplete")}</p>
           <p className="text-xs text-green-700 mt-0.5">
-            {changedCount} item{changedCount !== 1 ? "s" : ""} updated · {discrepancies.length} discrepanc{discrepancies.length === 1 ? "y" : "ies"} corrected
+            {changedCount} {t("stocktakeItemsUpdated")} · {discrepancies.length} {t("stocktakeCorrected")}
           </p>
         </div>
       )}
@@ -123,13 +125,13 @@ export default function StocktakePage() {
       ) : materials.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <ClipboardList className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-          <p className="font-semibold text-muted-foreground">No materials yet</p>
-          <p className="text-sm text-muted-foreground mt-1">Add purchased-part products first.</p>
+          <p className="font-semibold text-muted-foreground">{t("stocktakeNoMaterials")}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t("stocktakeNoMaterials")}</p>
         </div>
       ) : (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground px-1">
-            Enter the physical count for each item. Leave blank to keep unchanged.
+            {t("stocktakeInstruction")}
           </p>
           {materials.map((m) => {
             const raw = counts[m.id];
@@ -152,7 +154,7 @@ export default function StocktakePage() {
                   <p className="font-semibold text-sm truncate">{m.name}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs text-muted-foreground">
-                      System: <strong>{m.totalStock}</strong>
+                      {t("stocktakeSystem")} <strong>{m.totalStock}</strong>
                     </span>
                     {isLow && (
                       <span className="text-[10px] font-bold text-orange-600 bg-orange-100 border border-orange-200 rounded-full px-1.5 py-0.5">
@@ -168,7 +170,7 @@ export default function StocktakePage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <label className="text-xs text-muted-foreground">Counted:</label>
+                  <label className="text-xs text-muted-foreground">{t("stocktakeCounted")}</label>
                   <input
                     type="number"
                     min="0"

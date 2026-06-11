@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,6 +90,7 @@ function SupplierGroupCard({
     Object.fromEntries(group.items.map((i) => [i.id, i.shortfall]))
   );
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
@@ -133,9 +135,9 @@ function SupplierGroupCard({
           {hasSupplier ? <Building2 className="h-4 w-4 text-blue-700" /> : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm">{group.supplierName ?? "No supplier assigned"}</p>
+          <p className="font-bold text-sm">{group.supplierName ?? t("reorderNoSupplier")}</p>
           <p className="text-xs text-muted-foreground">
-            {group.items.length} item{group.items.length !== 1 ? "s" : ""} to reorder
+            {group.items.length} {t("reorderItemsToReorder")}
             {totalCost > 0 && ` · est. $${totalCost.toFixed(2)}`}
           </p>
         </div>
@@ -206,7 +208,7 @@ function SupplierGroupCard({
           <div className="border-t border-border bg-muted/20 px-4 py-3 flex items-center gap-2 flex-wrap">
             {allPending ? (
               <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
-                <CheckCircle2 className="h-4 w-4" /> All items have pending POs
+                <CheckCircle2 className="h-4 w-4" /> {t("reorderAllPending")}
               </div>
             ) : (
               <Button
@@ -217,12 +219,12 @@ function SupplierGroupCard({
               >
                 {batchMutation.isPending
                   ? "Creating…"
-                  : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} item{itemsToOrder.length !== 1 ? "s" : ""} from {group.supplierName ?? "supplier"}</>}
+                  : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
               </Button>
             )}
             <Link href="/work/purchase-orders">
               <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
-                <Truck className="h-3.5 w-3.5" /> View POs
+                <Truck className="h-3.5 w-3.5" /> {t("reorderViewPO")}
               </Button>
             </Link>
           </div>
@@ -235,6 +237,7 @@ function SupplierGroupCard({
 export default function ReorderQueuePage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const [showFlagForm, setShowFlagForm] = useState(false);
@@ -319,23 +322,23 @@ export default function ReorderQueuePage() {
           <Link href="/work/projects" className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-xl font-bold">Report Shortage</h1>
+          <h1 className="text-xl font-bold">{t("reorderReportShortage")}</h1>
         </div>
         <div className="p-4 space-y-4 pb-24">
           <div className="border-2 border-rose-200 bg-rose-50 rounded-xl p-4 space-y-3">
             <p className="text-sm font-bold text-rose-800 flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" /> Flag a missing or low part
+              <AlertTriangle className="h-4 w-4" /> {t("reorderFlagDesc")}
             </p>
             <input
               type="text"
-              placeholder="Part / product name"
+              placeholder={t("reorderPartName")}
               value={flagProductName}
               onChange={(e) => setFlagProductName(e.target.value)}
               className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
             />
             <input
               type="text"
-              placeholder="Note (optional, e.g. needed for job #42)"
+              placeholder={t("reorderNoteDetailed")}
               value={flagNote}
               onChange={(e) => setFlagNote(e.target.value)}
               className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-rose-300"
@@ -345,12 +348,12 @@ export default function ReorderQueuePage() {
               disabled={!flagProductName.trim() || flagMutation.isPending}
               onClick={() => flagMutation.mutate({ productName: flagProductName.trim(), note: flagNote.trim() || undefined })}
             >
-              Submit Shortage Flag
+              {t("reorderSubmitFlag")}
             </Button>
           </div>
           {activeFlags.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your Recent Flags</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("reorderRecentFlags")}</p>
               {activeFlags.map((f) => (
                 <div key={f.id} className="border rounded-xl p-3 text-sm">
                   <p className="font-semibold">{f.productName}</p>
@@ -371,12 +374,12 @@ export default function ReorderQueuePage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">Reorder Queue</h1>
-          <p className="text-xs opacity-70">{queue.length} item{queue.length !== 1 ? "s" : ""} below min stock</p>
+          <h1 className="text-xl font-bold">{t("reorderTitle")}</h1>
+          <p className="text-xs opacity-70">{queue.length} {t("reorderSubtitle")}</p>
         </div>
         <Link href="/work/purchase-orders">
           <Button size="sm" variant="outline" className="font-bold h-9">
-            <ShoppingCart className="h-3.5 w-3.5 mr-1" /> POs
+            <ShoppingCart className="h-3.5 w-3.5 mr-1" /> {t("reorderViewPO")}
           </Button>
         </Link>
       </div>
@@ -388,19 +391,19 @@ export default function ReorderQueuePage() {
           <div className="border-2 border-blue-300 bg-blue-50 rounded-xl p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-bold text-sm text-blue-900">PO #{emailPrompt.poId} created</p>
-                <p className="text-xs text-blue-700 mt-0.5">Send the order to {emailPrompt.supplierName}?</p>
+                <p className="font-bold text-sm text-blue-900">{t("reorderPoCreated")} #{emailPrompt.poId}</p>
+                <p className="text-xs text-blue-700 mt-0.5">{t("reorderSendPrompt")} {emailPrompt.supplierName}?</p>
               </div>
               <button onClick={() => setEmailPrompt(null)} className="text-blue-400 hover:text-blue-600 flex-shrink-0">✕</button>
             </div>
             <div className="flex gap-2">
               <a href={emailPrompt.mailtoUrl} onClick={() => setEmailPrompt(null)}>
                 <Button size="sm" className="h-9 font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
-                  <Mail className="h-3.5 w-3.5" /> Open in email app
+                  <Mail className="h-3.5 w-3.5" /> {t("reorderOpenEmail")}
                 </Button>
               </a>
               <Link href={`/work/purchase-orders/${emailPrompt.poId}`} onClick={() => setEmailPrompt(null)}>
-                <Button size="sm" variant="outline" className="h-9 font-semibold">View PO</Button>
+                <Button size="sm" variant="outline" className="h-9 font-semibold">{t("reorderViewPO")}</Button>
               </Link>
             </div>
           </div>
@@ -410,13 +413,13 @@ export default function ReorderQueuePage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" /> Shortage Flags
+              <AlertTriangle className="h-3.5 w-3.5" /> {t("reorderShortageFlags")}
               {activeFlags.length > 0 && (
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">{activeFlags.length}</span>
               )}
             </h2>
             <Button size="sm" variant="outline" className="h-8 font-bold text-xs" onClick={() => setShowFlagForm((v) => !v)}>
-              <Plus className="h-3.5 w-3.5 mr-1" /> Flag Shortage
+              <Plus className="h-3.5 w-3.5 mr-1" /> {t("reorderFlagShortage")}
             </Button>
           </div>
 
@@ -424,31 +427,31 @@ export default function ReorderQueuePage() {
             <div className="border-2 border-rose-200 bg-rose-50 rounded-xl p-3 space-y-3">
               <input
                 type="text"
-                placeholder="Part / product name"
+                placeholder={t("reorderPartName")}
                 value={flagProductName}
                 onChange={(e) => setFlagProductName(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none"
               />
               <input
                 type="text"
-                placeholder="Note (optional)"
+                placeholder={t("reorderNoteOpt")}
                 value={flagNote}
                 onChange={(e) => setFlagNote(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none"
               />
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1 h-9" onClick={() => setShowFlagForm(false)}>Cancel</Button>
+                <Button variant="outline" size="sm" className="flex-1 h-9" onClick={() => setShowFlagForm(false)}>{t("cancel")}</Button>
                 <Button
                   size="sm" className="flex-1 h-9 font-bold bg-rose-600 hover:bg-rose-700"
                   disabled={!flagProductName.trim() || flagMutation.isPending}
                   onClick={() => flagMutation.mutate({ productName: flagProductName.trim(), note: flagNote.trim() || undefined })}
-                >Submit</Button>
+                >{t("reorderSubmit")}</Button>
               </div>
             </div>
           )}
 
           {flagsLoading ? <Skeleton className="h-16 rounded-xl" /> : activeFlags.length === 0 ? (
-            <div className="text-center py-3 text-xs text-muted-foreground">No active shortage flags</div>
+            <div className="text-center py-3 text-xs text-muted-foreground">{t("reorderNoFlags")}</div>
           ) : (
             <div className="space-y-2">
               {activeFlags.map((flag) => (
@@ -456,14 +459,14 @@ export default function ReorderQueuePage() {
                   <AlertTriangle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-rose-900">{flag.productName}</p>
-                    {flag.flaggedByUsername && <p className="text-xs text-rose-600">by {flag.flaggedByUsername}</p>}
+                    {flag.flaggedByUsername && <p className="text-xs text-rose-600">{flag.flaggedByUsername}</p>}
                     {flag.note && <p className="text-xs text-rose-700 mt-0.5">{flag.note}</p>}
                   </div>
                   <Button size="sm" variant="outline"
                     className="h-8 text-xs font-bold flex-shrink-0 border-rose-300 text-rose-700 hover:bg-rose-100"
                     onClick={() => resolveMutation.mutate(flag.id)} disabled={resolveMutation.isPending}
                   >
-                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Resolve
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t("reorderResolve")}
                   </Button>
                 </div>
               ))}
@@ -474,7 +477,7 @@ export default function ReorderQueuePage() {
         {/* Reorder queue — grouped by supplier */}
         <div className="space-y-2">
           <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-            <TrendingDown className="h-3.5 w-3.5" /> Below Min Stock
+            <TrendingDown className="h-3.5 w-3.5" /> {t("reorderBelowMin")}
             {queue.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
             )}
@@ -485,8 +488,8 @@ export default function ReorderQueuePage() {
           ) : queue.length === 0 ? (
             <div className="text-center py-10 px-4 bg-green-50 rounded-xl border border-green-200">
               <CheckCircle2 className="h-8 w-8 text-green-600 mx-auto mb-2" />
-              <p className="font-semibold text-green-800">All stock levels look good</p>
-              <p className="text-xs text-green-600 mt-1">No items below minimum threshold</p>
+              <p className="font-semibold text-green-800">{t("reorderAllGood")}</p>
+              <p className="text-xs text-green-600 mt-1">{t("reorderAllGoodDesc")}</p>
             </div>
           ) : (
             <div className="space-y-3">
