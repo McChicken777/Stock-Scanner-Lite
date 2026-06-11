@@ -60,6 +60,7 @@ import QuotesPage from "@/pages/quotes";
 import QuoteFormPage from "@/pages/quote-form";
 import QuoteDetailPage from "@/pages/quote-detail";
 import AnalyticsPage from "@/pages/analytics";
+import KioskPage from "@/pages/kiosk";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -263,7 +264,10 @@ function App() {
           <AuthProvider>
             {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <ProtectedRoutes />
+              <Switch>
+                <Route path="/kiosk" component={KioskPage} />
+                <Route component={ProtectedRoutes} />
+              </Switch>
             </WouterRouter>
             <Toaster />
           </AuthProvider>
