@@ -22,6 +22,7 @@ import leaveRouter from "./leave";
 import analyticsRouter from "./analytics";
 import stationsRouter from "./stations";
 import adminRouter from "./admin";
+import kioskRouter from "./kiosk";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -49,5 +50,6 @@ router.use("/leave", requireAuth, leaveRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/stations", requireAuth, stationsRouter);
 router.use("/admin", requireAuth, adminRouter);
+router.use("/kiosk", kioskRouter);
 
 export default router;

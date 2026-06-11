@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useLocation, Link, useRoute } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +54,7 @@ interface QuoteData {
 
 export default function QuoteFormPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/quotes/:id/edit");
   const editingId = params ? Number(params.id) : null;
@@ -186,14 +188,14 @@ export default function QuoteFormPage() {
     },
     onSuccess: (q) => {
       qc.invalidateQueries({ queryKey: ["/api/quotes"] });
-      toast({ title: editingId ? "Quote updated" : "Quote created" });
+      toast({ title: editingId ? t("quoteFormUpdated") : t("quoteFormCreated") });
       setLocation(`/quotes/${q.id}`);
     },
     onError: (e) => toast({ title: e instanceof Error ? e.message : "Failed", variant: "destructive" }),
   });
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground mt-20">Admin only</div>;
+    return <div className="p-6 text-center text-muted-foreground mt-20">{t("adminOnly")}</div>;
   }
 
   const customerValid =
@@ -209,7 +211,7 @@ export default function QuoteFormPage() {
         <Link href={editingId ? `/quotes/${editingId}` : "/quotes"} className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10">
           <ArrowLeft className="h-6 w-6" />
         </Link>
-        <h1 className="text-xl font-bold">{editingId ? "Edit Quote" : "New Quote"}</h1>
+        <h1 className="text-xl font-bold">{editingId ? t("quoteEditQuote") : t("quoteFormNewTitle")}</h1>
       </div>
 
       <div className="p-4 space-y-5 pb-24">
@@ -221,7 +223,7 @@ export default function QuoteFormPage() {
             className={cn("rounded-lg py-2.5 text-sm font-bold transition-all flex items-center justify-center gap-1.5",
               customerMode === "existing" ? "bg-card shadow text-foreground" : "text-muted-foreground")}
           >
-            <User className="h-3.5 w-3.5" /> Pick Customer
+            <User className="h-3.5 w-3.5" /> {t("quoteFormPickCustomer")}
           </button>
           <button
             type="button"
@@ -229,45 +231,45 @@ export default function QuoteFormPage() {
             className={cn("rounded-lg py-2.5 text-sm font-bold transition-all flex items-center justify-center gap-1.5",
               customerMode === "manual" ? "bg-card shadow text-foreground" : "text-muted-foreground")}
           >
-            <UserPlus className="h-3.5 w-3.5" /> Enter Manually
+            <UserPlus className="h-3.5 w-3.5" /> {t("quoteFormEnterManually")}
           </button>
         </div>
 
         {customerMode === "existing" ? (
           <div className="space-y-2">
-            <Label className="text-sm font-bold">Customer</Label>
+            <Label className="text-sm font-bold">{t("quoteCustomer")}</Label>
             <select
               value={customerId ?? ""}
               onChange={(e) => setCustomerId(e.target.value ? Number(e.target.value) : null)}
               className="w-full h-12 border-2 border-border rounded-lg px-3 text-base bg-background"
             >
-              <option value="">Select customer…</option>
+              <option value="">{t("quoteFormSelectCustomer")}</option>
               {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <Link href="/customers" className="text-xs text-primary font-semibold underline">Manage customers →</Link>
+            <Link href="/customers" className="text-xs text-primary font-semibold underline">{t("quoteFormManageCustomers")}</Link>
           </div>
         ) : (
           <div className="space-y-3 border-2 border-border rounded-xl p-3 bg-muted/10">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Customer Name *</Label>
+              <Label className="text-xs font-bold">{t("quoteFormCustomerName")}</Label>
               <Input value={manualName} onChange={(e) => setManualName(e.target.value)} className="h-10 border-2" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Contact</Label>
+                <Label className="text-xs font-bold">{t("fieldContact")}</Label>
                 <Input value={manualContact} onChange={(e) => setManualContact(e.target.value)} className="h-10 border-2" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Phone</Label>
+                <Label className="text-xs font-bold">{t("fieldPhone")}</Label>
                 <Input value={manualPhone} onChange={(e) => setManualPhone(e.target.value)} className="h-10 border-2" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Email</Label>
+              <Label className="text-xs font-bold">{t("fieldEmail")}</Label>
               <Input value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} className="h-10 border-2" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold">Address</Label>
+              <Label className="text-xs font-bold">{t("fieldAddress")}</Label>
               <Textarea value={manualAddress} onChange={(e) => setManualAddress(e.target.value)} className="border-2 min-h-[50px]" />
             </div>
           </div>
@@ -275,15 +277,15 @@ export default function QuoteFormPage() {
 
         {/* Validity */}
         <div className="space-y-2">
-          <Label className="text-sm font-bold">Valid Until</Label>
+          <Label className="text-sm font-bold">{t("quoteValidUntil")}</Label>
           <Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} className="h-12 border-2" />
         </div>
 
         {/* Line items */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-bold">Line Items</Label>
-            <span className="text-xs text-muted-foreground">{items.length} item{items.length !== 1 ? "s" : ""}</span>
+            <Label className="text-sm font-bold">{t("quoteFormLineItems")}</Label>
+            <span className="text-xs text-muted-foreground">{items.length} {t("ordersItems")}</span>
           </div>
 
           <div className="space-y-2">
@@ -294,18 +296,18 @@ export default function QuoteFormPage() {
                     <Input
                       value={it.name}
                       onChange={(e) => updateItem(idx, { name: e.target.value })}
-                      placeholder="Item name"
+                      placeholder={t("quoteFormItemName")}
                       className="h-9 border-2 text-sm font-semibold"
                     />
                     <Textarea
                       value={it.description}
                       onChange={(e) => updateItem(idx, { description: e.target.value })}
-                      placeholder="Description (optional)"
+                      placeholder={t("quoteFormDescOptional")}
                       className="border-2 text-xs min-h-[40px]"
                     />
                     <div className="grid grid-cols-3 gap-2">
                       <div>
-                        <Label className="text-[10px] font-bold text-muted-foreground">Qty</Label>
+                        <Label className="text-[10px] font-bold text-muted-foreground">{t("quoteFormQty")}</Label>
                         <Input
                           type="number" step="0.01" min="0"
                           value={it.quantity}
@@ -314,7 +316,7 @@ export default function QuoteFormPage() {
                         />
                       </div>
                       <div>
-                        <Label className="text-[10px] font-bold text-muted-foreground">Unit $</Label>
+                        <Label className="text-[10px] font-bold text-muted-foreground">{t("quoteFormUnitPrice")}</Label>
                         <Input
                           type="number" step="0.01" min="0"
                           value={it.unitPrice}
@@ -323,7 +325,7 @@ export default function QuoteFormPage() {
                         />
                       </div>
                       <div>
-                        <Label className="text-[10px] font-bold text-muted-foreground">Total</Label>
+                        <Label className="text-[10px] font-bold text-muted-foreground">{t("quoteTotal")}</Label>
                         <p className="h-9 flex items-center font-mono font-bold text-sm">${(it.quantity * it.unitPrice).toFixed(2)}</p>
                       </div>
                     </div>
@@ -338,10 +340,10 @@ export default function QuoteFormPage() {
 
           <div className="grid grid-cols-2 gap-2">
             <Button type="button" variant="outline" className="h-10 gap-1.5" onClick={() => setShowProductPicker((v) => !v)}>
-              <Plus className="h-3.5 w-3.5" /> {showProductPicker ? "Hide products" : "From Catalog"}
+              <Plus className="h-3.5 w-3.5" /> {showProductPicker ? t("quoteFormHideProducts") : t("quoteFormFromCatalog")}
             </Button>
             <Button type="button" variant="outline" className="h-10 gap-1.5" onClick={addFreeText}>
-              <FileText className="h-3.5 w-3.5" /> Free Text
+              <FileText className="h-3.5 w-3.5" /> {t("quoteFormFreeText")}
             </Button>
           </div>
 
@@ -350,12 +352,12 @@ export default function QuoteFormPage() {
               <Input
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Search products…"
+                placeholder={t("quoteFormSearchProducts")}
                 className="h-9 border-2 text-sm bg-background"
               />
               <div className="max-h-56 overflow-y-auto space-y-1">
                 {filteredProducts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-2">No products match.</p>
+                  <p className="text-xs text-muted-foreground italic text-center py-2">{t("quoteFormNoProducts")}</p>
                 ) : filteredProducts.map((p) => (
                   <button
                     key={p.id}
@@ -375,38 +377,38 @@ export default function QuoteFormPage() {
         {/* Totals */}
         <div className="border-2 border-border rounded-xl p-3 space-y-2 bg-muted/20">
           <div className="flex justify-between text-sm">
-            <span className="font-semibold">Subtotal</span>
+            <span className="font-semibold">{t("quoteSubtotal")}</span>
             <span className="font-mono">${subtotal.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-xs font-bold flex-shrink-0">Discount $</Label>
+            <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormDiscountDollar")}</Label>
             <Input type="number" step="0.01" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-8 border-2 text-sm flex-1" />
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-xs font-bold flex-shrink-0">Tax %</Label>
+            <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormTaxPercent")}</Label>
             <Input type="number" step="0.01" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} className="h-8 border-2 text-sm flex-1" />
             <span className="text-xs font-mono">${taxAmount.toFixed(2)}</span>
           </div>
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
-            <span>Total</span>
+            <span>{t("quoteTotal")}</span>
             <span className="font-mono">${total.toFixed(2)}</span>
           </div>
         </div>
 
         {/* Notes / Terms */}
         <div className="space-y-2">
-          <Label className="text-sm font-bold">Notes</Label>
-          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Internal or customer-facing notes…" className="border-2 min-h-[60px]" />
+          <Label className="text-sm font-bold">{t("fieldNotes")}</Label>
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("quoteFormNotesPlaceholder")} className="border-2 min-h-[60px]" />
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-bold">Terms & Conditions</Label>
-          <Textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder="Payment terms, delivery, etc." className="border-2 min-h-[60px]" />
+          <Label className="text-sm font-bold">{t("quoteFormTermsAndConditions")}</Label>
+          <Textarea value={terms} onChange={(e) => setTerms(e.target.value)} placeholder={t("quoteFormTermsPlaceholder")} className="border-2 min-h-[60px]" />
         </div>
 
         <Button onClick={() => saveMut.mutate()} disabled={!canSubmit || saveMut.isPending} className="w-full h-14 font-bold text-base">
           {saveMut.isPending
-            ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Saving…</>
-            : editingId ? "Save Changes" : "Create Quote"}
+            ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t("saving")}</>
+            : editingId ? t("quoteFormSaveChanges") : t("quoteFormCreateQuote")}
         </Button>
       </div>
     </div>

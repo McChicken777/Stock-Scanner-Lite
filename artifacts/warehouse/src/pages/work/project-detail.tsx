@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useRoute, Link, useSearch } from "wouter";
+import { useRoute, Link, useSearch, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
@@ -513,6 +513,7 @@ export default function WorkProjectDetailPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
   const [showTimeLogs, setShowTimeLogs] = useState(false);
@@ -584,6 +585,19 @@ export default function WorkProjectDetailPage() {
       toast({ title: "Project marked as complete!" });
     },
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to update", variant: "destructive" }),
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/work/projects/${projectId}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/projects"] });
+      toast({ title: t("jobsDeleteOrder") });
+      navigate("/work/projects");
+    },
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to delete", variant: "destructive" }),
   });
 
   const deleteItemMutation = useMutation({
@@ -671,6 +685,20 @@ export default function WorkProjectDetailPage() {
             className={cn("p-2 rounded-full transition-colors", editMode ? "bg-orange-500 text-white" : "hover:bg-secondary-foreground/10")}
           >
             <Pencil className="h-4 w-4" />
+          </button>
+        )}
+        {isAdmin && (
+          <button
+            onClick={() => {
+              if (confirm(t("jobsDeleteOrderDesc"))) {
+                deleteProjectMutation.mutate();
+              }
+            }}
+            disabled={deleteProjectMutation.isPending}
+            className="p-2 rounded-full hover:bg-red-500/20 text-red-400 transition-colors disabled:opacity-50"
+            title={t("jobsDeleteOrder")}
+          >
+            <Trash2 className="h-4 w-4" />
           </button>
         )}
       </div>

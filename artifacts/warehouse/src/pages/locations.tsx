@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useListLocations, useCreateLocation, useDeleteLocation } from "@workspace/api-client-react";
+import { useLang } from "@/contexts/lang";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, MapPin, Trash2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export default function LocationsPage() {
   const createLocation = useCreateLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLang();
   
   const [search, setSearch] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -81,17 +83,17 @@ export default function LocationsPage() {
   return (
     <div className="p-4 flex flex-col min-h-full">
       <div className="flex items-center justify-between px-1 pt-2 mb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Locations</h1>
-        
+        <h1 className="text-2xl font-bold tracking-tight">{t("locationsTitle")}</h1>
+
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="font-bold">
-              <Plus className="h-4 w-4 mr-1" /> New
+              <Plus className="h-4 w-4 mr-1" /> {t("new")}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Create New Location</DialogTitle>
+              <DialogTitle>{t("locationsCreateDialog")}</DialogTitle>
             </DialogHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
@@ -100,7 +102,7 @@ export default function LocationsPage() {
                   name="id"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Location ID</FormLabel>
+                      <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("locationsIdLabel")}</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. A1-01-02" className="h-12 font-mono uppercase border-2" {...field} />
                       </FormControl>
@@ -113,7 +115,7 @@ export default function LocationsPage() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Description (Optional)</FormLabel>
+                      <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("locationsDescLabel")}</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. Top Shelf, Aisle 1" className="h-12 border-2" {...field} />
                       </FormControl>
@@ -123,7 +125,7 @@ export default function LocationsPage() {
                 />
                 <div className="pt-4">
                   <Button type="submit" className="w-full h-12 font-bold text-lg" disabled={createLocation.isPending}>
-                    {createLocation.isPending ? "Saving..." : "Save Location"}
+                    {createLocation.isPending ? t("saving") : t("locationsSave")}
                   </Button>
                 </div>
               </form>
@@ -135,7 +137,7 @@ export default function LocationsPage() {
       <div className="relative mb-6">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
         <Input
-          placeholder="Search locations..."
+          placeholder={t("locationsSearchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-10 h-12 text-md shadow-sm bg-background border-2"
@@ -147,7 +149,7 @@ export default function LocationsPage() {
           [1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
         ) : filteredLocations?.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
-            No locations found
+            {t("locationsNone")}
           </div>
         ) : (
           filteredLocations?.map((location) => (
@@ -173,18 +175,18 @@ export default function LocationsPage() {
                   </AlertDialogTrigger>
                   <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Location?</AlertDialogTitle>
+                      <AlertDialogTitle>{t("locationsDeleteQ")}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently delete {location.id}. This cannot be undone. You can only delete empty locations.
+                        {t("locationsDeleteDesc")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex-col gap-2 sm:flex-row sm:gap-0 mt-4">
-                      <AlertDialogCancel className="h-12 w-full sm:w-auto">Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
+                      <AlertDialogCancel className="h-12 w-full sm:w-auto">{t("cancel")}</AlertDialogCancel>
+                      <AlertDialogAction
                         onClick={() => handleDelete(location.id)}
                         className="h-12 w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90"
                       >
-                        Delete
+                        {t("delete")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>

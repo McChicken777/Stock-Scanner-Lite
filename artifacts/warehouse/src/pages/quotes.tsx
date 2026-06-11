@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
+import type { TranslationKey } from "@/i18n/translations";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -22,13 +24,13 @@ interface QuoteRow {
   createdAt: string;
 }
 
-const statuses: { key: QuoteRow["status"] | "all"; label: string; color: string }[] = [
-  { key: "all", label: "All", color: "bg-muted text-foreground" },
-  { key: "draft", label: "Draft", color: "bg-slate-100 text-slate-700" },
-  { key: "sent", label: "Sent", color: "bg-blue-100 text-blue-700" },
-  { key: "approved", label: "Approved", color: "bg-green-100 text-green-700" },
-  { key: "rejected", label: "Rejected", color: "bg-red-100 text-red-700" },
-  { key: "converted", label: "Converted", color: "bg-purple-100 text-purple-700" },
+const statuses: { key: QuoteRow["status"] | "all"; labelKey: TranslationKey; color: string }[] = [
+  { key: "all", labelKey: "statusAll", color: "bg-muted text-foreground" },
+  { key: "draft", labelKey: "statusDraft", color: "bg-slate-100 text-slate-700" },
+  { key: "sent", labelKey: "statusSent", color: "bg-blue-100 text-blue-700" },
+  { key: "approved", labelKey: "statusApproved", color: "bg-green-100 text-green-700" },
+  { key: "rejected", labelKey: "statusRejected", color: "bg-red-100 text-red-700" },
+  { key: "converted", labelKey: "statusConverted", color: "bg-purple-100 text-purple-700" },
 ];
 
 const statusBadge: Record<string, string> = {
@@ -41,6 +43,7 @@ const statusBadge: Record<string, string> = {
 
 export default function QuotesPage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const isAdmin = user?.role === "admin";
   const [filter, setFilter] = useState<typeof statuses[number]["key"]>("all");
   const [search, setSearch] = useState("");
@@ -88,19 +91,19 @@ export default function QuotesPage() {
     <div className="p-4 space-y-4 pb-24">
       <div className="flex items-center justify-between pt-2">
         <div>
-          <h1 className="text-2xl font-black">Quotes</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{quotes.length} total</p>
+          <h1 className="text-2xl font-black">{t("quotesTitle")}</h1>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{quotes.length} {t("quotesTotal")}</p>
         </div>
         {isAdmin && (
           <Link href="/quotes/new">
-            <Button size="sm" className="font-bold gap-1"><Plus className="h-4 w-4" /> New</Button>
+            <Button size="sm" className="font-bold gap-1"><Plus className="h-4 w-4" /> {t("new")}</Button>
           </Link>
         )}
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by number or customer…" className="pl-9 h-10 border-2" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("quotesSearchPlaceholder")} className="pl-9 h-10 border-2" />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -109,7 +112,7 @@ export default function QuotesPage() {
           onChange={(e) => setCustomerFilter(e.target.value)}
           className="h-10 px-3 rounded-md border-2 bg-background text-sm font-medium"
         >
-          <option value="all">All customers</option>
+          <option value="all">{t("quotesAllCustomers")}</option>
           {customers.map((c) => (
             <option key={c.id} value={String(c.id)}>{c.name}</option>
           ))}
@@ -122,7 +125,7 @@ export default function QuotesPage() {
           onClick={() => { setFilter("all"); setCustomerFilter("all"); setFromDate(""); setToDate(""); setSearch(""); }}
           className="text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
         >
-          <X className="h-3 w-3" /> Clear filters
+          <X className="h-3 w-3" /> {t("quotesClearFilters")}
         </button>
       )}
 
@@ -136,7 +139,7 @@ export default function QuotesPage() {
               filter === s.key ? `${s.color} border-current` : "bg-muted/30 text-muted-foreground border-transparent"
             )}
           >
-            {s.label} {filter === s.key && quotes.filter((q) => s.key === "all" || q.status === s.key).length > 0 && `(${quotes.filter((q) => s.key === "all" || q.status === s.key).length})`}
+            {t(s.labelKey)} {filter === s.key && quotes.filter((q) => s.key === "all" || q.status === s.key).length > 0 && `(${quotes.filter((q) => s.key === "all" || q.status === s.key).length})`}
           </button>
         ))}
       </div>
@@ -146,8 +149,8 @@ export default function QuotesPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <FileText className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-          <p className="font-semibold">No quotes</p>
-          {isAdmin && <p className="text-sm text-muted-foreground mt-1">Create your first quote to send to a customer.</p>}
+          <p className="font-semibold">{t("quotesNone")}</p>
+          {isAdmin && <p className="text-sm text-muted-foreground mt-1">{t("quotesNoneDesc")}</p>}
         </div>
       ) : (
         <div className="space-y-2">

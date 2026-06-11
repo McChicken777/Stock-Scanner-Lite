@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useLang } from "@/contexts/lang";
 import { ArrowLeft, DollarSign, Package, TrendingUp, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +48,7 @@ async function apiFetch(url: string) {
 
 export default function ValuationPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const { t } = useLang();
   const { data, isLoading, isError } = useQuery<StockValuation>({
     queryKey: ["/api/stock/valuation"],
     queryFn: () => apiFetch("/api/stock/valuation"),
@@ -59,8 +61,8 @@ export default function ValuationPage() {
           <ArrowLeft className="h-6 w-6" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">Stock Valuation</h1>
-          <p className="text-xs opacity-70">Inventory value at current unit costs</p>
+          <h1 className="text-xl font-bold">{t("valuationTitle")}</h1>
+          <p className="text-xs opacity-70">{t("valuationSubtitle")}</p>
         </div>
       </div>
 
@@ -74,7 +76,7 @@ export default function ValuationPage() {
         ) : isError || !data ? (
           <div className="p-6 text-center bg-destructive/5 rounded-xl border border-destructive/30">
             <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
-            <p className="font-semibold">Failed to load valuation</p>
+            <p className="font-semibold">{t("valuationFailed")}</p>
           </div>
         ) : (
           <>
@@ -82,16 +84,16 @@ export default function ValuationPage() {
               <CardContent className="p-5 space-y-3">
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5" />
-                  <span className="text-xs font-bold uppercase tracking-wider opacity-80">Total Inventory Value</span>
+                  <span className="text-xs font-bold uppercase tracking-wider opacity-80">{t("valuationTotalLabel")}</span>
                 </div>
                 <p className="text-4xl font-black font-mono">${Number(data.totalValue).toFixed(2)}</p>
                 <div className="flex items-center gap-4 text-xs opacity-90 pt-1 border-t border-primary-foreground/20">
-                  <span><span className="font-bold">{data.totalProducts}</span> products</span>
-                  <span><span className="font-bold">{data.totalQty}</span> units</span>
+                  <span><span className="font-bold">{data.totalProducts}</span> {t("valuationProducts")}</span>
+                  <span><span className="font-bold">{data.totalQty}</span> {t("valuationUnits")}</span>
                   {data.productsWithoutCost > 0 && (
                     <span className="ml-auto text-amber-200 font-bold">
                       <AlertTriangle className="h-3 w-3 inline mr-0.5" />
-                      {data.productsWithoutCost} missing cost
+                      {data.productsWithoutCost} {t("valuationMissingCost")}
                     </span>
                   )}
                 </div>
@@ -100,12 +102,12 @@ export default function ValuationPage() {
 
             <div className="space-y-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5" /> By Category
+                <TrendingUp className="h-3.5 w-3.5" /> {t("valuationByCategory")}
               </h2>
               {data.categories.length === 0 ? (
                 <div className="text-center py-10 text-sm text-muted-foreground">
                   <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  No stock on hand
+                  {t("valuationNoStock")}
                 </div>
               ) : (
                 data.categories.map((cat) => {
@@ -115,7 +117,7 @@ export default function ValuationPage() {
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm truncate">{cat.category || "Uncategorized"}</p>
+                            <p className="font-bold text-sm truncate">{cat.category || t("valuationUncategorized")}</p>
                             <p className="text-xs text-muted-foreground">
                               {cat.productCount} product{cat.productCount !== 1 ? "s" : ""} · {cat.totalQty} unit{cat.totalQty !== 1 ? "s" : ""}
                             </p>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
+import type { TranslationKey } from "@/i18n/translations";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -41,11 +43,11 @@ interface UserOption {
 
 type StatusFilter = "all" | "pending" | "approved" | "rejected";
 
-const STATUS_TABS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "approved", label: "Approved" },
-  { value: "rejected", label: "Rejected" },
+const STATUS_TABS: { value: StatusFilter; key: TranslationKey }[] = [
+  { value: "all", key: "statusAll" },
+  { value: "pending", key: "statusPending" },
+  { value: "approved", key: "statusApproved" },
+  { value: "rejected", key: "statusRejected" },
 ];
 
 const statusColors: Record<string, string> = {
@@ -63,6 +65,7 @@ const cardBorders: Record<string, string> = {
 export default function AdminLeaveInboxPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { t } = useLang();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [userFilter, setUserFilter] = useState<string>("");
@@ -71,8 +74,8 @@ export default function AdminLeaveInboxPage() {
   if (user?.role !== "admin") {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        <p className="font-bold">Access denied</p>
-        <p className="text-sm mt-1">This page is only available to admins.</p>
+        <p className="font-bold">{t("leaveInboxAccessDenied")}</p>
+        <p className="text-sm mt-1">{t("leaveInboxAccessDesc")}</p>
       </div>
     );
   }
@@ -115,15 +118,15 @@ export default function AdminLeaveInboxPage() {
       <div className="pt-2">
         <div className="flex items-center gap-2">
           <Inbox className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-black">Leave Inbox</h1>
+          <h1 className="text-2xl font-black">{t("leaveInboxTitle")}</h1>
           {pendingCount > 0 && (
             <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
-              {pendingCount} pending
+              {pendingCount} {t("statusPending").toLowerCase()}
             </span>
           )}
         </div>
         <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mt-0.5">
-          All leave requests · Company-wide
+          {t("leaveInboxSubtitle")}
         </p>
       </div>
 
@@ -140,7 +143,7 @@ export default function AdminLeaveInboxPage() {
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {tab.label}
+            {t(tab.key)}
           </button>
         ))}
       </div>
@@ -148,14 +151,14 @@ export default function AdminLeaveInboxPage() {
       {/* User filter */}
       <div>
         <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-          Filter by worker
+          {t("leaveInboxFilterWorker")}
         </label>
         <select
           value={userFilter}
           onChange={(e) => setUserFilter(e.target.value)}
           className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          <option value="">All workers</option>
+          <option value="">{t("leaveInboxAllWorkers")}</option>
           {users.map((u) => (
             <option key={u.id} value={String(u.id)}>{u.username}</option>
           ))}
@@ -170,9 +173,9 @@ export default function AdminLeaveInboxPage() {
       ) : requests.length === 0 ? (
         <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
           <Inbox className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="font-semibold text-muted-foreground">No leave requests</p>
+          <p className="font-semibold text-muted-foreground">{t("leaveInboxNoRequests")}</p>
           <p className="text-sm text-muted-foreground mt-1">
-            {statusFilter !== "all" ? `No ${statusFilter} requests match your filters.` : "No requests have been submitted yet."}
+            {statusFilter !== "all" ? t("leaveInboxNoMatchFilters") : t("leaveInboxNoPending")}
           </p>
         </div>
       ) : (
@@ -198,7 +201,7 @@ export default function AdminLeaveInboxPage() {
                 <span className="font-semibold text-foreground">
                   {fmtDate(r.startDate)}{r.startDate !== r.endDate ? ` → ${fmtDate(r.endDate)}` : ""}
                 </span>
-                <span>Submitted {fmtDateTime(r.createdAt)}</span>
+                <span>{t("leaveInboxSubmitted")} {fmtDateTime(r.createdAt)}</span>
               </div>
 
               {r.managerNote && (
@@ -212,7 +215,7 @@ export default function AdminLeaveInboxPage() {
                   <textarea
                     value={notes[r.id] ?? ""}
                     onChange={(e) => setNotes((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                    placeholder="Optional note to worker…"
+                    placeholder={t("leaveInboxNoteOptional")}
                     rows={2}
                     className="w-full px-3 py-2 rounded-lg border border-input bg-background text-xs resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
@@ -224,7 +227,7 @@ export default function AdminLeaveInboxPage() {
                       disabled={resolve.isPending}
                       onClick={() => resolve.mutate({ id: r.id, status: "rejected", managerNote: notes[r.id] })}
                     >
-                      <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                      <XCircle className="h-3.5 w-3.5 mr-1" /> {t("leaveInboxReject")}
                     </Button>
                     <Button
                       size="sm"
@@ -232,7 +235,7 @@ export default function AdminLeaveInboxPage() {
                       disabled={resolve.isPending}
                       onClick={() => resolve.mutate({ id: r.id, status: "approved", managerNote: notes[r.id] })}
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> {t("leaveInboxApprove")}
                     </Button>
                   </div>
                 </div>

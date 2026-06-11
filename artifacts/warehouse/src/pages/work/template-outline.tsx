@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
+import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -375,6 +376,7 @@ function OpSetupPanel({
   stationTypes: StationType[];
   onChange: (s: OutlineSettings) => void;
 }) {
+  const { t } = useLang();
   const [newCode, setNewCode] = useState("");
   const [newCodeSt, setNewCodeSt] = useState<number | "">("");
   const [newProfileName, setNewProfileName] = useState("");
@@ -448,8 +450,8 @@ function OpSetupPanel({
     <div className="space-y-4 text-sm">
       {/* Op Codes */}
       <div>
-        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">Operation Short Codes</p>
-        <p className="text-xs text-muted-foreground mb-2">Define short codes to use in the editor. Mark as default to apply automatically to every part.</p>
+        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("outlineOpCodesSection")}</p>
+        <p className="text-xs text-muted-foreground mb-2">{t("outlineOpCodesDesc")}</p>
         {codes.length > 0 && (
           <div className="space-y-1 mb-2">
             {codes.map((code) => {
@@ -462,9 +464,9 @@ function OpSetupPanel({
                   <button
                     onClick={() => toggleDefault(code)}
                     className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${isDef ? "bg-green-100 text-green-700 border-green-300" : "border-border text-muted-foreground hover:bg-muted"}`}
-                    title={isDef ? "Default (click to remove)" : "Not default (click to make default)"}
+                    title={isDef ? t("outlineDefaultOnTitle") : t("outlineDefaultOffTitle")}
                   >
-                    {isDef ? "default ✓" : "default?"}
+                    {isDef ? t("outlineDefaultOn") : t("outlineDefaultOff")}
                   </button>
                   <button onClick={() => removeOpCode(code)} className="text-muted-foreground hover:text-destructive">
                     <X className="h-3 w-3" />
@@ -487,7 +489,7 @@ function OpSetupPanel({
             onChange={(e) => setNewCodeSt(e.target.value ? Number(e.target.value) : "")}
             className="h-7 text-xs rounded border border-border bg-background px-1.5 flex-1 min-w-[120px]"
           >
-            <option value="">→ station type</option>
+            <option value="">{t("outlineStationTypePlaceholder")}</option>
             {stationTypes.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <Button size="sm" className="h-7 text-xs px-2" onClick={addOpCode} disabled={!newCode.trim() || !newCodeSt}>
@@ -495,24 +497,24 @@ function OpSetupPanel({
           </Button>
         </div>
         {stationTypes.length === 0 && (
-          <p className="text-xs text-yellow-600 mt-1">⚠ No station types defined yet. Go to Production Flow in settings first.</p>
+          <p className="text-xs text-yellow-600 mt-1">{t("outlineNoStationTypes")}</p>
         )}
       </div>
 
       {/* Conditional Exclusions */}
       <div>
-        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">Conditional Exclusions</p>
-        <p className="text-xs text-muted-foreground mb-2">e.g. "exclude <b>sb</b> if part has <b>cnc</b>" — CNC parts skip sandblasting automatically.</p>
+        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("outlineExclusionsSection")}</p>
+        <p className="text-xs text-muted-foreground mb-2">{t("outlineExclusionsDesc")}</p>
         {settings.conditionalExclusions.map((exc, i) => (
           <div key={i} className="flex items-center gap-1 bg-muted/40 rounded px-2 py-1 mb-1 text-xs">
-            <span>Exclude <code className="font-mono font-bold">{exc.excludeCode}</code> if has <code className="font-mono font-bold">{exc.ifHasCode}</code></span>
+            <span>{t("outlineExcludePrefix")} <code className="font-mono font-bold">{exc.excludeCode}</code> {t("outlineIfHas")} <code className="font-mono font-bold">{exc.ifHasCode}</code></span>
             <button onClick={() => removeExclusion(i)} className="ml-auto text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
           </div>
         ))}
         <div className="flex gap-1.5 items-center flex-wrap mt-1">
-          <span className="text-xs text-muted-foreground">Exclude</span>
+          <span className="text-xs text-muted-foreground">{t("outlineExcludePrefix")}</span>
           <Input value={newExclFrom} onChange={(e) => setNewExclFrom(e.target.value)} placeholder="sb" className="h-7 text-xs font-mono w-16" />
-          <span className="text-xs text-muted-foreground">if has</span>
+          <span className="text-xs text-muted-foreground">{t("outlineIfHas")}</span>
           <Input value={newExclIf} onChange={(e) => setNewExclIf(e.target.value)} placeholder="cnc" className="h-7 text-xs font-mono w-16" />
           <Button size="sm" className="h-7 text-xs px-2" onClick={addExclusion} disabled={!newExclFrom.trim() || !newExclIf.trim()}>
             <Plus className="h-3 w-3" />
@@ -522,8 +524,8 @@ function OpSetupPanel({
 
       {/* Profiles */}
       <div>
-        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">Part Profiles</p>
-        <p className="text-xs text-muted-foreground mb-2">Shorthand for common op combinations. Type <code className="font-mono">@name</code> in the editor.</p>
+        <p className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("outlineProfilesSection")}</p>
+        <p className="text-xs text-muted-foreground mb-2">{t("outlineProfilesDesc")}</p>
         {Object.entries(settings.profiles).map(([key, ops]) => (
           <div key={key} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1 mb-1 text-xs">
             <code className="font-mono font-bold text-purple-700">{key}</code>
@@ -563,6 +565,7 @@ const KEYBOARD_HINTS = [
 
 export default function TemplateOutlinePage() {
   const { user } = useAuth();
+  const { t } = useLang();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const qc = useQueryClient();
@@ -612,7 +615,7 @@ export default function TemplateOutlinePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/settings/outline"] });
       setSettingsDirty(false);
-      toast({ title: "Settings saved" });
+      toast({ title: t("outlineSettingsSaved") });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -638,10 +641,10 @@ export default function TemplateOutlinePage() {
   });
 
   const handleCreate = () => {
-    if (!text.trim()) { toast({ title: "Outline is empty", variant: "destructive" }); return; }
+    if (!text.trim()) { toast({ title: t("outlineIsEmpty"), variant: "destructive" }); return; }
     const name = templateName.trim() || (parseResult.roots[0]?.name ?? "Template");
     const payload = treeToPayload(name, parseResult.roots, settings);
-    if (!payload.templateName.trim()) { toast({ title: "Template name required", variant: "destructive" }); return; }
+    if (!payload.templateName.trim()) { toast({ title: t("outlineNameRequired"), variant: "destructive" }); return; }
     importMutation.mutate(payload);
   };
 
@@ -829,7 +832,7 @@ export default function TemplateOutlinePage() {
   };
 
   if (user?.role !== "admin") {
-    return <div className="p-6 text-center text-muted-foreground mt-20"><p>Admin only</p></div>;
+    return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("adminOnly")}</p></div>;
   }
 
   const hasUnknownOps = parseResult.warnings.length > 0;
@@ -845,12 +848,12 @@ export default function TemplateOutlinePage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="font-bold text-base">Outline Import</div>
+        <div className="font-bold text-base">{t("outlineTitle")}</div>
         <div className="flex items-center gap-1.5 ml-2">
           <Input
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
-            placeholder={parseResult.roots[0]?.name || "Template name…"}
+            placeholder={parseResult.roots[0]?.name || t("outlineTemplatePlaceholder")}
             className="h-8 text-sm border-2 w-52"
           />
         </div>
@@ -859,12 +862,12 @@ export default function TemplateOutlinePage() {
         {/* Stats */}
         {text.trim() && (
           <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-            <span>{parseResult.partCount} parts</span>
-            <span>{parseResult.assemblyCount} assemblies</span>
+            <span>{parseResult.partCount} {t("outlineParts")}</span>
+            <span>{parseResult.assemblyCount} {t("outlineAssemblies")}</span>
             {hasUnknownOps && (
               <span className="text-yellow-600 flex items-center gap-1">
                 <AlertTriangle className="h-3 w-3" />
-                {parseResult.warnings.length} warnings
+                {parseResult.warnings.length} {t("outlineWarnings")}
               </span>
             )}
           </div>
@@ -874,14 +877,14 @@ export default function TemplateOutlinePage() {
           onClick={() => setShowHints((v) => !v)}
           className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border"
         >
-          ? Keys
+          {t("outlineKeys")}
         </button>
         <button
           onClick={() => setShowSetup((v) => !v)}
           className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${showSetup ? "bg-blue-50 border-blue-300 text-blue-700" : "border-border text-muted-foreground hover:text-foreground"}`}
         >
           <Settings2 className="h-3.5 w-3.5" />
-          Setup
+          {t("outlineSetup")}
           {!codesConfigured && <span className="text-yellow-500">!</span>}
         </button>
         <Button
@@ -891,7 +894,7 @@ export default function TemplateOutlinePage() {
           onClick={handleCreate}
         >
           {importMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-          Create Template
+          {t("outlineCreateTemplate")}
         </Button>
       </div>
 
@@ -913,7 +916,7 @@ export default function TemplateOutlinePage() {
       {showSetup && (
         <div className="border-b bg-slate-50 px-4 py-3 flex-shrink-0 overflow-y-auto max-h-[40vh]">
           <div className="flex items-center justify-between mb-3">
-            <span className="font-bold text-sm">Op Code Setup</span>
+            <span className="font-bold text-sm">{t("outlineOpCodeSetup")}</span>
             <div className="flex items-center gap-2">
               {settingsDirty && (
                 <Button
@@ -923,7 +926,7 @@ export default function TemplateOutlinePage() {
                   onClick={() => saveSettings.mutate(settings)}
                 >
                   {saveSettings.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  Save settings
+                  {t("outlineSaveSettings")}
                 </Button>
               )}
               <button onClick={() => setShowSetup(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
@@ -938,14 +941,14 @@ export default function TemplateOutlinePage() {
         {/* Editor side */}
         <div className="flex-1 flex flex-col min-w-0 border-r">
           <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20 flex-shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outline</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("outlineEditorLabel")}</span>
             <div className="flex items-center gap-2">
               {!codesConfigured && (
                 <button
                   onClick={() => setShowSetup(true)}
                   className="text-xs text-yellow-600 hover:text-yellow-800 flex items-center gap-1"
                 >
-                  <AlertTriangle className="h-3 w-3" /> Set up op codes first
+                  <AlertTriangle className="h-3 w-3" /> {t("outlineSetupFirst")}
                 </button>
               )}
               {text.trim() === "" && (
@@ -953,7 +956,7 @@ export default function TemplateOutlinePage() {
                   onClick={loadExample}
                   className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
                 >
-                  <Copy className="h-3 w-3" /> Load example
+                  <Copy className="h-3 w-3" /> {t("outlineLoadExample")}
                 </button>
               )}
             </div>
@@ -1002,11 +1005,11 @@ export default function TemplateOutlinePage() {
               {parseResult.warnings.slice(0, 5).map((w, i) => (
                 <p key={i} className="text-xs text-yellow-700 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3 flex-shrink-0" />
-                  Line {w.lineIndex + 1}: {w.message}
+                  {t("outlineLinePrefix")} {w.lineIndex + 1}: {w.message}
                 </p>
               ))}
               {parseResult.warnings.length > 5 && (
-                <p className="text-xs text-yellow-600">…and {parseResult.warnings.length - 5} more</p>
+                <p className="text-xs text-yellow-600">{t("outlineAndMore").replace("{n}", String(parseResult.warnings.length - 5))}</p>
               )}
             </div>
           )}
@@ -1015,10 +1018,10 @@ export default function TemplateOutlinePage() {
         {/* Preview side */}
         <div className="w-[44%] flex flex-col min-w-0 bg-card">
           <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/20 flex-shrink-0">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Live Preview</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("outlinePreviewLabel")}</span>
             {text.trim() && (
               <span className="text-xs text-muted-foreground">
-                {parseResult.partCount} parts · {parseResult.assemblyCount} assemblies
+                {parseResult.partCount} {t("outlineParts")} · {parseResult.assemblyCount} {t("outlineAssemblies")}
               </span>
             )}
           </div>
@@ -1028,9 +1031,9 @@ export default function TemplateOutlinePage() {
               <div className="h-full flex flex-col items-center justify-center gap-3 text-center px-6">
                 <Info className="h-8 w-8 text-muted-foreground/40" />
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Start typing on the left</p>
+                  <p className="text-sm font-medium text-muted-foreground">{t("outlineStartTyping")}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Indent with Tab, ops after second Tab or 3+ spaces.
+                    {t("outlineIndentHint")}
                     {settings.defaultOpCodes.length > 0 && (
                       <> Defaults ({settings.defaultOpCodes.join(", ")}) shown faded.</>
                     )}
@@ -1038,19 +1041,19 @@ export default function TemplateOutlinePage() {
                 </div>
                 {codesConfigured && (
                   <div className="mt-2 text-xs text-muted-foreground border border-border rounded-lg p-3 text-left w-full">
-                    <p className="font-semibold mb-1.5">Your op codes:</p>
+                    <p className="font-semibold mb-1.5">{t("outlineYourOpCodes")}</p>
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(settings.opCodes).map(([code, info]) => (
                         <span key={code} className="flex items-center gap-1 bg-muted rounded px-1.5 py-0.5">
                           <code className="font-mono font-bold text-xs">{code}</code>
                           <span className="text-xs text-muted-foreground">{info.stationTypeName}</span>
-                          {settings.defaultOpCodes.includes(code) && <span className="text-[10px] text-green-600">default</span>}
+                          {settings.defaultOpCodes.includes(code) && <span className="text-[10px] text-green-600">{t("outlineDefaultOn")}</span>}
                         </span>
                       ))}
                     </div>
                     {Object.keys(settings.profiles).length > 0 && (
                       <>
-                        <p className="font-semibold mt-2 mb-1">Profiles:</p>
+                        <p className="font-semibold mt-2 mb-1">{t("outlineProfiles")}</p>
                         <div className="flex flex-wrap gap-1">
                           {Object.entries(settings.profiles).map(([key, ops]) => (
                             <span key={key} className="bg-purple-50 text-purple-700 text-xs rounded px-1.5 py-0.5 font-mono">{key} = {ops.join(" ")}</span>
@@ -1077,9 +1080,9 @@ export default function TemplateOutlinePage() {
             <div className="border-t px-3 py-2 flex-shrink-0 bg-muted/20">
               <div className="flex items-center justify-between">
                 <div className="flex gap-3 text-xs">
-                  <span className="text-muted-foreground">{parseResult.partCount} leaf parts</span>
-                  {parseResult.assemblyCount > 0 && <span className="text-muted-foreground">{parseResult.assemblyCount} assemblies</span>}
-                  {hasUnknownOps && <span className="text-yellow-600">{parseResult.warnings.length} warnings</span>}
+                  <span className="text-muted-foreground">{parseResult.partCount} {t("outlineParts")}</span>
+                  {parseResult.assemblyCount > 0 && <span className="text-muted-foreground">{parseResult.assemblyCount} {t("outlineAssemblies")}</span>}
+                  {hasUnknownOps && <span className="text-yellow-600">{parseResult.warnings.length} {t("outlineWarnings")}</span>}
                 </div>
                 <Button
                   size="sm"
@@ -1088,7 +1091,7 @@ export default function TemplateOutlinePage() {
                   onClick={handleCreate}
                 >
                   {importMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  Create
+                  {t("create")}
                 </Button>
               </div>
             </div>
