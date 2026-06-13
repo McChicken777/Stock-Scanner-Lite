@@ -313,8 +313,6 @@ function KioskSetupSection({ companyId }: { companyId: number }) {
     },
   });
 
-  if (workstations.length === 0) return null;
-
   return (
     <div className="space-y-3 border-t border-border pt-4">
       <div className="flex items-center gap-2">
@@ -326,6 +324,11 @@ function KioskSetupSection({ companyId }: { companyId: number }) {
       </p>
 
       {/* Workstation list */}
+      {workstations.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic py-1">
+          No workstations configured yet — add them in the client's Production Flow page first.
+        </p>
+      ) : (
       <div className="space-y-2">
         {workstations.map((ws) => {
           const kiosk = kiosks.find((k) => k.workstationId === ws.id);
@@ -370,6 +373,7 @@ function KioskSetupSection({ companyId }: { companyId: number }) {
           );
         })}
       </div>
+      )}
 
       {/* Workers PIN + NFC */}
       <button
