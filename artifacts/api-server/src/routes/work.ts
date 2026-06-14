@@ -7,7 +7,7 @@ import {
   productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
   suppliersTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
-  stationTypesTable,
+  stationTypesTable, rawMaterialsTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -527,7 +527,11 @@ router.post("/templates/outline-import", requireAdmin, async (req, res) => {
 router.post("/templates", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1),
+      rawMaterialId: z.number().int().nullable().optional(),
+      materialQtyPerPiece: z.number().positive().nullable().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
 
     const [product] = await db.insert(productsTable).values({
@@ -537,6 +541,8 @@ router.post("/templates", requireAdmin, async (req, res) => {
 
     const [t] = await db.insert(workTemplatesTable).values({
       name: parsed.data.name, companyId, productId: product.id,
+      rawMaterialId: parsed.data.rawMaterialId ?? null,
+      materialQtyPerPiece: parsed.data.materialQtyPerPiece ?? null,
     }).returning();
     res.status(201).json({ ...t, productId: product.id });
   } catch (err) {
@@ -549,9 +555,18 @@ router.put("/templates/:id", requireAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
     const companyId = req.session.companyId!;
-    const parsed = z.object({ name: z.string().min(1) }).safeParse(req.body);
+    const parsed = z.object({
+      name: z.string().min(1),
+      rawMaterialId: z.number().int().nullable().optional(),
+      materialQtyPerPiece: z.number().positive().nullable().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
-    const [t] = await db.update(workTemplatesTable).set({ name: parsed.data.name })
+    const [t] = await db.update(workTemplatesTable)
+      .set({
+        name: parsed.data.name,
+        rawMaterialId: parsed.data.rawMaterialId !== undefined ? parsed.data.rawMaterialId : undefined,
+        materialQtyPerPiece: parsed.data.materialQtyPerPiece !== undefined ? parsed.data.materialQtyPerPiece : undefined,
+      })
       .where(and(eq(workTemplatesTable.id, id), eq(workTemplatesTable.companyId, companyId))).returning();
     if (!t) { res.status(404).json({ error: "Not found" }); return; }
     res.json(t);
@@ -2096,9 +2111,21 @@ async function getProjectWithItems(projectId: number) {
   const [project] = await db.select().from(workProjectsTable).where(eq(workProjectsTable.id, projectId));
   if (!project) return null;
 
-  const items = await db.select().from(workProjectItemsTable)
+  const itemRows = await db
+    .select({
+      item: workProjectItemsTable,
+      rawMaterialName: rawMaterialsTable.name,
+      rawMaterialUnit: rawMaterialsTable.unit,
+    })
+    .from(workProjectItemsTable)
+    .leftJoin(rawMaterialsTable, eq(rawMaterialsTable.id, workProjectItemsTable.rawMaterialId))
     .where(eq(workProjectItemsTable.projectId, projectId))
     .orderBy(workProjectItemsTable.sortOrder);
+  const items = itemRows.map((r) => ({
+    ...r.item,
+    rawMaterialName: r.rawMaterialName ?? null,
+    rawMaterialUnit: r.rawMaterialUnit ?? null,
+  }));
   const itemIds = items.map((i) => i.id);
 
   type ProcWithRole = typeof workItemStepsTable.$inferSelect & {
@@ -2412,6 +2439,8 @@ router.post("/projects", requireAdmin, async (req, res) => {
           const itemName = quantity > 1 ? `${template.name} #${i}` : template.name;
           const [item] = await db.insert(workProjectItemsTable).values({
             projectId: project.id, name: itemName, sortOrder,
+            rawMaterialId: template.rawMaterialId ?? null,
+            materialQtyPerPiece: template.materialQtyPerPiece ?? null,
           }).returning();
           sortOrder++;
 
