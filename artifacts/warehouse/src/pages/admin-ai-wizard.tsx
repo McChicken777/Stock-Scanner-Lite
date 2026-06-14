@@ -285,14 +285,14 @@ function WizardForm({
       <div className="space-y-2">
         <label className="text-sm font-bold">
           2. Material{" "}
-          <a href="/admin/raw-materials" className="text-[10px] font-normal text-primary underline">
+          <a href="/work/materials" className="text-[10px] font-normal text-primary underline">
             manage list
           </a>
         </label>
         {materials.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">
             No materials added yet.{" "}
-            <a href="/admin/raw-materials" className="text-primary underline">Add materials</a> to your catalogue first.
+            <a href="/work/materials" className="text-primary underline">Add materials</a> to your catalogue first.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
