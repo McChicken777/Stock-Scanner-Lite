@@ -593,7 +593,18 @@ export default function TemplateOutlinePage() {
   });
 
   useEffect(() => {
-    if (savedSettings) setSettings(savedSettings);
+    if (savedSettings) {
+      // Merge over defaults so a partial/legacy saved row (missing opCodes etc.)
+      // can't leave fields undefined and crash Object.keys/iteration.
+      setSettings({
+        ...EMPTY_SETTINGS,
+        ...savedSettings,
+        opCodes: savedSettings.opCodes ?? {},
+        defaultOpCodes: savedSettings.defaultOpCodes ?? [],
+        conditionalExclusions: savedSettings.conditionalExclusions ?? [],
+        profiles: savedSettings.profiles ?? {},
+      });
+    }
   }, [savedSettings]);
 
   // Debounced parse on text or settings change
