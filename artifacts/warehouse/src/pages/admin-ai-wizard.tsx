@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ interface RawMaterial {
 
 interface FormData {
   partName: string;
+  materialGrade: string;
   shape: string;
   materialId: number | null;
   materialName: string;
@@ -58,11 +59,11 @@ interface BatchResult {
 const FINISH_OPTIONS = ["Raw", "Painted", "Galvanized"];
 
 const EMPTY_FORM: FormData = {
-  partName: "", shape: "", materialId: null, materialName: "",
+  partName: "", materialGrade: "", shape: "", materialId: null, materialName: "",
   operations: [], surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
 };
 
-// Operations that don't make sense for a given shape — hidden by default
+// Operations that don't apply for a given shape — hidden by default
 const SHAPE_OP_EXCLUSIONS: Record<string, RegExp> = {
   rod:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
   hex:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
@@ -82,33 +83,6 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return d;
 }
 
-// ─── Shape picker ─────────────────────────────────────────────────────────
-
-function ShapePicker({ selected, onChange }: { selected: string; onChange: (v: string) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {MAT_SHAPES.map((s) => {
-        const active = selected === s.value;
-        return (
-          <button
-            key={s.value}
-            type="button"
-            onClick={() => onChange(active ? "" : s.value)}
-            className={`flex flex-col items-start px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
-              active
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-foreground hover:border-primary/40"
-            }`}
-          >
-            <span className="text-xs font-bold leading-tight">{s.label}</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{s.profileHint}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── Chip toggle helper ────────────────────────────────────────────────────
 
 function ChipSelect({
@@ -117,7 +91,6 @@ function ChipSelect({
   options: string[]; selected: string[]; onToggle: (v: string) => void; hiddenOps?: string[];
 }) {
   const [showAll, setShowAll] = useState(false);
-
   const visible = showAll ? options : options.filter((o) => !hiddenOps.includes(o));
   const hiddenCount = hiddenOps.length;
 
@@ -135,9 +108,7 @@ function ChipSelect({
           const active = selected.includes(opt);
           return (
             <button
-              key={opt}
-              type="button"
-              onClick={() => onToggle(opt)}
+              key={opt} type="button" onClick={() => onToggle(opt)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
                 active
                   ? "border-primary bg-primary/10 text-primary"
@@ -152,12 +123,13 @@ function ChipSelect({
       </div>
       {hiddenCount > 0 && (
         <button
-          type="button"
-          onClick={() => setShowAll((p) => !p)}
+          type="button" onClick={() => setShowAll((p) => !p)}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
         >
           <Eye className="h-3 w-3" />
-          {showAll ? `Hide ${hiddenCount} inapplicable operation${hiddenCount !== 1 ? "s" : ""}` : `Show ${hiddenCount} hidden operation${hiddenCount !== 1 ? "s" : ""} (not typical for this shape)`}
+          {showAll
+            ? `Hide ${hiddenCount} inapplicable operation${hiddenCount !== 1 ? "s" : ""}`
+            : `Show ${hiddenCount} hidden operation${hiddenCount !== 1 ? "s" : ""} (not typical for this shape)`}
         </button>
       )}
     </div>
@@ -166,14 +138,8 @@ function ChipSelect({
 
 // ─── Single Result Card ────────────────────────────────────────────────────
 
-function ResultCard({
-  result,
-  sourceItem,
-  onSaved,
-}: {
-  result: WizardResult;
-  sourceItem: FormData;
-  onSaved: () => void;
+function ResultCard({ result, sourceItem, onSaved }: {
+  result: WizardResult; sourceItem: FormData; onSaved: () => void;
 }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
@@ -186,8 +152,7 @@ function ResultCard({
     const text = result.steps
       .map((s, i) => `${i + 1}. ${s.name}${s.durationEstimate ? ` (~${s.durationEstimate}min)` : ""}${s.notes ? `\n   ${s.notes}` : ""}`)
       .join("\n");
-    navigator.clipboard
-      .writeText(`${result.templateName}\n\n${text}`)
+    navigator.clipboard.writeText(`${result.templateName}\n\n${text}`)
       .then(() => toast({ title: "Copied to clipboard" }))
       .catch(() => toast({ title: "Copy failed", variant: "destructive" }));
   };
@@ -209,13 +174,7 @@ function ResultCard({
         await apiFetch(`/api/work/templates/${tmpl.id}/procedures`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: s.name,
-            sortOrder: i,
-            roleId: s.roleId,
-            stationTypeId: s.stationTypeId,
-            durationEstimate: s.durationEstimate,
-          }),
+          body: JSON.stringify({ name: s.name, sortOrder: i, roleId: s.roleId, stationTypeId: s.stationTypeId, durationEstimate: s.durationEstimate }),
         });
       }
       setSaved(true);
@@ -235,15 +194,11 @@ function ResultCard({
           <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">AI Suggestion</p>
           <h3 className="text-sm font-black mt-0.5">{result.templateName}</h3>
         </div>
-        <button
-          type="button"
-          onClick={copyToClipboard}
-          className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
-        >
+        <button type="button" onClick={copyToClipboard}
+          className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
           <Copy className="h-3.5 w-3.5" />
         </button>
       </div>
-
       <div className="space-y-1.5">
         {result.steps.map((step, i) => (
           <div key={i} className="rounded-lg border border-border bg-background px-2.5 py-2 space-y-1">
@@ -281,7 +236,6 @@ function ResultCard({
           </div>
         ))}
       </div>
-
       {saved ? (
         <div className="flex items-center gap-1.5 text-green-700 font-bold text-xs py-1">
           <Check className="h-4 w-4" /> Saved! Find it in Job Templates.
@@ -296,17 +250,10 @@ function ResultCard({
   );
 }
 
-// ─── Form section ─────────────────────────────────────────────────────────
+// ─── Wizard Form ──────────────────────────────────────────────────────────
 
 function WizardForm({
-  form,
-  onChange,
-  materials,
-  operationOptions,
-  onAddToCart,
-  onGenerateNow,
-  isPending,
-  cartCount,
+  form, onChange, materials, operationOptions, onAddToCart, onGenerateNow, isPending, cartCount,
 }: {
   form: FormData;
   onChange: (patch: Partial<FormData>) => void;
@@ -317,16 +264,25 @@ function WizardForm({
   isPending: boolean;
   cartCount: number;
 }) {
-  // Materials filtered by selected shape (untagged materials always shown)
-  const visibleMaterials = form.shape
-    ? materials.filter((m) => !m.shape || m.shape === form.shape)
-    : materials;
+  // Derived catalogue data
+  const uniqueGrades = [...new Set(materials.map((m) => m.name))];
+
+  const shapesForGrade = (grade: string) =>
+    [...new Set(materials.filter((m) => m.name === grade && m.shape).map((m) => m.shape!))];
+
+  const profilesForGradeShape = (grade: string, shape: string) =>
+    materials.filter((m) => m.name === grade && m.shape === shape);
+
+  const availableShapes = form.materialGrade ? shapesForGrade(form.materialGrade) : [];
+  const availableProfiles = form.materialGrade && form.shape
+    ? profilesForGradeShape(form.materialGrade, form.shape)
+    : [];
+
+  const selectedProfile = materials.find((m) => m.id === form.materialId);
 
   // Operations hidden for the selected shape
   const exclusion = form.shape ? SHAPE_OP_EXCLUSIONS[form.shape] : undefined;
   const hiddenOps = exclusion ? operationOptions.filter((o) => exclusion.test(o)) : [];
-
-  const selectedMat = materials.find((m) => m.id === form.materialId);
 
   const shapeLabel = MAT_SHAPES.find((s) => s.value === form.shape)?.label;
 
@@ -338,86 +294,76 @@ function WizardForm({
   };
 
   const toggleFinish = (v: string) => {
-    const cur = form.surfaceFinish;
-    onChange({ surfaceFinish: cur.includes(v) ? [] : [v] });
+    onChange({ surfaceFinish: form.surfaceFinish.includes(v) ? [] : [v] });
   };
 
-  const handleShapeChange = (newShape: string) => {
-    // Reset material if it doesn't match the new shape
-    const currentMat = materials.find((m) => m.id === form.materialId);
-    const matStillValid = !currentMat?.shape || currentMat.shape === newShape;
-    // Remove now-hidden operations
-    const newExclusion = newShape ? SHAPE_OP_EXCLUSIONS[newShape] : undefined;
+  const handleGradeChange = (newGrade: string) => {
+    // Keep shape only if it exists for the new grade
+    const newShapes = newGrade ? shapesForGrade(newGrade) : [];
+    const shapeStillValid = form.shape && newShapes.includes(form.shape);
+    const newExclusion = shapeStillValid ? SHAPE_OP_EXCLUSIONS[form.shape] : undefined;
     const cleanedOps = newExclusion
       ? form.operations.filter((o) => !newExclusion.test(o))
       : form.operations;
     onChange({
-      shape: newShape,
-      materialId: matStillValid ? form.materialId : null,
-      materialName: matStillValid ? form.materialName : "",
+      materialGrade: newGrade,
+      shape: shapeStillValid ? form.shape : "",
+      materialId: null,
+      materialName: newGrade,
       operations: cleanedOps,
     });
   };
 
-  // step numbering
+  const handleShapeChange = (newShape: string) => {
+    const newExclusion = newShape ? SHAPE_OP_EXCLUSIONS[newShape] : undefined;
+    const cleanedOps = newExclusion
+      ? form.operations.filter((o) => !newExclusion.test(o))
+      : form.operations;
+    onChange({ shape: newShape, materialId: null, materialName: form.materialGrade, operations: cleanedOps });
+  };
+
+  const handleProfileChange = (mat: RawMaterial) => {
+    const active = form.materialId === mat.id;
+    onChange({
+      materialId: active ? null : mat.id,
+      materialName: active ? form.materialGrade : `${form.materialGrade}${mat.profile ? ` ${mat.profile}` : ""}`,
+    });
+  };
+
   let step = 0;
-  const nextStep = () => { step++; return step; };
+  const s = () => { step++; return step; };
 
   return (
     <div className="space-y-5">
+
       {/* 1. Part name */}
       <div className="space-y-2">
-        <label className="text-sm font-bold">{nextStep()}. What is this part called?</label>
+        <label className="text-sm font-bold">{s()}. What is this part called?</label>
         <input
-          type="text"
-          value={form.partName}
+          type="text" value={form.partName}
           onChange={(e) => onChange({ partName: e.target.value })}
           placeholder="e.g. Bracket arm, Gate frame, Piston rod…"
           className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
         />
       </div>
 
-      {/* 2. Shape */}
+      {/* 2. Material grade */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {nextStep()}. Raw material shape{" "}
-          <span className="font-normal text-muted-foreground">(filters materials and operations)</span>
+          {s()}. Material grade{" "}
+          <a href="/work/materials" className="text-[10px] font-normal text-primary underline">manage list</a>
         </label>
-        <ShapePicker selected={form.shape} onChange={handleShapeChange} />
-        {form.shape && (
-          <p className="text-xs text-primary font-semibold">
-            {shapeLabel} selected — operations inapplicable for this shape are hidden below.
-          </p>
-        )}
-      </div>
-
-      {/* 3. Material */}
-      <div className="space-y-2">
-        <label className="text-sm font-bold">
-          {nextStep()}. Material grade{" "}
-          <a href="/work/materials" className="text-[10px] font-normal text-primary underline">
-            manage list
-          </a>
-        </label>
-        {materials.length === 0 ? (
+        {uniqueGrades.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">
             No materials added yet.{" "}
-            <a href="/work/materials" className="text-primary underline">Add materials</a> to your catalogue first.
-          </p>
-        ) : visibleMaterials.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">
-            No materials tagged as &ldquo;{shapeLabel}&rdquo; yet.{" "}
-            <a href="/work/materials" className="text-primary underline">Add one</a> or pick a different shape.
+            <a href="/work/materials" className="text-primary underline">Add grades and sizes</a> to your catalogue first.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {visibleMaterials.map((m) => {
-              const active = form.materialId === m.id;
+            {uniqueGrades.map((grade) => {
+              const active = form.materialGrade === grade;
               return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onChange({ materialId: active ? null : m.id, materialName: active ? "" : `${m.name}${m.profile ? ` ${m.profile}` : ""}` })}
+                <button key={grade} type="button" onClick={() => handleGradeChange(active ? "" : grade)}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
                     active
                       ? "border-primary bg-primary/10 text-primary"
@@ -425,9 +371,7 @@ function WizardForm({
                   }`}
                 >
                   {active && <Check className="inline h-3 w-3 mr-1" />}
-                  {m.name}
-                  {m.profile && <span className="ml-1 font-bold">{m.profile}</span>}
-                  <span className="ml-1 opacity-60">/ {m.unit}</span>
+                  {grade}
                 </button>
               );
             })}
@@ -435,22 +379,75 @@ function WizardForm({
         )}
       </div>
 
-      {/* 4. Qty per piece (conditional) */}
-      {selectedMat && (
+      {/* 3. Shape — shown only if grade is selected and has shapes in catalogue */}
+      {form.materialGrade && availableShapes.length > 0 && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
-            {nextStep()}. Material quantity per piece{" "}
-            <span className="font-normal text-muted-foreground">
-              ({selectedMat.unit} — optional)
-            </span>
+            {s()}. Shape{" "}
+            <span className="font-normal text-muted-foreground">(filters sizes and operations)</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {availableShapes.map((shapeVal) => {
+              const active = form.shape === shapeVal;
+              const label = MAT_SHAPES.find((x) => x.value === shapeVal)?.label ?? shapeVal;
+              return (
+                <button key={shapeVal} type="button" onClick={() => handleShapeChange(active ? "" : shapeVal)}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all ${
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {active && <Check className="inline h-3 w-3 mr-1" />}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          {form.shape && (
+            <p className="text-[10px] text-primary font-semibold">
+              {shapeLabel} — operations that don&rsquo;t apply to this shape are hidden below.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 4. Profile / diameter — shown when grade+shape has entries */}
+      {form.materialGrade && form.shape && availableProfiles.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-sm font-bold">{s()}. Size / diameter</label>
+          <div className="flex flex-wrap gap-2">
+            {availableProfiles.map((mat) => {
+              const active = form.materialId === mat.id;
+              return (
+                <button key={mat.id} type="button" onClick={() => handleProfileChange(mat)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {active && <Check className="inline h-3 w-3 mr-1" />}
+                  {mat.profile ?? mat.unit}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 5. Qty per piece — shown when a specific profile is selected */}
+      {selectedProfile && (
+        <div className="space-y-2">
+          <label className="text-sm font-bold">
+            {s()}. Material per piece{" "}
+            <span className="font-normal text-muted-foreground">({selectedProfile.unit} — optional)</span>
           </label>
           <input
-            type="number"
-            min="0"
-            step="0.001"
+            type="number" min="0" step="0.001"
             value={form.materialQtyPerPiece}
             onChange={(e) => onChange({ materialQtyPerPiece: e.target.value })}
-            placeholder={`e.g. 250 ${selectedMat.unit}`}
+            placeholder={`e.g. 250 ${selectedProfile.unit}`}
             className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
           />
         </div>
@@ -459,7 +456,7 @@ function WizardForm({
       {/* Operations */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {nextStep()}. Required operations{" "}
+          {s()}. Required operations{" "}
           <span className="font-normal text-muted-foreground">(select all that apply)</span>
         </label>
         <ChipSelect
@@ -473,25 +470,18 @@ function WizardForm({
       {/* Surface finish */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {nextStep()}. Surface finish{" "}
+          {s()}. Surface finish{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
-        <ChipSelect
-          options={FINISH_OPTIONS}
-          selected={form.surfaceFinish}
-          onToggle={toggleFinish}
-        />
+        <ChipSelect options={FINISH_OPTIONS} selected={form.surfaceFinish} onToggle={toggleFinish} />
       </div>
 
       {/* Batch qty */}
       <div className="space-y-2">
-        <label className="text-sm font-bold">{nextStep()}. Typical batch quantity</label>
+        <label className="text-sm font-bold">{s()}. Typical batch quantity</label>
         <div className="flex gap-2">
           {["1", "5", "10", "25", "50"].map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => onChange({ batchQty: q })}
+            <button key={q} type="button" onClick={() => onChange({ batchQty: q })}
               className={`flex-1 h-10 rounded-lg text-sm font-bold border-2 transition-all ${
                 form.batchQty === q ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"
               }`}
@@ -505,12 +495,11 @@ function WizardForm({
       {/* Notes */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {nextStep()}. Anything else the AI should know?{" "}
+          {s()}. Anything else the AI should know?{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <textarea
-          value={form.notes}
-          onChange={(e) => onChange({ notes: e.target.value })}
+          value={form.notes} onChange={(e) => onChange({ notes: e.target.value })}
           placeholder="e.g. parts come pre-cut, tight tolerance holes, client provides own paint…"
           rows={3}
           className="w-full px-3 py-2 rounded-xl border-2 border-input bg-background text-sm resize-none focus:border-primary focus:outline-none"
@@ -524,20 +513,12 @@ function WizardForm({
       )}
 
       <div className="flex gap-2">
-        <Button
-          variant="outline"
-          className="flex-1 h-12 font-bold text-sm"
-          disabled={!canSubmit || isPending}
-          onClick={onAddToCart}
-        >
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add to Batch
+        <Button variant="outline" className="flex-1 h-12 font-bold text-sm"
+          disabled={!canSubmit || isPending} onClick={onAddToCart}>
+          <Plus className="h-4 w-4 mr-1.5" /> Add to Batch
         </Button>
-        <Button
-          className="flex-1 h-12 font-bold text-sm"
-          disabled={!canSubmit || isPending}
-          onClick={onGenerateNow}
-        >
+        <Button className="flex-1 h-12 font-bold text-sm"
+          disabled={!canSubmit || isPending} onClick={onGenerateNow}>
           {isPending ? (
             <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Generating…</>
           ) : cartCount > 0 ? (
@@ -553,13 +534,7 @@ function WizardForm({
 
 // ─── Cart list ────────────────────────────────────────────────────────────
 
-function CartList({
-  items,
-  onRemove,
-}: {
-  items: FormData[];
-  onRemove: (i: number) => void;
-}) {
+function CartList({ items, onRemove }: { items: FormData[]; onRemove: (i: number) => void }) {
   if (items.length === 0) return null;
   return (
     <div className="space-y-2">
@@ -567,21 +542,15 @@ function CartList({
         Batch queue — {items.length} part{items.length !== 1 ? "s" : ""}
       </p>
       {items.map((item, i) => (
-        <div
-          key={i}
-          className="flex items-center justify-between gap-2 bg-muted/50 rounded-xl px-3 py-2 border-2 border-border"
-        >
+        <div key={i} className="flex items-center justify-between gap-2 bg-muted/50 rounded-xl px-3 py-2 border-2 border-border">
           <div className="min-w-0">
             <p className="text-xs font-bold truncate">{item.partName}</p>
             <p className="text-[10px] text-muted-foreground truncate">
               {item.materialName || "—"} · {item.operations.join(", ")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => onRemove(i)}
-            className="flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors"
-          >
+          <button type="button" onClick={() => onRemove(i)}
+            className="flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
@@ -592,13 +561,7 @@ function CartList({
 
 // ─── Batch results ────────────────────────────────────────────────────────
 
-function BatchResults({
-  results,
-  onReset,
-}: {
-  results: BatchResult[];
-  onReset: () => void;
-}) {
+function BatchResults({ results, onReset }: { results: BatchResult[]; onReset: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -609,21 +572,15 @@ function BatchResults({
           <RotateCcw className="h-3.5 w-3.5 mr-1" /> New batch
         </Button>
       </div>
-
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
         <p className="font-bold mb-0.5">These are AI suggestions — review before using.</p>
         <p>Verify step order and durations match your actual workflow.</p>
       </div>
-
       <div className="space-y-3">
         {results.map((br, i) => (
           <div key={i}>
             {br.result ? (
-              <ResultCard
-                result={br.result}
-                sourceItem={br.item}
-                onSaved={() => { br.saved = true; }}
-              />
+              <ResultCard result={br.result} sourceItem={br.item} onSaved={() => { br.saved = true; }} />
             ) : (
               <div className="rounded-xl border-2 border-destructive/30 bg-destructive/5 p-3">
                 <p className="text-xs font-bold text-destructive">{br.item.partName}</p>
@@ -665,7 +622,6 @@ export default function AdminAiWizardPage() {
   });
 
   const operationOptions = stationTypes.map((s) => s.name);
-
   const patchForm = (patch: Partial<FormData>) => setForm((f) => ({ ...f, ...patch }));
 
   const canSubmit = form.partName.trim().length >= 2 && form.operations.length > 0;
@@ -679,8 +635,8 @@ export default function AdminAiWizardPage() {
 
   const removeFromCart = (i: number) => setCart((prev) => prev.filter((_, idx) => idx !== i));
 
-  const generateItem = async (item: FormData): Promise<WizardResult> => {
-    return apiFetch("/api/work/ai-template-wizard", {
+  const generateItem = async (item: FormData): Promise<WizardResult> =>
+    apiFetch("/api/work/ai-template-wizard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -693,7 +649,6 @@ export default function AdminAiWizardPage() {
         notes: item.notes.trim() || undefined,
       }),
     });
-  };
 
   const generateAll = async () => {
     if (!canSubmit) return;
@@ -705,8 +660,7 @@ export default function AdminAiWizardPage() {
     for (let i = 0; i < allItems.length; i++) {
       setProgress({ current: i + 1, total: allItems.length });
       try {
-        const result = await generateItem(allItems[i]);
-        results.push({ item: allItems[i], result, error: null, saved: false });
+        results.push({ item: allItems[i], result: await generateItem(allItems[i]), error: null, saved: false });
       } catch (err: any) {
         results.push({ item: allItems[i], result: null, error: err.message, saved: false });
       }
@@ -719,15 +673,10 @@ export default function AdminAiWizardPage() {
     setForm({ ...EMPTY_FORM });
   };
 
-  const reset = () => {
-    setBatchResults(null);
-    setCart([]);
-    setForm({ ...EMPTY_FORM });
-  };
+  const reset = () => { setBatchResults(null); setCart([]); setForm({ ...EMPTY_FORM }); };
 
   return (
     <div className="p-4 space-y-5 pb-24 max-w-2xl mx-auto">
-      {/* Header */}
       <div className="flex items-center gap-3 pt-2">
         <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
           <Sparkles className="h-5 w-5 text-white" />
@@ -740,7 +689,7 @@ export default function AdminAiWizardPage() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Pick shape → material → operations → Generate
+            Grade → shape → size → operations → Generate
           </p>
         </div>
       </div>
@@ -763,18 +712,11 @@ export default function AdminAiWizardPage() {
               </div>
             </div>
           )}
-
           <CartList items={cart} onRemove={removeFromCart} />
-
           <WizardForm
-            form={form}
-            onChange={patchForm}
-            materials={rawMaterials}
-            operationOptions={operationOptions}
-            onAddToCart={addToCart}
-            onGenerateNow={generateAll}
-            isPending={generating}
-            cartCount={cart.length}
+            form={form} onChange={patchForm} materials={rawMaterials}
+            operationOptions={operationOptions} onAddToCart={addToCart}
+            onGenerateNow={generateAll} isPending={generating} cartCount={cart.length}
           />
         </>
       )}

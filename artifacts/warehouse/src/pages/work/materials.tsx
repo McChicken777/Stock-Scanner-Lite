@@ -35,36 +35,45 @@ function shapeLabel(v: string | null) {
   return MAT_SHAPES.find((s) => s.value === v)?.label ?? v ?? "";
 }
 
-function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => void }) {
+// Groups flat list into grade → shape → profiles
+function groupMaterials(mats: RawMaterial[]) {
+  const order: string[] = [];
+  const map = new Map<string, { grade: string; shape: string | null; items: RawMaterial[] }>();
+  for (const m of mats) {
+    const key = `${m.name}\0${m.shape ?? ""}`;
+    if (!map.has(key)) { order.push(key); map.set(key, { grade: m.name, shape: m.shape, items: [] }); }
+    map.get(key)!.items.push(m);
+  }
+  return order.map((k) => map.get(k)!);
+}
+
+// One profile chip (e.g. "Ø30") — click to edit, X to delete
+function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(mat.name);
-  const [shape, setShape] = useState(mat.shape ?? "");
-  const [profile, setProfile] = useState(mat.profile ?? "");
-  const [unit, setUnit] = useState(mat.unit);
-  const [notes, setNotes] = useState(mat.notes ?? "");
+  const [value, setValue] = useState(mat.profile ?? "");
   const [saving, setSaving] = useState(false);
 
-  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "dimensions";
+  const profileHint = MAT_SHAPES.find((s) => s.value === mat.shape)?.profileHint ?? "dimensions";
 
   const save = async () => {
-    if (!name.trim()) return;
+    if (!value.trim()) return;
     setSaving(true);
     try {
-      const profileMm = parseFloat(profile.replace(/[^\d.]/g, "")) || null;
+      const profileMm = parseFloat(value.replace(/[^\d.]/g, "")) || null;
       const r = await fetch(`/api/raw-materials/${mat.id}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), shape: shape || undefined, profile: profile.trim() || undefined, profileMm, unit, notes: notes.trim() || undefined }),
+        body: JSON.stringify({ name: mat.name, shape: mat.shape ?? undefined, profile: value.trim(), profileMm, unit: mat.unit, notes: mat.notes ?? undefined }),
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to save"); }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
       onRefresh(); setEditing(false);
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
 
   const del = async () => {
-    if (!confirm(`Delete "${mat.name}"? Templates using it will lose the material link.`)) return;
+    if (!confirm(`Remove "${mat.profile || mat.unit}" from ${mat.name}? Templates using this entry will lose the material link.`)) return;
     try {
       const r = await fetch(`/api/raw-materials/${mat.id}`, { method: "DELETE", credentials: "include" });
       if (r.ok) onRefresh();
@@ -73,64 +82,119 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
   };
 
   if (editing) return (
-    <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
-      <div className="flex gap-2">
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
-          placeholder="Grade / material — e.g. 42CrMo4, S235" />
-        <select value={unit} onChange={(e) => setUnit(e.target.value)}
-          className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
-          {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
-        </select>
-      </div>
-      <div className="flex gap-2">
-        <select value={shape} onChange={(e) => { setShape(e.target.value); setProfile(""); }}
-          className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
-          <option value="">Shape…</option>
-          {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-        <input value={profile} onChange={(e) => setProfile(e.target.value)}
-          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-          placeholder={profileHint} />
-      </div>
-      <input value={notes} onChange={(e) => setNotes(e.target.value)}
-        className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-        placeholder="Notes (optional)" />
-      <div className="flex gap-2 justify-end">
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditing(false)}>
-          <X className="h-3.5 w-3.5 mr-1" /> Cancel
-        </Button>
-        <Button size="sm" className="h-8 text-xs" disabled={!name.trim() || saving} onClick={save}>
-          {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Save
-        </Button>
-      </div>
+    <div className="flex items-center gap-1">
+      <input
+        autoFocus value={value} onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+        placeholder={profileHint}
+        className="h-7 w-28 px-2 text-xs rounded-full border-2 border-primary bg-background focus:outline-none font-semibold"
+      />
+      <button onClick={save} disabled={!value.trim() || saving} className="text-green-600 hover:text-green-700 disabled:opacity-40">
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+      </button>
+      <button onClick={() => setEditing(false)} className="text-muted-foreground hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 border-border bg-card">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-sm font-semibold">{mat.name}</p>
-          {mat.shape && (
+    <div className="group flex items-center gap-1 bg-muted rounded-full px-2.5 py-1.5 border border-border">
+      <button onClick={() => setEditing(true)} className="text-xs font-semibold hover:text-primary transition-colors">
+        {mat.profile || mat.unit}
+      </button>
+      <button onClick={del} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all ml-0.5">
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+// One grade+shape group card with profile chips
+function MaterialGradeGroup({ grade, shape, items, onRefresh }: {
+  grade: string; shape: string | null; items: RawMaterial[]; onRefresh: () => void;
+}) {
+  const { toast } = useToast();
+  const [addingProfile, setAddingProfile] = useState(false);
+  const [newProfile, setNewProfile] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "e.g. 30";
+  const unit = items[0]?.unit ?? "mm";
+
+  const addProfile = async () => {
+    if (!newProfile.trim()) return;
+    setSaving(true);
+    try {
+      const profileMm = parseFloat(newProfile.replace(/[^\d.]/g, "")) || null;
+      const r = await fetch("/api/raw-materials", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: grade, shape: shape ?? undefined, profile: newProfile.trim(), profileMm, unit }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status}`); }
+      setNewProfile("");
+      onRefresh();
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const deleteGroup = async () => {
+    const label = shape ? `${grade} ${shapeLabel(shape)}` : grade;
+    if (!confirm(`Delete all ${items.length} size${items.length !== 1 ? "s" : ""} of "${label}"?`)) return;
+    try {
+      await Promise.all(items.map((m) =>
+        fetch(`/api/raw-materials/${m.id}`, { method: "DELETE", credentials: "include" })
+      ));
+      onRefresh();
+    } catch { toast({ title: "Failed to delete", variant: "destructive" }); }
+  };
+
+  return (
+    <div className="rounded-xl border-2 border-border bg-card p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-sm">{grade}</span>
+          {shape && (
             <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">
-              {shapeLabel(mat.shape)}
+              {shapeLabel(shape)}
             </span>
           )}
-          {mat.profile && (
-            <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-              {mat.profile} {mat.unit}
-            </span>
-          )}
+          <span className="text-[10px] text-muted-foreground">
+            {items.length} size{items.length !== 1 ? "s" : ""}
+          </span>
         </div>
-        {mat.notes && <p className="text-xs text-muted-foreground truncate mt-0.5">{mat.notes}</p>}
+        <button onClick={deleteGroup} className="text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
-      <button onClick={() => setEditing(true)} className="flex-shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
-      <button onClick={del} className="flex-shrink-0 text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {items.map((m) => <ProfileChip key={m.id} mat={m} onRefresh={onRefresh} />)}
+        {addingProfile ? (
+          <div className="flex items-center gap-1">
+            <input
+              autoFocus value={newProfile}
+              onChange={(e) => setNewProfile(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addProfile(); if (e.key === "Escape") { setAddingProfile(false); setNewProfile(""); } }}
+              placeholder={shape ? profileHint : "profile/dim"}
+              className="h-7 w-28 px-2 text-xs rounded-full border-2 border-primary bg-background focus:outline-none font-semibold"
+            />
+            <button onClick={addProfile} disabled={!newProfile.trim() || saving} className="text-green-600 hover:text-green-700 disabled:opacity-40">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            </button>
+            <button onClick={() => { setAddingProfile(false); setNewProfile(""); }} className="text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setAddingProfile(true)}
+            className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-full border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-primary transition-all"
+          >
+            <Plus className="h-3 w-3" /> Add size
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -138,15 +202,14 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
 function RawMaterialsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [name, setName] = useState("");
-  const [shape, setShape] = useState("");
-  const [profile, setProfile] = useState("");
-  const [unit, setUnit] = useState("mm");
-  const [notes, setNotes] = useState("");
+  const [newGrade, setNewGrade] = useState("");
+  const [newShape, setNewShape] = useState("");
+  const [newProfile, setNewProfile] = useState("");
+  const [newUnit, setNewUnit] = useState("mm");
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "dimensions";
+  const profileHint = MAT_SHAPES.find((s) => s.value === newShape)?.profileHint ?? "e.g. 30";
 
   const { data: mats = [], isLoading } = useQuery<RawMaterial[]>({
     queryKey: ["/api/raw-materials"],
@@ -158,27 +221,29 @@ function RawMaterialsTab() {
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["/api/raw-materials"] });
+  const groups = groupMaterials(mats);
+  const uniqueGrades = [...new Set(mats.map((m) => m.name))];
 
-  const save = async () => {
-    if (!name.trim()) return;
+  const saveOne = async () => {
+    if (!newGrade.trim()) return;
     setSaving(true);
     try {
-      const profileMm = parseFloat(profile.replace(/[^\d.]/g, "")) || null;
+      const profileMm = newProfile ? parseFloat(newProfile.replace(/[^\d.]/g, "")) || null : null;
       const r = await fetch("/api/raw-materials", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          shape: shape || undefined,
-          profile: profile.trim() || undefined,
+          name: newGrade.trim(),
+          shape: newShape || undefined,
+          profile: newProfile.trim() || undefined,
           profileMm,
-          unit,
-          notes: notes.trim() || undefined,
+          unit: newUnit,
         }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status} — try restarting the server`); }
-      setName(""); setShape(""); setProfile(""); setUnit("mm"); setNotes(""); setAdding(false);
+      setNewProfile(""); // keep grade+shape so user can quickly add more sizes
       refresh();
+      toast({ title: `Added${newProfile ? ` ${newGrade.trim()} ${newProfile}` : ` ${newGrade.trim()}`}` });
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
@@ -186,53 +251,76 @@ function RawMaterialsTab() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Steel grades, profiles, and raw materials your workshop uses — linked to job templates and shown on job orders.
+        Define each material grade once (e.g. S235, 42CrMo4), then add all the sizes your shop stocks. Each size is a separate stock item.
       </p>
       {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />)}</div>
-      ) : mats.length === 0 && !adding ? (
+        <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}</div>
+      ) : groups.length === 0 && !adding ? (
         <div className="text-center py-10 text-muted-foreground">
           <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
           <p className="text-sm font-semibold">No materials yet</p>
-          <p className="text-xs mt-0.5">Add the materials your shop uses — e.g. S235 rod Ø30, 42CrMo4 rod Ø40</p>
+          <p className="text-xs mt-0.5">e.g. S235 rod → add Ø30, Ø50, Ø100 as separate sizes</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {mats.map((m) => <RawMaterialRow key={m.id} mat={m} onRefresh={refresh} />)}
+          {groups.map((g) => (
+            <MaterialGradeGroup
+              key={`${g.grade}\0${g.shape ?? ""}`}
+              grade={g.grade}
+              shape={g.shape}
+              items={g.items}
+              onRefresh={refresh}
+            />
+          ))}
         </div>
       )}
 
       {adding ? (
         <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && save()}
-            className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
-            placeholder="Grade / material — e.g. S235, 42CrMo4" />
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">New material</p>
           <div className="flex gap-2">
-            <select value={shape} onChange={(e) => { setShape(e.target.value); setProfile(""); }}
-              className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
-              <option value="">Shape…</option>
-              {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-            <input value={profile} onChange={(e) => setProfile(e.target.value)}
-              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-              placeholder={shape ? profileHint : "Profile / dimensions"} />
-          </div>
-          <div className="flex gap-2">
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}
+            <div className="flex-1">
+              <input
+                autoFocus
+                list="grade-suggestions"
+                value={newGrade}
+                onChange={(e) => setNewGrade(e.target.value)}
+                placeholder="Grade — e.g. S235, 42CrMo4, AL6082"
+                className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
+              />
+              <datalist id="grade-suggestions">
+                {uniqueGrades.map((g) => <option key={g} value={g} />)}
+              </datalist>
+            </div>
+            <select value={newUnit} onChange={(e) => setNewUnit(e.target.value)}
               className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
               {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
             </select>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)}
-              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-              placeholder="Notes (optional)" />
           </div>
-          <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setAdding(false)}>
-              <X className="h-3.5 w-3.5 mr-1" /> Cancel
+          <select value={newShape} onChange={(e) => { setNewShape(e.target.value); setNewProfile(""); }}
+            className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+            <option value="">Shape (optional)…</option>
+            {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <input
+              value={newProfile}
+              onChange={(e) => setNewProfile(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveOne()}
+              placeholder={newShape ? profileHint : "Profile / dimensions (optional)"}
+              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+            />
+            <Button size="sm" className="h-9 px-4 text-xs font-bold" disabled={!newGrade.trim() || saving} onClick={saveOne}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
             </Button>
-            <Button size="sm" className="h-8 text-xs" disabled={!name.trim() || saving} onClick={save}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />} Add
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Grade and shape stay filled so you can add multiple sizes quickly.
+          </p>
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" className="h-8 text-xs"
+              onClick={() => { setAdding(false); setNewGrade(""); setNewShape(""); setNewProfile(""); }}>
+              Done
             </Button>
           </div>
         </div>
