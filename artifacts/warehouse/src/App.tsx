@@ -206,9 +206,6 @@ function ProtectedRoutes() {
         {/* Analytics (Pro, admin-only) */}
         <Route path="/analytics" component={AnalyticsPage} />
 
-        {/* Raw materials catalogue */}
-        <Route path="/admin/raw-materials" component={AdminRawMaterialsPage} />
-
         {/* AI Template Wizard (TEST) */}
         <Route path="/admin/ai-wizard" component={AdminAiWizardPage} />
 

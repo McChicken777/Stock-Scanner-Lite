@@ -2,12 +2,173 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLang } from "@/contexts/lang";
 import * as XLSX from "xlsx";
-import { Plus, Upload, Download, Search, Trash2, Loader2, PackageOpen, X, CheckCircle2, AlertTriangle, TrendingDown, Pencil, Check } from "lucide-react";
+import { Plus, Upload, Download, Search, Trash2, Loader2, PackageOpen, X, CheckCircle2, AlertTriangle, TrendingDown, Pencil, Check, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
+
+// ─── Raw Materials tab ────────────────────────────────────────────────────────
+
+interface RawMaterial { id: number; name: string; unit: string; notes: string | null; }
+const RAW_UNITS = ["kg", "m", "mm", "pcs", "L", "m²", "m³"];
+
+function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(mat.name);
+  const [unit, setUnit] = useState(mat.unit);
+  const [notes, setNotes] = useState(mat.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/raw-materials/${mat.id}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      onRefresh(); setEditing(false);
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  const del = async () => {
+    if (!confirm(`Delete "${mat.name}"? Templates using it will lose the material link.`)) return;
+    const r = await fetch(`/api/raw-materials/${mat.id}`, { method: "DELETE", credentials: "include" });
+    if (r.ok) onRefresh();
+    else toast({ title: "Failed to delete", variant: "destructive" });
+  };
+
+  if (editing) return (
+    <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
+      <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+        className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
+        placeholder="Material name" />
+      <div className="flex gap-2">
+        <select value={unit} onChange={(e) => setUnit(e.target.value)}
+          className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+          {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
+        </select>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)}
+          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+          placeholder="Notes (optional)" />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditing(false)}>
+          <X className="h-3.5 w-3.5 mr-1" /> Cancel
+        </Button>
+        <Button size="sm" className="h-8 text-xs" disabled={!name.trim() || saving} onClick={save}>
+          {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Save
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 border-border bg-card">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold truncate">{mat.name}</p>
+        {mat.notes && <p className="text-xs text-muted-foreground truncate">{mat.notes}</p>}
+      </div>
+      <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full flex-shrink-0">{mat.unit}</span>
+      <button onClick={() => setEditing(true)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
+      <button onClick={del} className="text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function RawMaterialsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const [unit, setUnit] = useState("kg");
+  const [notes, setNotes] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const { data: mats = [], isLoading } = useQuery<RawMaterial[]>({
+    queryKey: ["/api/raw-materials"],
+    queryFn: () => fetch("/api/raw-materials", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ["/api/raw-materials"] });
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const r = await fetch("/api/raw-materials", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      setName(""); setUnit("kg"); setNotes(""); setAdding(false);
+      refresh();
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Steel grades, profiles, and raw materials your workshop uses — linked to job templates and shown on job orders.
+      </p>
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-12 rounded-xl bg-muted animate-pulse" />)}</div>
+      ) : mats.length === 0 && !adding ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm font-semibold">No materials yet</p>
+          <p className="text-xs mt-0.5">Add the materials your shop uses — e.g. S235, 42CrMo4, AL6082</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {mats.map((m) => <RawMaterialRow key={m.id} mat={m} onRefresh={refresh} />)}
+        </div>
+      )}
+
+      {adding ? (
+        <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
+            placeholder="e.g. S235 structural steel, 42CrMo4 rod…" />
+          <div className="flex gap-2">
+            <select value={unit} onChange={(e) => setUnit(e.target.value)}
+              className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+              {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
+            </select>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)}
+              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+              placeholder="Notes (optional)" />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setAdding(false)}>
+              <X className="h-3.5 w-3.5 mr-1" /> Cancel
+            </Button>
+            <Button size="sm" className="h-8 text-xs" disabled={!name.trim() || saving} onClick={save}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />} Add
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button className="w-full h-10 font-bold" onClick={() => setAdding(true)}>
+          <Plus className="h-4 w-4 mr-2" /> Add material
+        </Button>
+      )}
+    </div>
+  );
+}
 
 interface Material {
   id: number;
@@ -217,6 +378,7 @@ export default function MaterialsPage() {
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [tab, setTab] = useState<"consumables" | "raw">("consumables");
   const [search, setSearch] = useState("");
   const [addingName, setAddingName] = useState("");
   const [addingCategory, setAddingCategory] = useState("");
@@ -343,7 +505,7 @@ export default function MaterialsPage() {
           <h1 className="text-2xl font-black">{t("materialsTitle")}</h1>
           <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">{t("materialsSubtitle")}</p>
         </div>
-        {isAdmin && (
+        {isAdmin && tab === "consumables" && (
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5" /> {t("productsTemplate")}
@@ -359,6 +521,24 @@ export default function MaterialsPage() {
         )}
       </div>
 
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-muted p-1 rounded-xl">
+        {(["consumables", "raw"] as const).map((t_) => (
+          <button
+            key={t_}
+            onClick={() => setTab(t_)}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              tab === t_ ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t_ === "consumables" ? "Consumables" : "Raw Materials"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "raw" && <RawMaterialsTab />}
+
+      {tab === "consumables" && <>
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -490,6 +670,7 @@ export default function MaterialsPage() {
           ))}
         </div>
       )}
+      </>}
     </div>
   );
 }
