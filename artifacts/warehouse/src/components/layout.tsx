@@ -235,7 +235,6 @@ function AdminDesktopSidebar() {
         {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
         {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
         {atLeast("standard") && <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />}
-        <SideNavItem href="/admin/raw-materials" icon={FlaskConical} label="Raw Materials" active={location.startsWith("/admin/raw-materials")} />
         <Link href="/admin/ai-wizard">
           <div className={cn(
             "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer",
