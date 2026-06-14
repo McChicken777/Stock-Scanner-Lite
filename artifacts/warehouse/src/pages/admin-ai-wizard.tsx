@@ -59,19 +59,26 @@ interface BatchResult {
 
 const FINISH_OPTIONS = ["Raw", "Painted", "Galvanized"];
 
+// Shapes consumed by cutting from a length of stock — worth tracking length per
+// piece. Flat products (sheet, plate) are ordered laser-cut, so no in-house
+// consumption tracking is needed for them.
+const TRACK_LENGTH_SHAPES = new Set(["rod", "hex", "tube_round", "tube_sq", "flat_bar", "angle", "channel"]);
+
 const EMPTY_FORM: FormData = {
   partName: "", materialGrade: "", shape: "", materialId: null, materialName: "",
   operations: [], surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
 };
 
 // Operations that don't apply for a given shape — hidden by default
+// Solid round/hex stock and round tube: no tapping (no flat face to tap into a
+// workflow sense), bending, sanding or assembly — hidden but revealable.
 const SHAPE_OP_EXCLUSIONS: Record<string, RegExp> = {
-  rod:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
-  hex:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
+  rod:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form|tap|sand|assembl/i,
+  hex:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form|tap|sand|assembl/i,
   sheet:      /lathe|turning|thread.*turn/i,
   plate:      /lathe|turning|thread.*turn/i,
   flat_bar:   /lathe|turning/i,
-  tube_round: /lathe|turning/i,
+  tube_round: /lathe|turning|bend|tap|sand|assembl/i,
   tube_sq:    /lathe|turning/i,
   angle:      /lathe|turning/i,
   channel:    /lathe|turning/i,
@@ -520,12 +527,12 @@ function WizardForm({
         </div>
       )}
 
-      {/* 5. Material per piece */}
-      {selectedProfile && (
+      {/* 5. Length per piece — only for stock cut from a length (not sheet/plate) */}
+      {selectedProfile && TRACK_LENGTH_SHAPES.has(form.shape) && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
-            {s()}. Material per piece{" "}
-            <span className="font-normal text-muted-foreground">({selectedProfile.unit} — optional)</span>
+            {s()}. Length per piece{" "}
+            <span className="font-normal text-muted-foreground">({selectedProfile.unit} — optional, for consumption tracking)</span>
           </label>
           <input
             type="number" min="0" step="0.001"
