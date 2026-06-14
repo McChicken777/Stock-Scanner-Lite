@@ -414,11 +414,35 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
 }) {
   const { t } = useLang();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [addingProc, setAddingProc] = useState(false);
   const [newProcName, setNewProcName] = useState("");
   const [showPresetPicker, setShowPresetPicker] = useState(false);
+  const [showImportPicker, setShowImportPicker] = useState(false);
 
   const base = `/api/work/templates/${templateId}/components/${comp.id}/steps`;
+
+  const { data: allTemplates = [] } = useQuery<Template[]>({
+    queryKey: ["/api/work/templates"],
+    queryFn: () => apiFetch("/api/work/templates"),
+    enabled: showImportPicker,
+  });
+  const importableTemplates = allTemplates.filter((tmpl) => tmpl.id !== templateId);
+
+  const importFromTemplate = useMutation({
+    mutationFn: ({ sourceTemplateId, clearExisting }: { sourceTemplateId: number; clearExisting: boolean }) =>
+      apiFetch(`/api/work/templates/${templateId}/components/${comp.id}/import-steps`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceTemplateId, clearExisting }),
+      }),
+    onSuccess: (data: { imported: number }) => {
+      onInvalidate();
+      qc.invalidateQueries({ queryKey: ["/api/work/templates"] });
+      setShowImportPicker(false);
+      toast({ title: `${data.imported} step${data.imported !== 1 ? "s" : ""} imported` });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
 
   const updateProc = useMutation({
     mutationFn: ({ procId, data }: { procId: number; data: object }) =>
@@ -640,6 +664,39 @@ function ComponentProcedureList({ templateId, comp, roles, stationTypes, presets
             >
               <ListPlus className="h-3 w-3" /> Preset
             </button>
+          )}
+          <button
+            onClick={() => { setShowImportPicker((v) => !v); setShowPresetPicker(false); }}
+            className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 font-medium"
+          >
+            <Copy className="h-3 w-3" /> Import template
+          </button>
+        </div>
+      )}
+
+      {showImportPicker && (
+        <div className="mt-1 bg-emerald-50 border border-emerald-200 rounded-lg p-2 space-y-1.5">
+          <p className="text-xs font-semibold text-emerald-700">Import steps from template:</p>
+          {importableTemplates.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No other templates available</p>
+          ) : (
+            importableTemplates.map((tmpl) => (
+              <div key={tmpl.id} className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium truncate">{tmpl.name}</span>
+                <div className="flex gap-1 flex-shrink-0">
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5"
+                    disabled={importFromTemplate.isPending}
+                    onClick={() => importFromTemplate.mutate({ sourceTemplateId: tmpl.id, clearExisting: false })}>
+                    Append
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-1.5 border-rose-200 text-rose-600 hover:bg-rose-50"
+                    disabled={importFromTemplate.isPending}
+                    onClick={() => importFromTemplate.mutate({ sourceTemplateId: tmpl.id, clearExisting: true })}>
+                    Replace
+                  </Button>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}

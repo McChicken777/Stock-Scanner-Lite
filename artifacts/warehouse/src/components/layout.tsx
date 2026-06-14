@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
@@ -188,7 +188,7 @@ function SidebarSection({ label }: { label: string }) {
 
 // ─── Admin Desktop Sidebar ────────────────────────────────────────────────────
 
-interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; overdueJobs: number; }
+interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; overdueJobs: number; restockRequests: number; }
 
 function AdminDesktopSidebar() {
   const [location] = useLocation();
@@ -226,7 +226,7 @@ function AdminDesktopSidebar() {
         <SidebarSection label={t("navMain")} />
         {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navJobs")} active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
         <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
-        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} />}
+        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} badge={attention?.restockRequests ?? 0} />}
 
         {atLeast("standard") && <SidebarSection label={t("navWork")} />}
         {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
@@ -235,6 +235,18 @@ function AdminDesktopSidebar() {
         {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
         {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
         {atLeast("standard") && <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />}
+        <Link href="/admin/ai-wizard">
+          <div className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer",
+            location.startsWith("/admin/ai-wizard")
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}>
+            <Sparkles className="h-[18px] w-[18px] flex-shrink-0" strokeWidth={location.startsWith("/admin/ai-wizard") ? 2.5 : 2} />
+            <span className="flex-1 truncate">AI Wizard</span>
+            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-amber-400 text-amber-900 rounded-full flex-shrink-0">TEST</span>
+          </div>
+        </Link>
 
         <SidebarSection label={t("navPeople")} />
         <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
