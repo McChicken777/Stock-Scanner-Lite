@@ -117,7 +117,7 @@ function RawMaterialsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
       });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to add material"); }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status} — try restarting the server`); }
       setName(""); setUnit("kg"); setNotes(""); setAdding(false);
       refresh();
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
