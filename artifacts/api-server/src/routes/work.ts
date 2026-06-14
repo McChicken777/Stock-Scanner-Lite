@@ -239,8 +239,9 @@ Rules:
 
     let steps: { name: string; roleId: number | null }[];
     try {
-      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      steps = JSON.parse(cleaned);
+      const arrMatch = text.match(/\[[\s\S]*\]/);
+      if (!arrMatch) throw new Error("No JSON array in response");
+      steps = JSON.parse(arrMatch[0]);
       if (!Array.isArray(steps)) throw new Error("Not an array");
     } catch {
       res.status(502).json({ error: "AI returned an unexpected response. Please try rewording your description." });
@@ -358,10 +359,13 @@ Rules:
 
     let result: { templateName: string; steps: { name: string; roleId: number | null; stationTypeId: number | null; durationEstimate: number | null; notes: string }[] };
     try {
-      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      result = JSON.parse(cleaned);
+      // Extract the first complete JSON object, ignoring any surrounding text or markdown fences
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("No JSON object in response");
+      result = JSON.parse(jsonMatch[0]);
       if (!result.steps || !Array.isArray(result.steps)) throw new Error("Invalid shape");
-    } catch {
+    } catch (parseErr) {
+      req.log.warn({ text: text.slice(0, 500), err: parseErr }, "AI wizard JSON parse failed");
       res.status(502).json({ error: "AI returned an unexpected format. Please try again." });
       return;
     }
@@ -715,7 +719,9 @@ Rules:
 
     let steps: { name: string; roleId: number | null; batchMode: string; durationEstimate: number | null }[];
     try {
-      steps = JSON.parse(text.text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim());
+      const arrMatch2 = (text.text as string).match(/\[[\s\S]*\]/);
+      if (!arrMatch2) throw new Error("No JSON array");
+      steps = JSON.parse(arrMatch2[0]);
     } catch {
       res.status(502).json({ error: "AI returned an unexpected response. Please try rewording your instruction." }); return;
     }
