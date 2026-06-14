@@ -4,19 +4,24 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles, Loader2, Check, Clock, User, Layers, FileText,
-  RotateCcw, Copy, Plus, Trash2, ChevronRight,
+  RotateCcw, Copy, Plus, Trash2, Eye,
 } from "lucide-react";
+import { MAT_SHAPES } from "@/pages/work/materials";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface RawMaterial {
   id: number;
   name: string;
+  shape: string | null;
+  profile: string | null;
+  profileMm: number | null;
   unit: string;
 }
 
 interface FormData {
   partName: string;
+  shape: string;
   materialId: number | null;
   materialName: string;
   operations: string[];
@@ -53,8 +58,21 @@ interface BatchResult {
 const FINISH_OPTIONS = ["Raw", "Painted", "Galvanized"];
 
 const EMPTY_FORM: FormData = {
-  partName: "", materialId: null, materialName: "", operations: [],
-  surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
+  partName: "", shape: "", materialId: null, materialName: "",
+  operations: [], surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
+};
+
+// Operations that don't make sense for a given shape — hidden by default
+const SHAPE_OP_EXCLUSIONS: Record<string, RegExp> = {
+  rod:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
+  hex:        /bend|press.?brake|laser|plasma|punch|shear|blanking|roll.?form/i,
+  sheet:      /lathe|turning|thread.*turn/i,
+  plate:      /lathe|turning|thread.*turn/i,
+  flat_bar:   /lathe|turning/i,
+  tube_round: /lathe|turning/i,
+  tube_sq:    /lathe|turning/i,
+  angle:      /lathe|turning/i,
+  channel:    /lathe|turning/i,
 };
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -64,13 +82,45 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return d;
 }
 
+// ─── Shape picker ─────────────────────────────────────────────────────────
+
+function ShapePicker({ selected, onChange }: { selected: string; onChange: (v: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {MAT_SHAPES.map((s) => {
+        const active = selected === s.value;
+        return (
+          <button
+            key={s.value}
+            type="button"
+            onClick={() => onChange(active ? "" : s.value)}
+            className={`flex flex-col items-start px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+              active
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background text-foreground hover:border-primary/40"
+            }`}
+          >
+            <span className="text-xs font-bold leading-tight">{s.label}</span>
+            <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{s.profileHint}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Chip toggle helper ────────────────────────────────────────────────────
 
 function ChipSelect({
-  options, selected, onToggle,
+  options, selected, onToggle, hiddenOps = [],
 }: {
-  options: string[]; selected: string[]; onToggle: (v: string) => void;
+  options: string[]; selected: string[]; onToggle: (v: string) => void; hiddenOps?: string[];
 }) {
+  const [showAll, setShowAll] = useState(false);
+
+  const visible = showAll ? options : options.filter((o) => !hiddenOps.includes(o));
+  const hiddenCount = hiddenOps.length;
+
   if (options.length === 0) {
     return (
       <p className="text-xs text-muted-foreground italic">
@@ -79,25 +129,37 @@ function ChipSelect({
     );
   }
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((opt) => {
-        const active = selected.includes(opt);
-        return (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => onToggle(opt)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
-              active
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
-            }`}
-          >
-            {active && <Check className="inline h-3 w-3 mr-1" />}
-            {opt}
-          </button>
-        );
-      })}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {visible.map((opt) => {
+          const active = selected.includes(opt);
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onToggle(opt)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                active
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}
+            >
+              {active && <Check className="inline h-3 w-3 mr-1" />}
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((p) => !p)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Eye className="h-3 w-3" />
+          {showAll ? `Hide ${hiddenCount} inapplicable operation${hiddenCount !== 1 ? "s" : ""}` : `Show ${hiddenCount} hidden operation${hiddenCount !== 1 ? "s" : ""} (not typical for this shape)`}
+        </button>
+      )}
     </div>
   );
 }
@@ -255,7 +317,20 @@ function WizardForm({
   isPending: boolean;
   cartCount: number;
 }) {
-  const canSubmit = form.partName.trim().length >= 2 && form.materialId !== null && form.operations.length > 0;
+  // Materials filtered by selected shape (untagged materials always shown)
+  const visibleMaterials = form.shape
+    ? materials.filter((m) => !m.shape || m.shape === form.shape)
+    : materials;
+
+  // Operations hidden for the selected shape
+  const exclusion = form.shape ? SHAPE_OP_EXCLUSIONS[form.shape] : undefined;
+  const hiddenOps = exclusion ? operationOptions.filter((o) => exclusion.test(o)) : [];
+
+  const selectedMat = materials.find((m) => m.id === form.materialId);
+
+  const shapeLabel = MAT_SHAPES.find((s) => s.value === form.shape)?.label;
+
+  const canSubmit = form.partName.trim().length >= 2 && form.operations.length > 0;
 
   const toggleOp = (v: string) => {
     const cur = form.operations;
@@ -267,24 +342,59 @@ function WizardForm({
     onChange({ surfaceFinish: cur.includes(v) ? [] : [v] });
   };
 
-  const selectedMat = materials.find((m) => m.id === form.materialId);
+  const handleShapeChange = (newShape: string) => {
+    // Reset material if it doesn't match the new shape
+    const currentMat = materials.find((m) => m.id === form.materialId);
+    const matStillValid = !currentMat?.shape || currentMat.shape === newShape;
+    // Remove now-hidden operations
+    const newExclusion = newShape ? SHAPE_OP_EXCLUSIONS[newShape] : undefined;
+    const cleanedOps = newExclusion
+      ? form.operations.filter((o) => !newExclusion.test(o))
+      : form.operations;
+    onChange({
+      shape: newShape,
+      materialId: matStillValid ? form.materialId : null,
+      materialName: matStillValid ? form.materialName : "",
+      operations: cleanedOps,
+    });
+  };
+
+  // step numbering
+  let step = 0;
+  const nextStep = () => { step++; return step; };
 
   return (
     <div className="space-y-5">
+      {/* 1. Part name */}
       <div className="space-y-2">
-        <label className="text-sm font-bold">1. What is this part called?</label>
+        <label className="text-sm font-bold">{nextStep()}. What is this part called?</label>
         <input
           type="text"
           value={form.partName}
           onChange={(e) => onChange({ partName: e.target.value })}
-          placeholder="e.g. Bracket arm, Gate frame, Shelf support…"
+          placeholder="e.g. Bracket arm, Gate frame, Piston rod…"
           className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
         />
       </div>
 
+      {/* 2. Shape */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          2. Material{" "}
+          {nextStep()}. Raw material shape{" "}
+          <span className="font-normal text-muted-foreground">(filters materials and operations)</span>
+        </label>
+        <ShapePicker selected={form.shape} onChange={handleShapeChange} />
+        {form.shape && (
+          <p className="text-xs text-primary font-semibold">
+            {shapeLabel} selected — operations inapplicable for this shape are hidden below.
+          </p>
+        )}
+      </div>
+
+      {/* 3. Material */}
+      <div className="space-y-2">
+        <label className="text-sm font-bold">
+          {nextStep()}. Material grade{" "}
           <a href="/work/materials" className="text-[10px] font-normal text-primary underline">
             manage list
           </a>
@@ -294,15 +404,20 @@ function WizardForm({
             No materials added yet.{" "}
             <a href="/work/materials" className="text-primary underline">Add materials</a> to your catalogue first.
           </p>
+        ) : visibleMaterials.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No materials tagged as &ldquo;{shapeLabel}&rdquo; yet.{" "}
+            <a href="/work/materials" className="text-primary underline">Add one</a> or pick a different shape.
+          </p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {materials.map((m) => {
+            {visibleMaterials.map((m) => {
               const active = form.materialId === m.id;
               return (
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => onChange({ materialId: active ? null : m.id, materialName: active ? "" : m.name })}
+                  onClick={() => onChange({ materialId: active ? null : m.id, materialName: active ? "" : `${m.name}${m.profile ? ` ${m.profile}` : ""}` })}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
                     active
                       ? "border-primary bg-primary/10 text-primary"
@@ -311,6 +426,7 @@ function WizardForm({
                 >
                   {active && <Check className="inline h-3 w-3 mr-1" />}
                   {m.name}
+                  {m.profile && <span className="ml-1 font-bold">{m.profile}</span>}
                   <span className="ml-1 opacity-60">/ {m.unit}</span>
                 </button>
               );
@@ -319,10 +435,11 @@ function WizardForm({
         )}
       </div>
 
+      {/* 4. Qty per piece (conditional) */}
       {selectedMat && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
-            3. Material quantity per piece{" "}
+            {nextStep()}. Material quantity per piece{" "}
             <span className="font-normal text-muted-foreground">
               ({selectedMat.unit} — optional)
             </span>
@@ -333,27 +450,30 @@ function WizardForm({
             step="0.001"
             value={form.materialQtyPerPiece}
             onChange={(e) => onChange({ materialQtyPerPiece: e.target.value })}
-            placeholder={`e.g. 2.5 ${selectedMat.unit}`}
+            placeholder={`e.g. 250 ${selectedMat.unit}`}
             className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
           />
         </div>
       )}
 
+      {/* Operations */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {selectedMat ? "4" : "3"}. Required operations{" "}
+          {nextStep()}. Required operations{" "}
           <span className="font-normal text-muted-foreground">(select all that apply)</span>
         </label>
         <ChipSelect
           options={operationOptions}
           selected={form.operations}
           onToggle={toggleOp}
+          hiddenOps={hiddenOps}
         />
       </div>
 
+      {/* Surface finish */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {selectedMat ? "5" : "4"}. Surface finish{" "}
+          {nextStep()}. Surface finish{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <ChipSelect
@@ -363,8 +483,9 @@ function WizardForm({
         />
       </div>
 
+      {/* Batch qty */}
       <div className="space-y-2">
-        <label className="text-sm font-bold">{selectedMat ? "6" : "5"}. Typical batch quantity</label>
+        <label className="text-sm font-bold">{nextStep()}. Typical batch quantity</label>
         <div className="flex gap-2">
           {["1", "5", "10", "25", "50"].map((q) => (
             <button
@@ -381,9 +502,10 @@ function WizardForm({
         </div>
       </div>
 
+      {/* Notes */}
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          {selectedMat ? "7" : "6"}. Anything else the AI should know?{" "}
+          {nextStep()}. Anything else the AI should know?{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <textarea
@@ -397,7 +519,7 @@ function WizardForm({
 
       {!canSubmit && (
         <p className="text-xs text-center text-muted-foreground">
-          Fill in part name, material, and at least one operation to continue.
+          Fill in part name and at least one operation to continue.
         </p>
       )}
 
@@ -477,16 +599,12 @@ function BatchResults({
   results: BatchResult[];
   onReset: () => void;
 }) {
-  const allSaved = results.filter((r) => r.result).every((r) => r.saved);
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            {results.length} template{results.length !== 1 ? "s" : ""} generated
-          </p>
-        </div>
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          {results.length} template{results.length !== 1 ? "s" : ""} generated
+        </p>
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onReset}>
           <RotateCcw className="h-3.5 w-3.5 mr-1" /> New batch
         </Button>
@@ -504,9 +622,7 @@ function BatchResults({
               <ResultCard
                 result={br.result}
                 sourceItem={br.item}
-                onSaved={() => {
-                  br.saved = true;
-                }}
+                onSaved={() => { br.saved = true; }}
               />
             ) : (
               <div className="rounded-xl border-2 border-destructive/30 bg-destructive/5 p-3">
@@ -540,7 +656,11 @@ export default function AdminAiWizardPage() {
 
   const { data: rawMaterials = [] } = useQuery<RawMaterial[]>({
     queryKey: ["/api/raw-materials"],
-    queryFn: () => fetch("/api/raw-materials", { credentials: "include" }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch("/api/raw-materials", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load materials");
+      return r.json();
+    },
     staleTime: 60_000,
   });
 
@@ -548,7 +668,7 @@ export default function AdminAiWizardPage() {
 
   const patchForm = (patch: Partial<FormData>) => setForm((f) => ({ ...f, ...patch }));
 
-  const canSubmit = form.partName.trim().length >= 2 && form.materialId !== null && form.operations.length > 0;
+  const canSubmit = form.partName.trim().length >= 2 && form.operations.length > 0;
 
   const addToCart = () => {
     if (!canSubmit) return;
@@ -565,7 +685,8 @@ export default function AdminAiWizardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         partName: item.partName.trim(),
-        material: item.materialName,
+        material: item.materialName || undefined,
+        shape: item.shape || undefined,
         operations: item.operations,
         surfaceFinish: item.surfaceFinish[0] ?? undefined,
         batchQuantity: Number(item.batchQty) || 1,
@@ -619,7 +740,7 @@ export default function AdminAiWizardPage() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
-            Fill the form → Add to Batch → Generate All at once
+            Pick shape → material → operations → Generate
           </p>
         </div>
       </div>

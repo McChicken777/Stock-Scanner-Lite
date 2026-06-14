@@ -8,7 +8,10 @@ const router: IRouter = Router();
 
 const materialSchema = z.object({
   name: z.string().min(1).max(200),
-  unit: z.string().min(1).max(20).default("kg"),
+  shape: z.string().max(30).optional(),
+  profile: z.string().max(50).optional(),
+  profileMm: z.number().positive().nullable().optional(),
+  unit: z.string().min(1).max(20).default("mm"),
   notes: z.string().max(500).optional(),
 });
 
@@ -33,6 +36,9 @@ router.post("/", requireAdmin, async (req, res) => {
     const [m] = await db.insert(rawMaterialsTable).values({
       companyId,
       name: parsed.data.name,
+      shape: parsed.data.shape ?? null,
+      profile: parsed.data.profile ?? null,
+      profileMm: parsed.data.profileMm ?? null,
       unit: parsed.data.unit,
       notes: parsed.data.notes ?? null,
     }).returning();
@@ -50,7 +56,14 @@ router.put("/:id", requireAdmin, async (req, res) => {
     const parsed = materialSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
     const [m] = await db.update(rawMaterialsTable)
-      .set({ name: parsed.data.name, unit: parsed.data.unit, notes: parsed.data.notes ?? null })
+      .set({
+        name: parsed.data.name,
+        shape: parsed.data.shape ?? null,
+        profile: parsed.data.profile ?? null,
+        profileMm: parsed.data.profileMm ?? null,
+        unit: parsed.data.unit,
+        notes: parsed.data.notes ?? null,
+      })
       .where(and(eq(rawMaterialsTable.id, id), eq(rawMaterialsTable.companyId, companyId)))
       .returning();
     if (!m) { res.status(404).json({ error: "Not found" }); return; }
