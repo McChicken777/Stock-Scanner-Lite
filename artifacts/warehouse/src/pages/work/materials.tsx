@@ -31,7 +31,7 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
       });
-      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to save"); }
       onRefresh(); setEditing(false);
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
@@ -39,9 +39,11 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
 
   const del = async () => {
     if (!confirm(`Delete "${mat.name}"? Templates using it will lose the material link.`)) return;
-    const r = await fetch(`/api/raw-materials/${mat.id}`, { method: "DELETE", credentials: "include" });
-    if (r.ok) onRefresh();
-    else toast({ title: "Failed to delete", variant: "destructive" });
+    try {
+      const r = await fetch(`/api/raw-materials/${mat.id}`, { method: "DELETE", credentials: "include" });
+      if (r.ok) onRefresh();
+      else { const d = await r.json().catch(() => ({})); toast({ title: d.error || "Failed to delete", variant: "destructive" }); }
+    } catch { toast({ title: "Failed to delete", variant: "destructive" }); }
   };
 
   if (editing) return (
@@ -97,7 +99,11 @@ function RawMaterialsTab() {
 
   const { data: mats = [], isLoading } = useQuery<RawMaterial[]>({
     queryKey: ["/api/raw-materials"],
-    queryFn: () => fetch("/api/raw-materials", { credentials: "include" }).then((r) => r.json()),
+    queryFn: async () => {
+      const r = await fetch("/api/raw-materials", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load materials");
+      return r.json();
+    },
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["/api/raw-materials"] });
@@ -111,7 +117,7 @@ function RawMaterialsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
       });
-      if (!r.ok) throw new Error((await r.json()).error || "Failed");
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to add material"); }
       setName(""); setUnit("kg"); setNotes(""); setAdding(false);
       refresh();
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }

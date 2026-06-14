@@ -62,7 +62,6 @@ import QuoteDetailPage from "@/pages/quote-detail";
 import AnalyticsPage from "@/pages/analytics";
 import KioskPage from "@/pages/kiosk";
 import AdminAiWizardPage from "@/pages/admin-ai-wizard";
-import AdminRawMaterialsPage from "@/pages/admin-raw-materials";
 
 const queryClient = new QueryClient({
   defaultOptions: {
