@@ -59,6 +59,11 @@ interface BatchResult {
 
 const FINISH_OPTIONS = ["Raw", "Painted", "Galvanized"];
 
+// Shapes consumed by cutting from a length of stock — worth tracking length per
+// piece. Flat products (sheet, plate) are ordered laser-cut, so no in-house
+// consumption tracking is needed for them.
+const TRACK_LENGTH_SHAPES = new Set(["rod", "hex", "tube_round", "tube_sq", "flat_bar", "angle", "channel"]);
+
 const EMPTY_FORM: FormData = {
   partName: "", materialGrade: "", shape: "", materialId: null, materialName: "",
   operations: [], surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
@@ -522,12 +527,12 @@ function WizardForm({
         </div>
       )}
 
-      {/* 5. Material per piece */}
-      {selectedProfile && (
+      {/* 5. Length per piece — only for stock cut from a length (not sheet/plate) */}
+      {selectedProfile && TRACK_LENGTH_SHAPES.has(form.shape) && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
-            {s()}. Material per piece{" "}
-            <span className="font-normal text-muted-foreground">({selectedProfile.unit} — optional)</span>
+            {s()}. Length per piece{" "}
+            <span className="font-normal text-muted-foreground">({selectedProfile.unit} — optional, for consumption tracking)</span>
           </label>
           <input
             type="number" min="0" step="0.001"
