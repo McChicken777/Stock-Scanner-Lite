@@ -17,6 +17,7 @@ export const rawMaterialsTable = pgTable("raw_materials", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  displayName: text("display_name"),
   shape: text("shape"),
   profile: text("profile"),
   profileMm: numeric("profile_mm", { precision: 10, scale: 2, mode: "number" }),

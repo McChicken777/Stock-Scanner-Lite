@@ -8,6 +8,7 @@ const router: IRouter = Router();
 
 const materialSchema = z.object({
   name: z.string().min(1).max(200),
+  displayName: z.string().max(100).nullable().optional(),
   shape: z.string().max(30).optional(),
   profile: z.string().max(50).optional(),
   profileMm: z.number().positive().nullable().optional(),
@@ -36,6 +37,7 @@ router.post("/", requireAdmin, async (req, res) => {
     const [m] = await db.insert(rawMaterialsTable).values({
       companyId,
       name: parsed.data.name,
+      displayName: parsed.data.displayName ?? null,
       shape: parsed.data.shape ?? null,
       profile: parsed.data.profile ?? null,
       profileMm: parsed.data.profileMm ?? null,
@@ -58,6 +60,7 @@ router.put("/:id", requireAdmin, async (req, res) => {
     const [m] = await db.update(rawMaterialsTable)
       .set({
         name: parsed.data.name,
+        displayName: parsed.data.displayName ?? null,
         shape: parsed.data.shape ?? null,
         profile: parsed.data.profile ?? null,
         profileMm: parsed.data.profileMm ?? null,

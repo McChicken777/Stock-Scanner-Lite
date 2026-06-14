@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Sparkles, Loader2, Check, Clock, User, Layers, FileText,
-  RotateCcw, Copy, Plus, Trash2, Eye,
+  RotateCcw, Copy, Plus, Trash2, Eye, X,
 } from "lucide-react";
 import { MAT_SHAPES } from "@/pages/work/materials";
 
@@ -12,7 +12,8 @@ import { MAT_SHAPES } from "@/pages/work/materials";
 
 interface RawMaterial {
   id: number;
-  name: string;
+  name: string;          // technical grade: S235, 42CrMo4
+  displayName: string | null; // worker name: "Mild steel", "Chrome-moly"
   shape: string | null;
   profile: string | null;
   profileMm: number | null;
@@ -24,7 +25,7 @@ interface FormData {
   materialGrade: string;
   shape: string;
   materialId: number | null;
-  materialName: string;
+  materialName: string;  // what gets sent to AI: "42CrMo4 Ø30"
   operations: string[];
   surfaceFinish: string[];
   batchQty: string;
@@ -83,6 +84,18 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return d;
 }
 
+// Display a profile with shape-appropriate prefix (Ø for rod/hex)
+function fmtProfile(shape: string | null, profile: string | null): string {
+  if (!profile || !profile.trim()) return "";
+  const p = profile.trim();
+  if ((shape === "rod" || shape === "hex") && /^\d/.test(p) && !p.includes("Ø")) return `Ø${p}`;
+  return p;
+}
+
+function shapeLabel(v: string | null) {
+  return MAT_SHAPES.find((s) => s.value === v)?.label ?? v ?? "";
+}
+
 // ─── Chip toggle helper ────────────────────────────────────────────────────
 
 function ChipSelect({
@@ -107,29 +120,25 @@ function ChipSelect({
         {visible.map((opt) => {
           const active = selected.includes(opt);
           return (
-            <button
-              key={opt} type="button" onClick={() => onToggle(opt)}
+            <button key={opt} type="button" onClick={() => onToggle(opt)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
                 active
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
               }`}
             >
-              {active && <Check className="inline h-3 w-3 mr-1" />}
-              {opt}
+              {active && <Check className="inline h-3 w-3 mr-1" />}{opt}
             </button>
           );
         })}
       </div>
       {hiddenCount > 0 && (
-        <button
-          type="button" onClick={() => setShowAll((p) => !p)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-        >
+        <button type="button" onClick={() => setShowAll((p) => !p)}
+          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
           <Eye className="h-3 w-3" />
           {showAll
             ? `Hide ${hiddenCount} inapplicable operation${hiddenCount !== 1 ? "s" : ""}`
-            : `Show ${hiddenCount} hidden operation${hiddenCount !== 1 ? "s" : ""} (not typical for this shape)`}
+            : `Show ${hiddenCount} hidden (not typical for ${shapeLabel(null)})`}
         </button>
       )}
     </div>
@@ -177,14 +186,11 @@ function ResultCard({ result, sourceItem, onSaved }: {
           body: JSON.stringify({ name: s.name, sortOrder: i, roleId: s.roleId, stationTypeId: s.stationTypeId, durationEstimate: s.durationEstimate }),
         });
       }
-      setSaved(true);
-      onSaved();
+      setSaved(true); onSaved();
       toast({ title: `Template "${result.templateName}" saved!` });
     } catch (err: any) {
       toast({ title: err.message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   return (
@@ -229,8 +235,7 @@ function ResultCard({ result, sourceItem, onSaved }: {
             </div>
             {step.notes && (
               <p className="text-[10px] text-muted-foreground leading-snug flex items-start gap-1">
-                <FileText className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                {step.notes}
+                <FileText className="h-3 w-3 flex-shrink-0 mt-0.5" />{step.notes}
               </p>
             )}
           </div>
@@ -264,12 +269,17 @@ function WizardForm({
   isPending: boolean;
   cartCount: number;
 }) {
-  // Derived catalogue data
+  // Unique grades from catalogue
   const uniqueGrades = [...new Set(materials.map((m) => m.name))];
 
+  // Get the display name for a grade (first entry wins)
+  const getDisplay = (grade: string) => materials.find((m) => m.name === grade)?.displayName ?? null;
+
+  // Shapes available for a given grade in the catalogue
   const shapesForGrade = (grade: string) =>
     [...new Set(materials.filter((m) => m.name === grade && m.shape).map((m) => m.shape!))];
 
+  // Profiles for a given grade+shape
   const profilesForGradeShape = (grade: string, shape: string) =>
     materials.filter((m) => m.name === grade && m.shape === shape);
 
@@ -277,14 +287,11 @@ function WizardForm({
   const availableProfiles = form.materialGrade && form.shape
     ? profilesForGradeShape(form.materialGrade, form.shape)
     : [];
-
   const selectedProfile = materials.find((m) => m.id === form.materialId);
 
   // Operations hidden for the selected shape
   const exclusion = form.shape ? SHAPE_OP_EXCLUSIONS[form.shape] : undefined;
   const hiddenOps = exclusion ? operationOptions.filter((o) => exclusion.test(o)) : [];
-
-  const shapeLabel = MAT_SHAPES.find((s) => s.value === form.shape)?.label;
 
   const canSubmit = form.partName.trim().length >= 2 && form.operations.length > 0;
 
@@ -292,46 +299,79 @@ function WizardForm({
     const cur = form.operations;
     onChange({ operations: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
   };
+  const toggleFinish = (v: string) => onChange({ surfaceFinish: form.surfaceFinish.includes(v) ? [] : [v] });
 
-  const toggleFinish = (v: string) => {
-    onChange({ surfaceFinish: form.surfaceFinish.includes(v) ? [] : [v] });
-  };
-
+  // When grade changes: keep shape if it exists for new grade; auto-select if only 1; auto-select profile if only 1
   const handleGradeChange = (newGrade: string) => {
-    // Keep shape only if it exists for the new grade
     const newShapes = newGrade ? shapesForGrade(newGrade) : [];
     const shapeStillValid = form.shape && newShapes.includes(form.shape);
-    const newExclusion = shapeStillValid ? SHAPE_OP_EXCLUSIONS[form.shape] : undefined;
-    const cleanedOps = newExclusion
-      ? form.operations.filter((o) => !newExclusion.test(o))
-      : form.operations;
+    const autoShape = shapeStillValid ? form.shape : (newShapes.length === 1 ? newShapes[0] : "");
+
+    const newExclusion = autoShape ? SHAPE_OP_EXCLUSIONS[autoShape] : undefined;
+    const cleanedOps = newExclusion ? form.operations.filter((o) => !newExclusion.test(o)) : form.operations;
+
+    const profiles = newGrade && autoShape ? profilesForGradeShape(newGrade, autoShape) : [];
+    const autoMat = profiles.length === 1 ? profiles[0] : null;
+    const display = getDisplay(newGrade);
+
     onChange({
       materialGrade: newGrade,
-      shape: shapeStillValid ? form.shape : "",
-      materialId: null,
-      materialName: newGrade,
+      shape: autoShape,
+      materialId: autoMat?.id ?? null,
+      materialName: autoMat
+        ? `${display ?? newGrade}${fmtProfile(autoShape, autoMat.profile) ? ` ${fmtProfile(autoShape, autoMat.profile)}` : ""}`
+        : (display ?? newGrade),
       operations: cleanedOps,
     });
   };
 
+  // When shape changes: auto-select profile if only 1; clear incompatible ops
   const handleShapeChange = (newShape: string) => {
     const newExclusion = newShape ? SHAPE_OP_EXCLUSIONS[newShape] : undefined;
-    const cleanedOps = newExclusion
-      ? form.operations.filter((o) => !newExclusion.test(o))
-      : form.operations;
-    onChange({ shape: newShape, materialId: null, materialName: form.materialGrade, operations: cleanedOps });
+    const cleanedOps = newExclusion ? form.operations.filter((o) => !newExclusion.test(o)) : form.operations;
+    const profiles = form.materialGrade && newShape ? profilesForGradeShape(form.materialGrade, newShape) : [];
+    const autoMat = profiles.length === 1 ? profiles[0] : null;
+    const display = form.materialGrade ? getDisplay(form.materialGrade) : null;
+
+    onChange({
+      shape: newShape,
+      materialId: autoMat?.id ?? null,
+      materialName: autoMat
+        ? `${display ?? form.materialGrade}${fmtProfile(newShape, autoMat.profile) ? ` ${fmtProfile(newShape, autoMat.profile)}` : ""}`
+        : (display ?? form.materialGrade),
+      operations: cleanedOps,
+    });
   };
 
   const handleProfileChange = (mat: RawMaterial) => {
     const active = form.materialId === mat.id;
+    const display = form.materialGrade ? getDisplay(form.materialGrade) : null;
+    const profileStr = fmtProfile(form.shape, mat.profile);
     onChange({
       materialId: active ? null : mat.id,
-      materialName: active ? form.materialGrade : `${form.materialGrade}${mat.profile ? ` ${mat.profile}` : ""}`,
+      materialName: active
+        ? (display ?? form.materialGrade)
+        : `${display ?? form.materialGrade}${profileStr ? ` ${profileStr}` : ""}`,
     });
   };
 
+  const clearMaterial = () => onChange({ materialGrade: "", shape: "", materialId: null, materialName: "" });
+
   let step = 0;
   const s = () => { step++; return step; };
+
+  // Build material context summary (shown as a strip before operations)
+  const hasAnyMaterial = form.materialGrade || form.shape || form.materialId;
+  const contextParts: string[] = [];
+  if (form.materialGrade) {
+    const dn = getDisplay(form.materialGrade);
+    contextParts.push(dn ? `${dn} (${form.materialGrade})` : form.materialGrade);
+  }
+  if (form.shape) contextParts.push(shapeLabel(form.shape) ?? form.shape);
+  if (selectedProfile) {
+    const p = fmtProfile(form.shape, selectedProfile.profile);
+    if (p) contextParts.push(p);
+  }
 
   return (
     <div className="space-y-5">
@@ -362,16 +402,25 @@ function WizardForm({
           <div className="flex flex-wrap gap-2">
             {uniqueGrades.map((grade) => {
               const active = form.materialGrade === grade;
+              const display = getDisplay(grade);
               return (
-                <button key={grade} type="button" onClick={() => handleGradeChange(active ? "" : grade)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                <button key={grade} type="button"
+                  onClick={() => handleGradeChange(active ? "" : grade)}
+                  className={`flex flex-col items-start px-3 py-1.5 rounded-xl text-left border-2 transition-all ${
                     active
                       ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                      : "border-border bg-background text-foreground hover:border-primary/40"
                   }`}
                 >
-                  {active && <Check className="inline h-3 w-3 mr-1" />}
-                  {grade}
+                  <span className="text-xs font-bold leading-tight">
+                    {active && <Check className="inline h-3 w-3 mr-1" />}
+                    {display ?? grade}
+                  </span>
+                  {display && (
+                    <span className={`text-[10px] font-mono leading-tight ${active ? "text-primary/70" : "text-muted-foreground"}`}>
+                      {grade}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -379,19 +428,15 @@ function WizardForm({
         )}
       </div>
 
-      {/* 3. Shape — shown only if grade is selected and has shapes in catalogue */}
-      {form.materialGrade && availableShapes.length > 0 && (
+      {/* 3. Shape — only when grade has multiple shapes */}
+      {form.materialGrade && availableShapes.length > 1 && (
         <div className="space-y-2">
-          <label className="text-sm font-bold">
-            {s()}. Shape{" "}
-            <span className="font-normal text-muted-foreground">(filters sizes and operations)</span>
-          </label>
+          <label className="text-sm font-bold">{s()}. Shape</label>
           <div className="flex flex-wrap gap-2">
-            {availableShapes.map((shapeVal) => {
-              const active = form.shape === shapeVal;
-              const label = MAT_SHAPES.find((x) => x.value === shapeVal)?.label ?? shapeVal;
+            {availableShapes.map((sv) => {
+              const active = form.shape === sv;
               return (
-                <button key={shapeVal} type="button" onClick={() => handleShapeChange(active ? "" : shapeVal)}
+                <button key={sv} type="button" onClick={() => handleShapeChange(active ? "" : sv)}
                   className={`px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-all ${
                     active
                       ? "border-primary bg-primary/10 text-primary"
@@ -399,26 +444,30 @@ function WizardForm({
                   }`}
                 >
                   {active && <Check className="inline h-3 w-3 mr-1" />}
-                  {label}
+                  {shapeLabel(sv)}
                 </button>
               );
             })}
           </div>
-          {form.shape && (
-            <p className="text-[10px] text-primary font-semibold">
-              {shapeLabel} — operations that don&rsquo;t apply to this shape are hidden below.
-            </p>
-          )}
         </div>
       )}
 
-      {/* 4. Profile / diameter — shown when grade+shape has entries */}
-      {form.materialGrade && form.shape && availableProfiles.length > 0 && (
+      {/* 4. Size / diameter — only when grade+shape has multiple options */}
+      {form.materialGrade && form.shape && availableProfiles.length > 1 && (
         <div className="space-y-2">
-          <label className="text-sm font-bold">{s()}. Size / diameter</label>
+          <label className="text-sm font-bold">
+            {s()}. Size
+            {(form.shape === "rod" || form.shape === "hex") && (
+              <span className="font-normal text-muted-foreground text-xs ml-1">(diameter)</span>
+            )}
+            {(form.shape === "sheet" || form.shape === "plate") && (
+              <span className="font-normal text-muted-foreground text-xs ml-1">(thickness)</span>
+            )}
+          </label>
           <div className="flex flex-wrap gap-2">
             {availableProfiles.map((mat) => {
               const active = form.materialId === mat.id;
+              const label = fmtProfile(form.shape, mat.profile) || mat.unit;
               return (
                 <button key={mat.id} type="button" onClick={() => handleProfileChange(mat)}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold border-2 transition-all ${
@@ -427,8 +476,7 @@ function WizardForm({
                       : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   }`}
                 >
-                  {active && <Check className="inline h-3 w-3 mr-1" />}
-                  {mat.profile ?? mat.unit}
+                  {active && <Check className="inline h-3 w-3 mr-1" />}{label}
                 </button>
               );
             })}
@@ -436,7 +484,27 @@ function WizardForm({
         </div>
       )}
 
-      {/* 5. Qty per piece — shown when a specific profile is selected */}
+      {/* Material context summary strip */}
+      {hasAnyMaterial && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl">
+          <div className="flex-1 flex items-center gap-1.5 flex-wrap text-xs font-semibold text-blue-800 min-w-0">
+            {contextParts.map((p, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-blue-300">·</span>}
+                {p}
+              </span>
+            ))}
+            {availableShapes.length === 1 && form.shape && (
+              <span className="text-blue-400 font-normal text-[10px]">(auto-selected)</span>
+            )}
+          </div>
+          <button type="button" onClick={clearMaterial} className="flex-shrink-0 text-blue-400 hover:text-blue-600">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 5. Material per piece */}
       {selectedProfile && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
@@ -447,7 +515,7 @@ function WizardForm({
             type="number" min="0" step="0.001"
             value={form.materialQtyPerPiece}
             onChange={(e) => onChange({ materialQtyPerPiece: e.target.value })}
-            placeholder={`e.g. 250 ${selectedProfile.unit}`}
+            placeholder={`e.g. 250 ${selectedProfile.unit} of ${fmtProfile(form.shape, selectedProfile.profile) || selectedProfile.unit}`}
             className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
           />
         </div>
@@ -459,6 +527,12 @@ function WizardForm({
           {s()}. Required operations{" "}
           <span className="font-normal text-muted-foreground">(select all that apply)</span>
         </label>
+        {form.shape && hiddenOps.length > 0 && (
+          <p className="text-[10px] text-muted-foreground bg-muted px-2.5 py-1.5 rounded-lg">
+            Showing operations typical for <strong>{shapeLabel(form.shape)}</strong>.
+            {hiddenOps.length} operation{hiddenOps.length !== 1 ? "s" : ""} hidden below.
+          </p>
+        )}
         <ChipSelect
           options={operationOptions}
           selected={form.operations}
@@ -500,7 +574,7 @@ function WizardForm({
         </label>
         <textarea
           value={form.notes} onChange={(e) => onChange({ notes: e.target.value })}
-          placeholder="e.g. parts come pre-cut, tight tolerance holes, client provides own paint…"
+          placeholder="e.g. parts come pre-cut, tight tolerance holes, client provides own paint, needs deburring after every step…"
           rows={3}
           className="w-full px-3 py-2 rounded-xl border-2 border-input bg-background text-sm resize-none focus:border-primary focus:outline-none"
         />
@@ -508,7 +582,7 @@ function WizardForm({
 
       {!canSubmit && (
         <p className="text-xs text-center text-muted-foreground">
-          Fill in part name and at least one operation to continue.
+          Fill in part name and at least one operation to generate.
         </p>
       )}
 
@@ -546,7 +620,7 @@ function CartList({ items, onRemove }: { items: FormData[]; onRemove: (i: number
           <div className="min-w-0">
             <p className="text-xs font-bold truncate">{item.partName}</p>
             <p className="text-[10px] text-muted-foreground truncate">
-              {item.materialName || "—"} · {item.operations.join(", ")}
+              {item.materialName || "—"}{item.shape ? ` · ${shapeLabel(item.shape)}` : ""} · {item.operations.join(", ")}
             </p>
           </div>
           <button type="button" onClick={() => onRemove(i)}
@@ -623,7 +697,6 @@ export default function AdminAiWizardPage() {
 
   const operationOptions = stationTypes.map((s) => s.name);
   const patchForm = (patch: Partial<FormData>) => setForm((f) => ({ ...f, ...patch }));
-
   const canSubmit = form.partName.trim().length >= 2 && form.operations.length > 0;
 
   const addToCart = () => {
@@ -642,6 +715,7 @@ export default function AdminAiWizardPage() {
       body: JSON.stringify({
         partName: item.partName.trim(),
         material: item.materialName || undefined,
+        materialGrade: item.materialGrade || undefined,
         shape: item.shape || undefined,
         operations: item.operations,
         surfaceFinish: item.surfaceFinish[0] ?? undefined,
@@ -655,7 +729,6 @@ export default function AdminAiWizardPage() {
     const allItems = [...cart, { ...form }];
     setGenerating(true);
     setProgress({ current: 0, total: allItems.length });
-
     const results: BatchResult[] = [];
     for (let i = 0; i < allItems.length; i++) {
       setProgress({ current: i + 1, total: allItems.length });
@@ -665,12 +738,8 @@ export default function AdminAiWizardPage() {
         results.push({ item: allItems[i], result: null, error: err.message, saved: false });
       }
     }
-
-    setGenerating(false);
-    setProgress(null);
-    setBatchResults(results);
-    setCart([]);
-    setForm({ ...EMPTY_FORM });
+    setGenerating(false); setProgress(null);
+    setBatchResults(results); setCart([]); setForm({ ...EMPTY_FORM });
   };
 
   const reset = () => { setBatchResults(null); setCart([]); setForm({ ...EMPTY_FORM }); };
@@ -705,10 +774,8 @@ export default function AdminAiWizardPage() {
                 Generating {progress.current} of {progress.total}…
               </p>
               <div className="h-1.5 rounded-full bg-primary/20 overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-500"
-                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                />
+                <div className="h-full bg-primary rounded-full transition-all duration-500"
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }} />
               </div>
             </div>
           )}
