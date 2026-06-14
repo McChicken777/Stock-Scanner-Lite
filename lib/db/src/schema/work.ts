@@ -8,16 +8,23 @@ export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress
 export const workProcedureStatusEnum = pgEnum("work_procedure_status", ["not_started", "in_progress", "completed"]);
 
 // Raw material catalogue: company-specific material specs (steel grades, profiles, etc.)
+// shape: rod | hex | sheet | plate | flat_bar | tube_round | tube_sq | angle | channel | other
+// profile: human-readable dimension string ("30" for Ø30 rod, "3" for 3mm sheet, "50×10" for flat bar)
+// profileMm: primary numeric dimension in mm (diameter for rod, thickness for sheet, etc.)
+//            stored for future cutting-optimization and stock deduction
+// stockMm: current stock length/quantity in mm (rods/bars) or pcs (sheets) — reserved for future
 export const rawMaterialsTable = pgTable("raw_materials", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  unit: text("unit").notNull().default("kg"),
+  shape: text("shape"),
+  profile: text("profile"),
+  profileMm: numeric("profile_mm", { precision: 10, scale: 2, mode: "number" }),
+  unit: text("unit").notNull().default("mm"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type RawMaterial = typeof rawMaterialsTable.$inferSelect;
-
 // Item templates (admin-configurable blueprints)
 export const workTemplatesTable = pgTable("work_templates", {
   id: serial("id").primaryKey(),

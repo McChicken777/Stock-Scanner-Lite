@@ -11,25 +11,51 @@ import { useAuth } from "@/contexts/auth";
 
 // ─── Raw Materials tab ────────────────────────────────────────────────────────
 
-interface RawMaterial { id: number; name: string; unit: string; notes: string | null; }
-const RAW_UNITS = ["kg", "m", "mm", "pcs", "L", "m²", "m³"];
+interface RawMaterial {
+  id: number; name: string; shape: string | null; profile: string | null;
+  profileMm: number | null; unit: string; notes: string | null;
+}
+
+const RAW_UNITS = ["mm", "m", "kg", "pcs", "L", "m²"];
+
+export const MAT_SHAPES = [
+  { value: "rod",        label: "Round bar / rod",      profileHint: "Ø mm — e.g. 30" },
+  { value: "hex",        label: "Hex bar",              profileHint: "A/F mm — e.g. 27" },
+  { value: "sheet",      label: "Sheet metal",          profileHint: "thickness mm — e.g. 3" },
+  { value: "plate",      label: "Plate",                profileHint: "thickness mm — e.g. 20" },
+  { value: "flat_bar",   label: "Flat bar",             profileHint: "W×H mm — e.g. 50×10" },
+  { value: "tube_round", label: "Round tube",           profileHint: "OD×wall mm — e.g. 60.3×3.6" },
+  { value: "tube_sq",    label: "Square / rect. tube",  profileHint: "W×H×wall mm — e.g. 50×50×3" },
+  { value: "angle",      label: "Angle iron (L)",       profileHint: "A×B×t mm — e.g. 50×50×5" },
+  { value: "channel",    label: "Channel (U/C)",        profileHint: "H×W×t mm — e.g. 100×50×5" },
+  { value: "other",      label: "Other / custom",       profileHint: "describe dimensions" },
+] as const;
+
+function shapeLabel(v: string | null) {
+  return MAT_SHAPES.find((s) => s.value === v)?.label ?? v ?? "";
+}
 
 function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(mat.name);
+  const [shape, setShape] = useState(mat.shape ?? "");
+  const [profile, setProfile] = useState(mat.profile ?? "");
   const [unit, setUnit] = useState(mat.unit);
   const [notes, setNotes] = useState(mat.notes ?? "");
   const [saving, setSaving] = useState(false);
+
+  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "dimensions";
 
   const save = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
+      const profileMm = parseFloat(profile.replace(/[^\d.]/g, "")) || null;
       const r = await fetch(`/api/raw-materials/${mat.id}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
+        body: JSON.stringify({ name: name.trim(), shape: shape || undefined, profile: profile.trim() || undefined, profileMm, unit, notes: notes.trim() || undefined }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed to save"); }
       onRefresh(); setEditing(false);
@@ -48,18 +74,28 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
 
   if (editing) return (
     <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
-      <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-        className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
-        placeholder="Material name" />
       <div className="flex gap-2">
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
+          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
+          placeholder="Grade / material — e.g. 42CrMo4, S235" />
         <select value={unit} onChange={(e) => setUnit(e.target.value)}
           className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
           {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
         </select>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)}
-          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-          placeholder="Notes (optional)" />
       </div>
+      <div className="flex gap-2">
+        <select value={shape} onChange={(e) => { setShape(e.target.value); setProfile(""); }}
+          className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+          <option value="">Shape…</option>
+          {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+        <input value={profile} onChange={(e) => setProfile(e.target.value)}
+          className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+          placeholder={profileHint} />
+      </div>
+      <input value={notes} onChange={(e) => setNotes(e.target.value)}
+        className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+        placeholder="Notes (optional)" />
       <div className="flex gap-2 justify-end">
         <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setEditing(false)}>
           <X className="h-3.5 w-3.5 mr-1" /> Cancel
@@ -74,14 +110,25 @@ function RawMaterialRow({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () =>
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 border-border bg-card">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold truncate">{mat.name}</p>
-        {mat.notes && <p className="text-xs text-muted-foreground truncate">{mat.notes}</p>}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-sm font-semibold">{mat.name}</p>
+          {mat.shape && (
+            <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">
+              {shapeLabel(mat.shape)}
+            </span>
+          )}
+          {mat.profile && (
+            <span className="text-[10px] font-bold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
+              {mat.profile} {mat.unit}
+            </span>
+          )}
+        </div>
+        {mat.notes && <p className="text-xs text-muted-foreground truncate mt-0.5">{mat.notes}</p>}
       </div>
-      <span className="text-xs font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full flex-shrink-0">{mat.unit}</span>
-      <button onClick={() => setEditing(true)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+      <button onClick={() => setEditing(true)} className="flex-shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
         <Pencil className="h-3.5 w-3.5" />
       </button>
-      <button onClick={del} className="text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
+      <button onClick={del} className="flex-shrink-0 text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -92,10 +139,14 @@ function RawMaterialsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [name, setName] = useState("");
-  const [unit, setUnit] = useState("kg");
+  const [shape, setShape] = useState("");
+  const [profile, setProfile] = useState("");
+  const [unit, setUnit] = useState("mm");
   const [notes, setNotes] = useState("");
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "dimensions";
 
   const { data: mats = [], isLoading } = useQuery<RawMaterial[]>({
     queryKey: ["/api/raw-materials"],
@@ -112,13 +163,21 @@ function RawMaterialsTab() {
     if (!name.trim()) return;
     setSaving(true);
     try {
+      const profileMm = parseFloat(profile.replace(/[^\d.]/g, "")) || null;
       const r = await fetch("/api/raw-materials", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), unit, notes: notes.trim() || undefined }),
+        body: JSON.stringify({
+          name: name.trim(),
+          shape: shape || undefined,
+          profile: profile.trim() || undefined,
+          profileMm,
+          unit,
+          notes: notes.trim() || undefined,
+        }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status} — try restarting the server`); }
-      setName(""); setUnit("kg"); setNotes(""); setAdding(false);
+      setName(""); setShape(""); setProfile(""); setUnit("mm"); setNotes(""); setAdding(false);
       refresh();
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
@@ -135,7 +194,7 @@ function RawMaterialsTab() {
         <div className="text-center py-10 text-muted-foreground">
           <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
           <p className="text-sm font-semibold">No materials yet</p>
-          <p className="text-xs mt-0.5">Add the materials your shop uses — e.g. S235, 42CrMo4, AL6082</p>
+          <p className="text-xs mt-0.5">Add the materials your shop uses — e.g. S235 rod Ø30, 42CrMo4 rod Ø40</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -148,7 +207,17 @@ function RawMaterialsTab() {
           <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && save()}
             className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
-            placeholder="e.g. S235 structural steel, 42CrMo4 rod…" />
+            placeholder="Grade / material — e.g. S235, 42CrMo4" />
+          <div className="flex gap-2">
+            <select value={shape} onChange={(e) => { setShape(e.target.value); setProfile(""); }}
+              className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+              <option value="">Shape…</option>
+              {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+            <input value={profile} onChange={(e) => setProfile(e.target.value)}
+              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+              placeholder={shape ? profileHint : "Profile / dimensions"} />
+          </div>
           <div className="flex gap-2">
             <select value={unit} onChange={(e) => setUnit(e.target.value)}
               className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
