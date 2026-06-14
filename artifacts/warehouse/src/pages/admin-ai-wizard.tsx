@@ -50,10 +50,7 @@ interface BatchResult {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const FINISH_OPTIONS = [
-  "Raw / unfinished", "Sandblasted", "Painted (brush)", "Painted (spray)",
-  "Powder coated", "Anodized", "Hot-dip galvanized", "Zinc plated", "Polished",
-];
+const FINISH_OPTIONS = ["Raw", "Painted", "Galvanized"];
 
 const EMPTY_FORM: FormData = {
   partName: "", materialId: null, materialName: "", operations: [],
