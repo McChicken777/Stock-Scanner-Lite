@@ -3,8 +3,9 @@ import {
   db, purchaseOrdersTable, purchaseOrderItemsTable, productsTable,
   stockTable, locationsTable, suppliersTable, workItemStepsTable, productComponentsTable,
   workProjectsTable, workProjectItemsTable, stockReservationsTable,
+  restockRequestsTable, supplierProductsTable, usersTable,
 } from "@workspace/db";
-import { eq, and, sum, sql, inArray } from "drizzle-orm";
+import { eq, and, sum, sql, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -484,6 +485,112 @@ router.put("/:id/items/:itemId/arrive", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to mark item as arrived");
     res.status(500).json({ error: "Failed to mark item as arrived" });
+  }
+});
+
+// ─── RESTOCK REQUESTS ─────────────────────────────────────────────────────────
+
+// POST /purchase-orders/restock-requests — any logged-in worker submits a request
+router.post("/restock-requests", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const userId = req.session.userId!;
+    const parsed = z.object({
+      productId: z.number().int().nullable().optional(),
+      productName: z.string().min(1),
+      quantity: z.number().int().min(1),
+      notes: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [row] = await db.insert(restockRequestsTable).values({
+      companyId,
+      userId,
+      productId: parsed.data.productId ?? null,
+      productName: parsed.data.productName,
+      quantity: parsed.data.quantity,
+      notes: parsed.data.notes ?? null,
+      status: "pending",
+    }).returning();
+
+    res.status(201).json(row);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create restock request");
+    res.status(500).json({ error: "Failed to create restock request" });
+  }
+});
+
+// GET /purchase-orders/restock-requests — admin views all pending, grouped by supplier
+router.get("/restock-requests", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const status = (req.query.status as string) ?? "pending";
+
+    const rows = await db
+      .select({
+        rr: restockRequestsTable,
+        username: usersTable.username,
+        supplierName: suppliersTable.name,
+        supplierId: supplierProductsTable.supplierId,
+      })
+      .from(restockRequestsTable)
+      .leftJoin(usersTable, eq(restockRequestsTable.userId, usersTable.id))
+      .leftJoin(supplierProductsTable, and(
+        eq(supplierProductsTable.productId, restockRequestsTable.productId!),
+        eq(supplierProductsTable.companyId, companyId),
+      ))
+      .leftJoin(suppliersTable, eq(supplierProductsTable.supplierId, suppliersTable.id))
+      .where(and(
+        eq(restockRequestsTable.companyId, companyId),
+        eq(restockRequestsTable.status, status as "pending" | "approved" | "ordered" | "dismissed"),
+      ))
+      .orderBy(desc(restockRequestsTable.createdAt));
+
+    // Group by supplier
+    const supplierMap = new Map<string, { supplierId: number | null; supplierName: string | null; requests: object[] }>();
+    for (const row of rows) {
+      const key = row.supplierId != null ? String(row.supplierId) : "none";
+      if (!supplierMap.has(key)) {
+        supplierMap.set(key, {
+          supplierId: row.supplierId ?? null,
+          supplierName: row.supplierName ?? null,
+          requests: [],
+        });
+      }
+      supplierMap.get(key)!.requests.push({
+        ...row.rr,
+        username: row.username,
+      });
+    }
+
+    res.json(Array.from(supplierMap.values()));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list restock requests");
+    res.status(500).json({ error: "Failed to list restock requests" });
+  }
+});
+
+// PUT /purchase-orders/restock-requests/:id — admin approves/dismisses
+router.put("/restock-requests/:id", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id, 10);
+    const parsed = z.object({
+      status: z.enum(["approved", "ordered", "dismissed"]),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const [updated] = await db
+      .update(restockRequestsTable)
+      .set({ status: parsed.data.status, resolvedAt: new Date() })
+      .where(and(eq(restockRequestsTable.id, id), eq(restockRequestsTable.companyId, companyId)))
+      .returning();
+
+    if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to update restock request");
+    res.status(500).json({ error: "Failed to update restock request" });
   }
 });
 

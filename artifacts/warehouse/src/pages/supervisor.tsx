@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   AlertTriangle, Calendar, CheckSquare, Clock, Flag, MoreVertical, PackageCheck,
-  SkipForward, Truck, User, UserCog, Zap, MapPin,
+  SkipForward, Truck, User, UserCog, Zap, MapPin, RotateCcw,
 } from "lucide-react";
 
 interface DailyPlanStep {
@@ -152,6 +152,19 @@ function StepActionsMenu({
     onError: handleErr,
   });
 
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/work/steps/${step.id}/reset`, {
+        method: "PATCH", credentials: "include",
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Failed to reset");
+      return d;
+    },
+    onSuccess: () => { invalidate(); toast({ title: "Step reset to not started" }); },
+    onError: handleErr,
+  });
+
   const urgentMutation = useMutation({
     mutationFn: async () => {
       const r = await fetch(`/api/work/projects/${step.projectId}/priority`, {
@@ -233,6 +246,20 @@ function StepActionsMenu({
         >
           <SkipForward className="h-4 w-4 mr-2" /> {t("supervisorSkipStep")}
         </DropdownMenuItem>
+
+        {step.status === "in_progress" && (
+          <DropdownMenuItem
+            disabled={resetMutation.isPending}
+            onClick={() => {
+              if (window.confirm(`Reset "${step.name}" back to not started? The active time log will be discarded.`)) {
+                resetMutation.mutate();
+              }
+            }}
+            className="text-rose-700 focus:text-rose-700"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" /> Reset step
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

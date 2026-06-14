@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable } from "@workspace/db";
+import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable, restockRequestsTable } from "@workspace/db";
 import { eq, and, sql, isNull, ne } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
@@ -44,7 +44,17 @@ router.get("/attention", requireAuth, async (req, res) => {
       ));
     const overdueJobs = overdueRows.length;
 
-    res.json({ total: leaveRequests + lowStock + overdueJobs, leaveRequests, lowStock, overdueJobs });
+    // Count pending restock requests from workers
+    const pendingRestock = await db
+      .select({ id: restockRequestsTable.id })
+      .from(restockRequestsTable)
+      .where(and(
+        eq(restockRequestsTable.companyId, companyId),
+        eq(restockRequestsTable.status, "pending"),
+      ));
+    const restockRequests = pendingRestock.length;
+
+    res.json({ total: leaveRequests + lowStock + overdueJobs + restockRequests, leaveRequests, lowStock, overdueJobs, restockRequests });
   } catch (err: any) {
     console.error("attention endpoint error:", err?.message ?? err);
     res.status(500).json({ error: "Failed to get attention counts" });

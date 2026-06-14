@@ -269,6 +269,129 @@ Rules:
   }
 });
 
+// ─── AI TEMPLATE WIZARD ───────────────────────────────────────────────────────
+// POST /work/ai-template-wizard — structured 6-question input → full template steps suggestion
+router.post("/ai-template-wizard", requireAdmin, async (req, res) => {
+  try {
+    const parsed = z.object({
+      partName: z.string().min(1),
+      material: z.string().min(1),
+      operations: z.array(z.string()),
+      surfaceFinish: z.string().optional(),
+      batchQuantity: z.number().int().min(1).optional(),
+      notes: z.string().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const companyId = req.session.companyId!;
+    const { partName, material, operations, surfaceFinish, batchQuantity, notes } = parsed.data;
+
+    // Load company's roles and station types for context
+    const [companyRoles, companyStations] = await Promise.all([
+      db.select({ id: rolesTable.id, name: rolesTable.name }).from(rolesTable).where(eq(rolesTable.companyId, companyId)),
+      db.select({ id: stationTypesTable.id, name: stationTypesTable.name }).from(stationTypesTable).where(eq(stationTypesTable.companyId, companyId)),
+    ]);
+
+    const roleList = companyRoles.length > 0
+      ? companyRoles.map((r) => `- id:${r.id} "${r.name}"`).join("\n")
+      : "None defined";
+    const stationList = companyStations.length > 0
+      ? companyStations.map((s) => `- id:${s.id} "${s.name}"`).join("\n")
+      : "None defined";
+
+    const prompt = `You are a production planning assistant for a custom metal/wood fabrication workshop.
+
+The customer needs this part manufactured:
+- Part name: ${partName}
+- Material: ${material}
+- Required operations: ${operations.join(", ")}
+${surfaceFinish ? `- Surface finish: ${surfaceFinish}` : ""}
+${batchQuantity ? `- Batch quantity: ${batchQuantity} pieces` : ""}
+${notes ? `- Additional notes: ${notes}` : ""}
+
+Available roles at this workshop:
+${roleList}
+
+Available workstation types at this workshop:
+${stationList}
+
+Generate a realistic, ordered production step sequence for this part.
+
+Respond with ONLY a valid JSON object (no markdown, no explanation):
+{
+  "templateName": "Suggested template name",
+  "steps": [
+    {
+      "name": "Step name (2-5 words)",
+      "roleId": null,
+      "stationTypeId": null,
+      "durationEstimate": 30,
+      "notes": "Brief tip for this step"
+    }
+  ]
+}
+
+Rules:
+- 3-10 steps, ordered by production sequence
+- roleId: null or one of the IDs above
+- stationTypeId: null or one of the station IDs above
+- durationEstimate: realistic minutes per piece
+- Derive steps only from the operations listed — don't add operations not mentioned
+- Surface finish steps go near the end (before final assembly/inspection)`;
+
+    let text: string;
+    try {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const block = message.content[0];
+      if (!block || block.type !== "text") throw new Error("AI returned no text");
+      text = block.text;
+    } catch (aiErr) {
+      req.log.warn({ err: aiErr }, "AI wizard call failed");
+      const { status, message: msg } = friendlyAiError(aiErr);
+      res.status(status).json({ error: msg });
+      return;
+    }
+
+    let result: { templateName: string; steps: { name: string; roleId: number | null; stationTypeId: number | null; durationEstimate: number | null; notes: string }[] };
+    try {
+      const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      result = JSON.parse(cleaned);
+      if (!result.steps || !Array.isArray(result.steps)) throw new Error("Invalid shape");
+    } catch {
+      res.status(502).json({ error: "AI returned an unexpected format. Please try again." });
+      return;
+    }
+
+    // Sanitise
+    const validRoleIds = new Set(companyRoles.map((r) => r.id));
+    const validStationIds = new Set(companyStations.map((s) => s.id));
+    const cleanSteps = result.steps
+      .filter((s) => s && typeof s.name === "string" && s.name.trim())
+      .slice(0, 12)
+      .map((s) => ({
+        name: String(s.name).trim().slice(0, 120),
+        roleId: typeof s.roleId === "number" && validRoleIds.has(s.roleId) ? s.roleId : null,
+        stationTypeId: typeof s.stationTypeId === "number" && validStationIds.has(s.stationTypeId) ? s.stationTypeId : null,
+        durationEstimate: typeof s.durationEstimate === "number" && s.durationEstimate > 0 ? Math.round(s.durationEstimate) : null,
+        notes: typeof s.notes === "string" ? s.notes.slice(0, 300) : null,
+      }));
+
+    res.json({
+      templateName: String(result.templateName ?? partName).trim().slice(0, 200),
+      steps: cleanSteps,
+      roles: companyRoles,
+      stationTypes: companyStations,
+    });
+  } catch (err) {
+    req.log.error({ err }, "AI template wizard failed");
+    res.status(500).json({ error: "Template wizard failed. Please try again." });
+  }
+});
+
 // ─── OUTLINE IMPORT ───────────────────────────────────────────────────────────
 // Accepts a structured outline payload and bulk-creates a template + BOM + steps in one shot.
 
@@ -1202,6 +1325,70 @@ router.post("/templates/:templateId/components/:componentId/apply-preset", requi
   } catch (err) {
     req.log.error({ err }, "Failed to apply preset to component");
     res.status(500).json({ error: "Failed to apply preset to component" });
+  }
+});
+
+// Import steps from an existing template into a BOM component
+// POST /work/templates/:templateId/components/:componentId/import-steps
+// Body: { sourceTemplateId: number, clearExisting?: boolean }
+router.post("/templates/:templateId/components/:componentId/import-steps", requireAdmin, async (req, res) => {
+  try {
+    const templateId = Number(req.params.templateId);
+    const componentId = Number(req.params.componentId);
+    const companyId = req.session.companyId!;
+    if (!await getOwnedComponent(templateId, componentId, companyId)) { res.status(404).json({ error: "Not found" }); return; }
+
+    const parsed = z.object({
+      sourceTemplateId: z.number().int(),
+      clearExisting: z.boolean().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    // Verify source template belongs to same company
+    const [srcTemplate] = await db.select().from(workTemplatesTable)
+      .where(and(eq(workTemplatesTable.id, parsed.data.sourceTemplateId), eq(workTemplatesTable.companyId, companyId)));
+    if (!srcTemplate) { res.status(404).json({ error: "Source template not found" }); return; }
+
+    // Get top-level steps from source template (templateComponentId is null)
+    const srcSteps = await db.select().from(workStepsTable)
+      .where(and(
+        eq(workStepsTable.templateId, parsed.data.sourceTemplateId),
+        isNull(workStepsTable.templateComponentId),
+      ))
+      .orderBy(workStepsTable.sortOrder);
+
+    if (srcSteps.length === 0) { res.status(400).json({ error: "Source template has no top-level steps to import" }); return; }
+
+    if (parsed.data.clearExisting) {
+      await db.delete(workStepsTable)
+        .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)));
+    }
+
+    // Get current max sortOrder
+    const existing = await db.select().from(workStepsTable)
+      .where(and(eq(workStepsTable.templateId, templateId), eq(workStepsTable.templateComponentId, componentId)));
+    const offset = existing.length;
+
+    const inserted = await db.insert(workStepsTable).values(
+      srcSteps.map((s, i) => ({
+        templateId,
+        templateComponentId: componentId,
+        name: s.name,
+        sortOrder: offset + i,
+        roleId: s.roleId,
+        batchMode: s.batchMode,
+        durationEstimate: s.durationEstimate,
+        stationTypeId: s.stationTypeId,
+        qcEnabled: s.qcEnabled,
+        qcInstructions: s.qcInstructions,
+        qcPhotoUrl: s.qcPhotoUrl,
+      }))
+    ).returning();
+
+    res.status(201).json({ imported: inserted.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to import steps from template");
+    res.status(500).json({ error: "Failed to import steps from template" });
   }
 });
 
@@ -3188,6 +3375,30 @@ router.patch("/steps/:id/skip", requireSupervisorOrAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to skip step");
     res.status(500).json({ error: "Failed to skip step" });
+  }
+});
+
+// PATCH /work/steps/:id/reset — supervisor resets a step back to not_started (clears in_progress, drops open time logs)
+router.patch("/steps/:id/reset", requireSupervisorOrAdmin, async (req, res) => {
+  try {
+    const stepId = Number(req.params.id);
+    const companyId = req.session.companyId!;
+
+    const existing = await getOwnedStep(stepId, companyId);
+    if (!existing) { res.status(404).json({ error: "Step not found" }); return; }
+
+    // Close any open time logs (abandon the session)
+    await db.delete(workTimeLogsTable)
+      .where(and(eq(workTimeLogsTable.stepId, stepId), isNull(workTimeLogsTable.endTime)));
+
+    const [updated] = await db.update(workItemStepsTable)
+      .set({ status: "not_started" })
+      .where(eq(workItemStepsTable.id, stepId))
+      .returning();
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset step");
+    res.status(500).json({ error: "Failed to reset step" });
   }
 });
 

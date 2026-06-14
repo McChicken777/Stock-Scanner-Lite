@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, serial, pgEnum, varchar, numeric } f
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 import { suppliersTable } from "./suppliers";
+import { usersTable } from "./users";
 import { relations } from "drizzle-orm";
 
 export const purchaseOrderStatusEnum = pgEnum("purchase_order_status", [
@@ -67,8 +68,26 @@ export const supplierProductsRelations = relations(supplierProductsTable, ({ one
   product: one(productsTable, { fields: [supplierProductsTable.productId], references: [productsTable.id] }),
 }));
 
+export const restockRequestStatusEnum = pgEnum("restock_request_status", [
+  "pending", "approved", "ordered", "dismissed",
+]);
+
+export const restockRequestsTable = pgTable("restock_requests", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
+  productName: text("product_name").notNull(),
+  quantity: integer("quantity").notNull(),
+  notes: text("notes"),
+  status: restockRequestStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+
 export type PurchaseOrder = typeof purchaseOrdersTable.$inferSelect;
 export type PurchaseOrderItem = typeof purchaseOrderItemsTable.$inferSelect;
 export type ShortageFlag = typeof shortageFlagsTable.$inferSelect;
 export type StockReservation = typeof stockReservationsTable.$inferSelect;
 export type SupplierProduct = typeof supplierProductsTable.$inferSelect;
+export type RestockRequest = typeof restockRequestsTable.$inferSelect;

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Plus, ShoppingCart, Package2, CheckCircle2,
   Truck, AlertCircle, ChevronRight, Trash2, Edit2, X, Mail,
+  Bell, User, Check, XCircle,
 } from "lucide-react";
 
 interface PurchaseOrder {
@@ -80,6 +81,23 @@ interface SupplierProductLink {
 interface Location {
   id: string;
   description: string | null;
+}
+
+interface RestockRequest {
+  id: number;
+  productId: number | null;
+  productName: string;
+  quantity: number;
+  notes: string | null;
+  status: "pending" | "approved" | "ordered" | "dismissed";
+  username: string | null;
+  createdAt: string;
+}
+
+interface RestockGroup {
+  supplierId: number | null;
+  supplierName: string | null;
+  requests: RestockRequest[];
 }
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -542,6 +560,101 @@ function PODetailPage({ poId }: { poId: number }) {
   );
 }
 
+// ─── Restock Requests Section ─────────────────────────────────────────────────
+
+function RestockRequestsSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: groups = [], isLoading } = useQuery<RestockGroup[]>({
+    queryKey: ["/api/purchase-orders/restock-requests"],
+    queryFn: () => apiFetch("/api/purchase-orders/restock-requests"),
+    refetchInterval: 30_000,
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: "approved" | "ordered" | "dismissed" }) =>
+      apiFetch(`/api/purchase-orders/restock-requests/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders/restock-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/attention"] });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="space-y-2">{[1,2].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>;
+
+  const total = groups.reduce((n, g) => n + g.requests.length, 0);
+
+  if (total === 0) return (
+    <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
+      <Bell className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+      <p className="font-semibold text-muted-foreground">No pending restock requests</p>
+      <p className="text-sm text-muted-foreground mt-1">Workers can request consumables from their task view.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group) => (
+        <div key={group.supplierId ?? "none"} className="border-2 border-border rounded-xl overflow-hidden">
+          <div className="bg-muted/60 px-3 py-2 flex items-center gap-2">
+            <Truck className="h-4 w-4 text-muted-foreground" />
+            <p className="font-bold text-sm">
+              {group.supplierName ?? "No supplier linked"}
+            </p>
+            <span className="ml-auto text-xs font-bold text-muted-foreground">{group.requests.length} request{group.requests.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="divide-y">
+            {group.requests.map((req) => (
+              <div key={req.id} className="px-3 py-2.5 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm truncate">{req.productName}</p>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                      <span className="font-bold text-primary">×{req.quantity}</span>
+                      {req.username && (
+                        <span className="flex items-center gap-0.5">
+                          <User className="h-3 w-3" /> {req.username}
+                        </span>
+                      )}
+                      <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    {req.notes && <p className="text-xs text-muted-foreground mt-1 italic">"{req.notes}"</p>}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1 h-8 text-xs font-bold bg-green-600 hover:bg-green-700"
+                    disabled={resolveMutation.isPending}
+                    onClick={() => resolveMutation.mutate({ id: req.id, status: "ordered" })}
+                  >
+                    <Check className="h-3 w-3 mr-1" /> Mark Ordered
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                    disabled={resolveMutation.isPending}
+                    onClick={() => resolveMutation.mutate({ id: req.id, status: "dismissed" })}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" /> Dismiss
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── PO List + Create ──────────────────────────────────────────────────────────
 
 export default function PurchaseOrdersPage() {
@@ -563,6 +676,7 @@ export default function PurchaseOrdersPage() {
     ? (Number(new URLSearchParams(window.location.search).get("productId")) || null)
     : null;
 
+  const [tab, setTab] = useState<"orders" | "requests">("orders");
   const [showCreate, setShowCreate] = useState(isNewRoute ?? false);
   const [newSupplierId, setNewSupplierId] = useState("");
   const [newExpectedDate, setNewExpectedDate] = useState("");
@@ -601,6 +715,13 @@ export default function PurchaseOrdersPage() {
     queryFn: () => apiFetch("/api/products"),
     enabled: !!prefillProductId,
   });
+
+  const { data: restockGroups = [] } = useQuery<RestockGroup[]>({
+    queryKey: ["/api/purchase-orders/restock-requests"],
+    queryFn: () => apiFetch("/api/purchase-orders/restock-requests"),
+    staleTime: 30_000,
+  });
+  const restockCount = restockGroups.reduce((n, g) => n + g.requests.length, 0);
   const prefillProduct = prefillProductId ? products.find((p) => p.id === prefillProductId) ?? null : null;
 
   // Auto-select the prefill product's supplier when it loads
@@ -705,14 +826,40 @@ export default function PurchaseOrdersPage() {
         </Link>
         <div className="flex-1">
           <h1 className="text-xl font-bold">{t("posTitle")}</h1>
-          <p className="text-xs opacity-70">{pos.length} order{pos.length !== 1 ? "s" : ""}</p>
         </div>
-        <Button size="sm" className="font-bold h-9" onClick={() => setShowCreate((v) => !v)}>
-          <Plus className="h-3.5 w-3.5 mr-1" /> New PO
-        </Button>
+        {tab === "orders" && (
+          <Button size="sm" className="font-bold h-9" onClick={() => setShowCreate((v) => !v)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> New PO
+          </Button>
+        )}
       </div>
 
       <div className="p-4 space-y-4 pb-24">
+        {/* Tab switcher */}
+        <div className="flex gap-1 bg-muted/50 border rounded-xl p-1">
+          <button
+            onClick={() => setTab("orders")}
+            className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all ${tab === "orders" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Orders
+          </button>
+          <button
+            onClick={() => setTab("requests")}
+            className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${tab === "requests" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Worker Requests
+            {restockCount > 0 && (
+              <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                {restockCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {tab === "requests" && <RestockRequestsSection />}
+
+        {tab === "orders" && (<>
+
         {showCreate && (
           <div className="border-2 border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3">
             <p className="font-bold text-sm">New Purchase Order</p>
@@ -906,6 +1053,7 @@ export default function PurchaseOrdersPage() {
             </div>
           );
         })()}
+        </>)}
       </div>
     </div>
   );

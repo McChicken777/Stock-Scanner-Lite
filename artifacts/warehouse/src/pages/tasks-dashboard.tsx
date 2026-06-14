@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Play, CheckCircle2, AlertCircle, Calendar, Flag, Timer, User,
   Layers, ChevronDown, ChevronRight, SquareCheck, Square, Zap, MapPin, X, AlertTriangle, TrendingDown,
-  Clock, LogOut, ShieldCheck,
+  Clock, LogOut, ShieldCheck, ShoppingCart, Search,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -1089,12 +1089,153 @@ function BatchQueueTab() {
   );
 }
 
+// ─── Restock Request Modal ────────────────────────────────────────────────────
+
+function RestockModal({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<{ id: number; name: string } | null>(null);
+  const [freeText, setFreeText] = useState("");
+  const [qty, setQty] = useState(50);
+  const [notes, setNotes] = useState("");
+
+  const { data: products = [] } = useQuery<{ id: number; name: string; category: string }[]>({
+    queryKey: ["/api/products"],
+    queryFn: () => fetch("/api/products", { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const filtered = query.length >= 2
+    ? products.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())).slice(0, 10)
+    : [];
+
+  const submitMutation = useMutation({
+    mutationFn: (data: object) =>
+      fetch("/api/purchase-orders/restock-requests", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(async (r) => {
+        if (!r.ok) { const d = await r.json(); throw new Error(d.error || "Failed"); }
+        return r.json();
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders/restock-requests"] });
+      toast({ title: "Restock request sent" });
+      onClose();
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const productName = selected ? selected.name : freeText;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center sm:items-center p-4" onClick={onClose}>
+      <div className="bg-background rounded-2xl w-full max-w-sm shadow-xl space-y-4 p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-base flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-primary" /> Request Restock</p>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+        </div>
+
+        {/* Product search */}
+        {!selected && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground">What do you need?</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                autoFocus
+                placeholder="Search product or type name…"
+                value={query}
+                onChange={(e) => { setQuery(e.target.value); setFreeText(e.target.value); setSelected(null); }}
+                className="w-full h-11 pl-9 pr-3 rounded-lg border-2 border-input bg-background text-sm"
+              />
+            </div>
+            {filtered.length > 0 && (
+              <div className="border-2 border-border rounded-xl overflow-hidden max-h-44 overflow-y-auto">
+                {filtered.map((p) => (
+                  <button
+                    key={p.id}
+                    className="w-full text-left px-3 py-2.5 hover:bg-muted transition-colors border-b border-border/50 last:border-0"
+                    onClick={() => { setSelected(p); setQuery(p.name); setFreeText(p.name); }}
+                  >
+                    <p className="text-sm font-semibold">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">{p.category}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selected && (
+          <div className="flex items-center gap-2 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+            <p className="text-sm font-semibold flex-1 truncate">{selected.name}</p>
+            <button onClick={() => { setSelected(null); setQuery(""); setFreeText(""); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+        )}
+
+        {/* Quantity presets */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-muted-foreground">Quantity</label>
+          <div className="flex gap-2">
+            {[50, 100, 200, 500].map((q) => (
+              <button
+                key={q}
+                onClick={() => setQty(q)}
+                className={`flex-1 h-10 rounded-lg text-sm font-bold border-2 transition-all ${qty === q ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/40"}`}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+          <input
+            type="number"
+            min={1}
+            value={qty}
+            onChange={(e) => setQty(Math.max(1, Number(e.target.value)))}
+            className="w-full h-9 px-3 rounded-lg border border-input bg-background text-sm font-mono"
+            placeholder="Custom quantity"
+          />
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted-foreground">Note (optional)</label>
+          <input
+            type="text"
+            placeholder="e.g. urgent, or specific grade needed"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm"
+          />
+        </div>
+
+        <Button
+          className="w-full h-11 font-bold"
+          disabled={!productName.trim() || submitMutation.isPending}
+          onClick={() => submitMutation.mutate({
+            productId: selected?.id ?? null,
+            productName: productName.trim(),
+            quantity: qty,
+            notes: notes || undefined,
+          })}
+        >
+          {submitMutation.isPending ? "Sending…" : "Send Request"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TasksDashboardPage() {
   const { user } = useAuth();
   const { t } = useLang();
   const [tab, setTab] = useState<"my-steps" | "batch">("my-steps");
+  const [restockOpen, setRestockOpen] = useState(false);
 
   const { data: batchQueueData } = useQuery<BatchQueue>({
     queryKey: ["/api/work/batch-queue"],
@@ -1112,12 +1253,19 @@ export default function TasksDashboardPage() {
             {user?.username ? `${user.username} · ` : ""}Production steps across all active orders
           </p>
         </div>
-        <Link href="/work/reorder-queue">
-          <Button size="sm" variant="outline" className="h-8 font-bold text-xs border-rose-200 text-rose-700 hover:bg-rose-50 flex-shrink-0">
-            <TrendingDown className="h-3.5 w-3.5 mr-1" /> {t("tasksReorder")}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button size="sm" variant="outline" className="h-8 font-bold text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
+            onClick={() => setRestockOpen(true)}>
+            <ShoppingCart className="h-3.5 w-3.5 mr-1" /> Restock
           </Button>
-        </Link>
+          <Link href="/work/reorder-queue">
+            <Button size="sm" variant="outline" className="h-8 font-bold text-xs border-rose-200 text-rose-700 hover:bg-rose-50">
+              <TrendingDown className="h-3.5 w-3.5 mr-1" /> {t("tasksReorder")}
+            </Button>
+          </Link>
+        </div>
       </div>
+      {restockOpen && <RestockModal onClose={() => setRestockOpen(false)} />}
 
       <ClockInBanner />
 
