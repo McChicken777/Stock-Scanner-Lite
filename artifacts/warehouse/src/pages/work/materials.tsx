@@ -12,8 +12,8 @@ import { useAuth } from "@/contexts/auth";
 // ─── Raw Materials tab ────────────────────────────────────────────────────────
 
 interface RawMaterial {
-  id: number; name: string; shape: string | null; profile: string | null;
-  profileMm: number | null; unit: string; notes: string | null;
+  id: number; name: string; displayName: string | null; shape: string | null;
+  profile: string | null; profileMm: number | null; unit: string; notes: string | null;
 }
 
 const RAW_UNITS = ["mm", "m", "kg", "pcs", "L", "m²"];
@@ -35,6 +35,30 @@ function shapeLabel(v: string | null) {
   return MAT_SHAPES.find((s) => s.value === v)?.label ?? v ?? "";
 }
 
+// Returns the display string for a profile chip — adds Ø prefix for rod/hex
+function formatProfile(shape: string | null, profile: string | null): string {
+  if (!profile || !profile.trim()) return "";
+  const p = profile.trim();
+  if ((shape === "rod" || shape === "hex") && /^\d/.test(p) && !p.includes("Ø")) return `Ø${p}`;
+  return p;
+}
+
+// Human-readable label for the size input field based on shape
+function sizeInputLabel(shape: string | null): string {
+  switch (shape) {
+    case "rod":        return "Diameter in mm — e.g. 30 (shown as Ø30)";
+    case "hex":        return "Across-flats in mm — e.g. 27 (shown as Ø27)";
+    case "sheet":      return "Thickness in mm — e.g. 3";
+    case "plate":      return "Thickness in mm — e.g. 20";
+    case "flat_bar":   return "Width × Height — e.g. 50×10";
+    case "tube_round": return "OD × wall — e.g. 60.3×3.6";
+    case "tube_sq":    return "W × H × wall — e.g. 50×50×3";
+    case "angle":      return "A × B × t — e.g. 50×50×5";
+    case "channel":    return "H × W × t — e.g. 100×50×5";
+    default:           return "Size / profile description";
+  }
+}
+
 // Groups flat list into grade → shape → profiles
 function groupMaterials(mats: RawMaterial[]) {
   const order: string[] = [];
@@ -47,14 +71,14 @@ function groupMaterials(mats: RawMaterial[]) {
   return order.map((k) => map.get(k)!);
 }
 
-// One profile chip (e.g. "Ø30") — click to edit, X to delete
+// One profile chip — click to edit, X to delete
 function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(mat.profile ?? "");
   const [saving, setSaving] = useState(false);
 
-  const profileHint = MAT_SHAPES.find((s) => s.value === mat.shape)?.profileHint ?? "dimensions";
+  const displayed = formatProfile(mat.shape, mat.profile);
 
   const save = async () => {
     if (!value.trim()) return;
@@ -64,7 +88,11 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
       const r = await fetch(`/api/raw-materials/${mat.id}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: mat.name, shape: mat.shape ?? undefined, profile: value.trim(), profileMm, unit: mat.unit, notes: mat.notes ?? undefined }),
+        body: JSON.stringify({
+          name: mat.name, displayName: mat.displayName ?? undefined,
+          shape: mat.shape ?? undefined, profile: value.trim(), profileMm,
+          unit: mat.unit, notes: mat.notes ?? undefined,
+        }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
       onRefresh(); setEditing(false);
@@ -73,7 +101,8 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
   };
 
   const del = async () => {
-    if (!confirm(`Remove "${mat.profile || mat.unit}" from ${mat.name}? Templates using this entry will lose the material link.`)) return;
+    const label = displayed || mat.unit;
+    if (!confirm(`Remove "${label}" from ${mat.name}? Templates using this entry will lose the material link.`)) return;
     try {
       const r = await fetch(`/api/raw-materials/${mat.id}`, { method: "DELETE", credentials: "include" });
       if (r.ok) onRefresh();
@@ -86,7 +115,7 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
       <input
         autoFocus value={value} onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-        placeholder={profileHint}
+        placeholder={sizeInputLabel(mat.shape).split(" — ")[1] ?? "size"}
         className="h-7 w-28 px-2 text-xs rounded-full border-2 border-primary bg-background focus:outline-none font-semibold"
       />
       <button onClick={save} disabled={!value.trim() || saving} className="text-green-600 hover:text-green-700 disabled:opacity-40">
@@ -99,9 +128,10 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
   );
 
   return (
-    <div className="group flex items-center gap-1 bg-muted rounded-full px-2.5 py-1.5 border border-border">
-      <button onClick={() => setEditing(true)} className="text-xs font-semibold hover:text-primary transition-colors">
-        {mat.profile || mat.unit}
+    <div className="group flex items-center gap-0.5 rounded-full border border-border bg-muted px-2.5 py-1.5">
+      <button onClick={() => setEditing(true)}
+        className={`text-xs font-semibold hover:text-primary transition-colors ${!displayed ? "text-muted-foreground italic" : ""}`}>
+        {displayed || "set size"}
       </button>
       <button onClick={del} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all ml-0.5">
         <X className="h-3 w-3" />
@@ -110,17 +140,40 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
   );
 }
 
-// One grade+shape group card with profile chips
+// One grade+shape group card with profile chips and editable display name
 function MaterialGradeGroup({ grade, shape, items, onRefresh }: {
   grade: string; shape: string | null; items: RawMaterial[]; onRefresh: () => void;
 }) {
   const { toast } = useToast();
+  const displayName = items[0]?.displayName ?? "";
+  const unit = items[0]?.unit ?? "mm";
+
   const [addingProfile, setAddingProfile] = useState(false);
   const [newProfile, setNewProfile] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const profileHint = MAT_SHAPES.find((s) => s.value === shape)?.profileHint ?? "e.g. 30";
-  const unit = items[0]?.unit ?? "mm";
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(displayName);
+  const [savingName, setSavingName] = useState(false);
+
+  const saveDisplayName = async () => {
+    setSavingName(true);
+    try {
+      await Promise.all(items.map((m) =>
+        fetch(`/api/raw-materials/${m.id}`, {
+          method: "PUT", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: m.name, displayName: nameDraft.trim() || null,
+            shape: m.shape ?? undefined, profile: m.profile ?? undefined,
+            profileMm: m.profileMm ?? undefined, unit: m.unit, notes: m.notes ?? undefined,
+          }),
+        })
+      ));
+      onRefresh(); setEditingName(false);
+    } catch { toast({ title: "Failed to save name", variant: "destructive" }); }
+    finally { setSavingName(false); }
+  };
 
   const addProfile = async () => {
     if (!newProfile.trim()) return;
@@ -130,70 +183,120 @@ function MaterialGradeGroup({ grade, shape, items, onRefresh }: {
       const r = await fetch("/api/raw-materials", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: grade, shape: shape ?? undefined, profile: newProfile.trim(), profileMm, unit }),
+        body: JSON.stringify({
+          name: grade, displayName: displayName || undefined,
+          shape: shape ?? undefined, profile: newProfile.trim(), profileMm, unit,
+        }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status}`); }
-      setNewProfile("");
-      onRefresh();
+      setNewProfile(""); onRefresh();
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
 
   const deleteGroup = async () => {
-    const label = shape ? `${grade} ${shapeLabel(shape)}` : grade;
+    const label = displayName || (shape ? `${grade} ${shapeLabel(shape)}` : grade);
     if (!confirm(`Delete all ${items.length} size${items.length !== 1 ? "s" : ""} of "${label}"?`)) return;
     try {
-      await Promise.all(items.map((m) =>
-        fetch(`/api/raw-materials/${m.id}`, { method: "DELETE", credentials: "include" })
-      ));
+      await Promise.all(items.map((m) => fetch(`/api/raw-materials/${m.id}`, { method: "DELETE", credentials: "include" })));
       onRefresh();
     } catch { toast({ title: "Failed to delete", variant: "destructive" }); }
   };
 
   return (
-    <div className="rounded-xl border-2 border-border bg-card p-3 space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-bold text-sm">{grade}</span>
-          {shape && (
-            <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">
-              {shapeLabel(shape)}
-            </span>
+    <div className="rounded-xl border-2 border-border bg-card p-3 space-y-2.5">
+      {/* Header: display name + grade + shape */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          {editingName ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveDisplayName(); if (e.key === "Escape") setEditingName(false); }}
+                placeholder={`Worker name — e.g. "Chrome-moly", "Mild steel"`}
+                className="flex-1 h-8 px-2.5 rounded-lg border-2 border-primary bg-background text-sm focus:outline-none font-bold"
+              />
+              <button onClick={saveDisplayName} disabled={savingName} className="text-green-600 hover:text-green-700 disabled:opacity-40">
+                {savingName ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              </button>
+              <button onClick={() => setEditingName(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setNameDraft(displayName); setEditingName(true); }}
+              className="group/n flex items-center gap-1.5 text-left w-full"
+            >
+              <div className="min-w-0">
+                {displayName ? (
+                  <>
+                    <p className="font-black text-base leading-tight truncate">{displayName}</p>
+                    <p className="text-xs text-muted-foreground font-mono truncate">{grade}</p>
+                  </>
+                ) : (
+                  <p className="font-bold text-sm truncate">{grade}</p>
+                )}
+              </div>
+              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/n:opacity-60 transition-opacity flex-shrink-0 mt-0.5" />
+            </button>
           )}
-          <span className="text-[10px] text-muted-foreground">
-            {items.length} size{items.length !== 1 ? "s" : ""}
-          </span>
+          {!editingName && (
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              {shape && (
+                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">
+                  {shapeLabel(shape)}
+                </span>
+              )}
+              <span className="text-[10px] text-muted-foreground">
+                {items.length} size{items.length !== 1 ? "s" : ""}
+                {!displayName && <span className="ml-1 text-amber-500">&middot; tap name to add worker label</span>}
+              </span>
+            </div>
+          )}
         </div>
-        <button onClick={deleteGroup} className="text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors">
+        <button onClick={deleteGroup} className="flex-shrink-0 text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-muted transition-colors mt-0.5">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="flex flex-wrap gap-1.5 items-center">
-        {items.map((m) => <ProfileChip key={m.id} mat={m} onRefresh={onRefresh} />)}
-        {addingProfile ? (
-          <div className="flex items-center gap-1">
-            <input
-              autoFocus value={newProfile}
-              onChange={(e) => setNewProfile(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addProfile(); if (e.key === "Escape") { setAddingProfile(false); setNewProfile(""); } }}
-              placeholder={shape ? profileHint : "profile/dim"}
-              className="h-7 w-28 px-2 text-xs rounded-full border-2 border-primary bg-background focus:outline-none font-semibold"
-            />
-            <button onClick={addProfile} disabled={!newProfile.trim() || saving} className="text-green-600 hover:text-green-700 disabled:opacity-40">
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            </button>
-            <button onClick={() => { setAddingProfile(false); setNewProfile(""); }} className="text-muted-foreground hover:text-foreground">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setAddingProfile(true)}
-            className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-full border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-primary transition-all"
-          >
-            <Plus className="h-3 w-3" /> Add size
-          </button>
+
+      {/* Size chips */}
+      <div className="space-y-1.5">
+        {shape && (
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            {sizeInputLabel(shape).split(" — ")[0]}
+          </p>
         )}
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {items.map((m) => <ProfileChip key={m.id} mat={m} onRefresh={onRefresh} />)}
+          {addingProfile ? (
+            <div className="flex items-center gap-1 flex-wrap">
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus value={newProfile}
+                  onChange={(e) => setNewProfile(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addProfile(); if (e.key === "Escape") { setAddingProfile(false); setNewProfile(""); } }}
+                  placeholder={shape ? sizeInputLabel(shape).split(" — ")[1] ?? "value" : "size"}
+                  className="h-7 w-36 px-2.5 text-xs rounded-full border-2 border-primary bg-background focus:outline-none font-semibold"
+                />
+                <button onClick={addProfile} disabled={!newProfile.trim() || saving} className="text-green-600 hover:text-green-700 disabled:opacity-40">
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                </button>
+                <button onClick={() => { setAddingProfile(false); setNewProfile(""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAddingProfile(true)}
+              className="flex items-center gap-0.5 px-2.5 py-1.5 rounded-full border-2 border-dashed border-border text-xs text-muted-foreground hover:border-primary hover:text-primary transition-all"
+            >
+              <Plus className="h-3 w-3" /> Add size
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -203,13 +306,12 @@ function RawMaterialsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [newGrade, setNewGrade] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
   const [newShape, setNewShape] = useState("");
   const [newProfile, setNewProfile] = useState("");
   const [newUnit, setNewUnit] = useState("mm");
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const profileHint = MAT_SHAPES.find((s) => s.value === newShape)?.profileHint ?? "e.g. 30";
 
   const { data: mats = [], isLoading } = useQuery<RawMaterial[]>({
     queryKey: ["/api/raw-materials"],
@@ -234,6 +336,7 @@ function RawMaterialsTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newGrade.trim(),
+          displayName: newDisplayName.trim() || undefined,
           shape: newShape || undefined,
           profile: newProfile.trim() || undefined,
           profileMm,
@@ -241,9 +344,10 @@ function RawMaterialsTab() {
         }),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `Server error ${r.status} — try restarting the server`); }
-      setNewProfile(""); // keep grade+shape so user can quickly add more sizes
+      setNewProfile(""); // keep grade+shape+displayName so user can quickly add more sizes
       refresh();
-      toast({ title: `Added${newProfile ? ` ${newGrade.trim()} ${newProfile}` : ` ${newGrade.trim()}`}` });
+      const label = newDisplayName.trim() || newGrade.trim();
+      toast({ title: `Added${newProfile ? ` ${label} ${newProfile}` : ` ${label}`}` });
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     finally { setSaving(false); }
   };
@@ -278,48 +382,73 @@ function RawMaterialsTab() {
       {adding ? (
         <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">New material</p>
+          {/* Grade (technical) */}
           <div className="flex gap-2">
             <div className="flex-1">
+              <p className="text-[10px] text-muted-foreground mb-1">Technical grade</p>
               <input
                 autoFocus
                 list="grade-suggestions"
                 value={newGrade}
                 onChange={(e) => setNewGrade(e.target.value)}
-                placeholder="Grade — e.g. S235, 42CrMo4, AL6082"
+                placeholder="e.g. S235, 42CrMo4, AL6082, SS304"
                 className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none font-semibold"
               />
               <datalist id="grade-suggestions">
                 {uniqueGrades.map((g) => <option key={g} value={g} />)}
               </datalist>
             </div>
-            <select value={newUnit} onChange={(e) => setNewUnit(e.target.value)}
-              className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
-              {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1">Stock unit</p>
+              <select value={newUnit} onChange={(e) => setNewUnit(e.target.value)}
+                className="h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+                {RAW_UNITS.map((u) => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          {/* Worker name (optional) */}
+          <div>
+            <p className="text-[10px] text-muted-foreground mb-1">Worker name <span className="opacity-60">(optional — what your team calls it)</span></p>
+            <input
+              value={newDisplayName}
+              onChange={(e) => setNewDisplayName(e.target.value)}
+              placeholder='e.g. "Chrome-moly", "Mild steel", "Stainless", "Aluminium"'
+              className="w-full h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+            />
+          </div>
+          {/* Shape */}
+          <div>
+            <p className="text-[10px] text-muted-foreground mb-1">Shape</p>
+            <select value={newShape} onChange={(e) => { setNewShape(e.target.value); setNewProfile(""); }}
+              className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
+              <option value="">Shape (optional)…</option>
+              {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>
-          <select value={newShape} onChange={(e) => { setNewShape(e.target.value); setNewProfile(""); }}
-            className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
-            <option value="">Shape (optional)…</option>
-            {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-          <div className="flex gap-2">
-            <input
-              value={newProfile}
-              onChange={(e) => setNewProfile(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveOne()}
-              placeholder={newShape ? profileHint : "Profile / dimensions (optional)"}
-              className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
-            />
-            <Button size="sm" className="h-9 px-4 text-xs font-bold" disabled={!newGrade.trim() || saving} onClick={saveOne}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
-            </Button>
+          {/* Profile / size */}
+          <div>
+            {newShape && (
+              <p className="text-[10px] text-muted-foreground mb-1">{sizeInputLabel(newShape)}</p>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={newProfile}
+                onChange={(e) => setNewProfile(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveOne()}
+                placeholder={newShape ? sizeInputLabel(newShape).split(" — ")[1] ?? "value" : "Size / dimensions (optional)"}
+                className="flex-1 h-9 px-2.5 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+              />
+              <Button size="sm" className="h-9 px-4 text-xs font-bold" disabled={!newGrade.trim() || saving} onClick={saveOne}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+              </Button>
+            </div>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Grade and shape stay filled so you can add multiple sizes quickly.
+            Grade, name and shape stay filled after adding — quickly add all your sizes.
           </p>
           <div className="flex justify-end">
             <Button size="sm" variant="outline" className="h-8 text-xs"
-              onClick={() => { setAdding(false); setNewGrade(""); setNewShape(""); setNewProfile(""); }}>
+              onClick={() => { setAdding(false); setNewGrade(""); setNewDisplayName(""); setNewShape(""); setNewProfile(""); }}>
               Done
             </Button>
           </div>
