@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
-  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock, History,
+  PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock, History, FlaskConical,
 } from "lucide-react";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,9 @@ interface ProjectItem {
   children: ProjectItem[];
   procedures: Procedure[];
   nextUp: NextUp | null;
+  rawMaterialName: string | null;
+  rawMaterialUnit: string | null;
+  materialQtyPerPiece: number | null;
 }
 
 interface StepDep {
@@ -329,6 +332,15 @@ function ItemCard({
             {effectiveColor && (
               <span className="text-xs font-bold bg-muted border border-border rounded px-1.5 py-0.5 flex items-center gap-1">
                 <Palette className="h-3 w-3" />{effectiveColor}
+              </span>
+            )}
+            {item.rawMaterialName && (
+              <span className="text-xs font-bold bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-1.5 py-0.5 flex items-center gap-1">
+                <FlaskConical className="h-3 w-3" />
+                {item.rawMaterialName}
+                {item.materialQtyPerPiece != null && (
+                  <span className="opacity-75 ml-0.5">{item.materialQtyPerPiece} {item.rawMaterialUnit}</span>
+                )}
               </span>
             )}
           </div>

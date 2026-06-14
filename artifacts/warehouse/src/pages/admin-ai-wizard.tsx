@@ -9,12 +9,20 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface RawMaterial {
+  id: number;
+  name: string;
+  unit: string;
+}
+
 interface FormData {
   partName: string;
-  material: string[];
+  materialId: number | null;
+  materialName: string;
   operations: string[];
   surfaceFinish: string[];
   batchQty: string;
+  materialQtyPerPiece: string;
   notes: string;
 }
 
@@ -42,18 +50,14 @@ interface BatchResult {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MATERIAL_OPTIONS = [
-  "Steel (structural)", "Steel (sheet)", "Stainless steel", "Aluminium",
-  "Galvanized steel", "Copper", "Wood", "Plywood", "Plastic", "Other",
-];
-
 const FINISH_OPTIONS = [
   "Raw / unfinished", "Sandblasted", "Painted (brush)", "Painted (spray)",
   "Powder coated", "Anodized", "Hot-dip galvanized", "Zinc plated", "Polished",
 ];
 
 const EMPTY_FORM: FormData = {
-  partName: "", material: [], operations: [], surfaceFinish: [], batchQty: "1", notes: "",
+  partName: "", materialId: null, materialName: "", operations: [],
+  surfaceFinish: [], batchQty: "1", materialQtyPerPiece: "", notes: "",
 };
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -105,9 +109,11 @@ function ChipSelect({
 
 function ResultCard({
   result,
+  sourceItem,
   onSaved,
 }: {
   result: WizardResult;
+  sourceItem: FormData;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -133,7 +139,11 @@ function ResultCard({
       const tmpl = await apiFetch("/api/work/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: result.templateName }),
+        body: JSON.stringify({
+          name: result.templateName,
+          rawMaterialId: sourceItem.materialId ?? null,
+          materialQtyPerPiece: sourceItem.materialQtyPerPiece ? Number(sourceItem.materialQtyPerPiece) : null,
+        }),
       });
       for (let i = 0; i < result.steps.length; i++) {
         const s = result.steps[i];
@@ -232,6 +242,7 @@ function ResultCard({
 function WizardForm({
   form,
   onChange,
+  materials,
   operationOptions,
   onAddToCart,
   onGenerateNow,
@@ -240,22 +251,26 @@ function WizardForm({
 }: {
   form: FormData;
   onChange: (patch: Partial<FormData>) => void;
+  materials: RawMaterial[];
   operationOptions: string[];
   onAddToCart: () => void;
   onGenerateNow: () => void;
   isPending: boolean;
   cartCount: number;
 }) {
-  const canSubmit = form.partName.trim().length >= 2 && form.material.length > 0 && form.operations.length > 0;
+  const canSubmit = form.partName.trim().length >= 2 && form.materialId !== null && form.operations.length > 0;
 
-  const toggle = (field: "material" | "operations" | "surfaceFinish", v: string, single = false) => {
-    const cur = form[field] as string[];
-    if (single) {
-      onChange({ [field]: cur.includes(v) ? [] : [v] });
-    } else {
-      onChange({ [field]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
-    }
+  const toggleOp = (v: string) => {
+    const cur = form.operations;
+    onChange({ operations: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] });
   };
+
+  const toggleFinish = (v: string) => {
+    const cur = form.surfaceFinish;
+    onChange({ surfaceFinish: cur.includes(v) ? [] : [v] });
+  };
+
+  const selectedMat = materials.find((m) => m.id === form.materialId);
 
   return (
     <div className="space-y-5">
@@ -271,40 +286,88 @@ function WizardForm({
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-bold">2. Material</label>
-        <ChipSelect
-          options={MATERIAL_OPTIONS}
-          selected={form.material}
-          onToggle={(v) => toggle("material", v, true)}
-        />
+        <label className="text-sm font-bold">
+          2. Material{" "}
+          <a href="/admin/raw-materials" className="text-[10px] font-normal text-primary underline">
+            manage list
+          </a>
+        </label>
+        {materials.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            No materials added yet.{" "}
+            <a href="/admin/raw-materials" className="text-primary underline">Add materials</a> to your catalogue first.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {materials.map((m) => {
+              const active = form.materialId === m.id;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => onChange({ materialId: active ? null : m.id, materialName: active ? "" : m.name })}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border-2 transition-all ${
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {active && <Check className="inline h-3 w-3 mr-1" />}
+                  {m.name}
+                  <span className="ml-1 opacity-60">/ {m.unit}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {selectedMat && (
+        <div className="space-y-2">
+          <label className="text-sm font-bold">
+            3. Material quantity per piece{" "}
+            <span className="font-normal text-muted-foreground">
+              ({selectedMat.unit} — optional)
+            </span>
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.001"
+            value={form.materialQtyPerPiece}
+            onChange={(e) => onChange({ materialQtyPerPiece: e.target.value })}
+            placeholder={`e.g. 2.5 ${selectedMat.unit}`}
+            className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+          />
+        </div>
+      )}
 
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          3. Required operations{" "}
+          {selectedMat ? "4" : "3"}. Required operations{" "}
           <span className="font-normal text-muted-foreground">(select all that apply)</span>
         </label>
         <ChipSelect
           options={operationOptions}
           selected={form.operations}
-          onToggle={(v) => toggle("operations", v, false)}
+          onToggle={toggleOp}
         />
       </div>
 
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          4. Surface finish{" "}
+          {selectedMat ? "5" : "4"}. Surface finish{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <ChipSelect
           options={FINISH_OPTIONS}
           selected={form.surfaceFinish}
-          onToggle={(v) => toggle("surfaceFinish", v, true)}
+          onToggle={toggleFinish}
         />
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm font-bold">5. Typical batch quantity</label>
+        <label className="text-sm font-bold">{selectedMat ? "6" : "5"}. Typical batch quantity</label>
         <div className="flex gap-2">
           {["1", "5", "10", "25", "50"].map((q) => (
             <button
@@ -323,7 +386,7 @@ function WizardForm({
 
       <div className="space-y-2">
         <label className="text-sm font-bold">
-          6. Anything else the AI should know?{" "}
+          {selectedMat ? "7" : "6"}. Anything else the AI should know?{" "}
           <span className="font-normal text-muted-foreground">(optional)</span>
         </label>
         <textarea
@@ -392,7 +455,7 @@ function CartList({
           <div className="min-w-0">
             <p className="text-xs font-bold truncate">{item.partName}</p>
             <p className="text-[10px] text-muted-foreground truncate">
-              {item.material.join(", ")} · {item.operations.join(", ")}
+              {item.materialName || "—"} · {item.operations.join(", ")}
             </p>
           </div>
           <button
@@ -443,6 +506,7 @@ function BatchResults({
             {br.result ? (
               <ResultCard
                 result={br.result}
+                sourceItem={br.item}
                 onSaved={() => {
                   br.saved = true;
                 }}
@@ -477,11 +541,17 @@ export default function AdminAiWizardPage() {
     staleTime: 60_000,
   });
 
+  const { data: rawMaterials = [] } = useQuery<RawMaterial[]>({
+    queryKey: ["/api/raw-materials"],
+    queryFn: () => fetch("/api/raw-materials", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+
   const operationOptions = stationTypes.map((s) => s.name);
 
   const patchForm = (patch: Partial<FormData>) => setForm((f) => ({ ...f, ...patch }));
 
-  const canSubmit = form.partName.trim().length >= 2 && form.material.length > 0 && form.operations.length > 0;
+  const canSubmit = form.partName.trim().length >= 2 && form.materialId !== null && form.operations.length > 0;
 
   const addToCart = () => {
     if (!canSubmit) return;
@@ -498,7 +568,7 @@ export default function AdminAiWizardPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         partName: item.partName.trim(),
-        material: item.material.join(", "),
+        material: item.materialName,
         operations: item.operations,
         surfaceFinish: item.surfaceFinish[0] ?? undefined,
         batchQuantity: Number(item.batchQty) || 1,
@@ -581,6 +651,7 @@ export default function AdminAiWizardPage() {
           <WizardForm
             form={form}
             onChange={patchForm}
+            materials={rawMaterials}
             operationOptions={operationOptions}
             onAddToCart={addToCart}
             onGenerateNow={generateAll}

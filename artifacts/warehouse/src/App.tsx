@@ -62,6 +62,7 @@ import QuoteDetailPage from "@/pages/quote-detail";
 import AnalyticsPage from "@/pages/analytics";
 import KioskPage from "@/pages/kiosk";
 import AdminAiWizardPage from "@/pages/admin-ai-wizard";
+import AdminRawMaterialsPage from "@/pages/admin-raw-materials";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -204,6 +205,9 @@ function ProtectedRoutes() {
 
         {/* Analytics (Pro, admin-only) */}
         <Route path="/analytics" component={AnalyticsPage} />
+
+        {/* Raw materials catalogue */}
+        <Route path="/admin/raw-materials" component={AdminRawMaterialsPage} />
 
         {/* AI Template Wizard (TEST) */}
         <Route path="/admin/ai-wizard" component={AdminAiWizardPage} />

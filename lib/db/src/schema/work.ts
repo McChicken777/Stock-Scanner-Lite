@@ -7,12 +7,25 @@ export const workPriorityEnum = pgEnum("work_priority", ["low", "normal", "high"
 export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress", "completed"]);
 export const workProcedureStatusEnum = pgEnum("work_procedure_status", ["not_started", "in_progress", "completed"]);
 
+// Raw material catalogue: company-specific material specs (steel grades, profiles, etc.)
+export const rawMaterialsTable = pgTable("raw_materials", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  unit: text("unit").notNull().default("kg"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type RawMaterial = typeof rawMaterialsTable.$inferSelect;
+
 // Item templates (admin-configurable blueprints)
 export const workTemplatesTable = pgTable("work_templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),
+  rawMaterialId: integer("raw_material_id").references(() => rawMaterialsTable.id, { onDelete: "set null" }),
+  materialQtyPerPiece: numeric("material_qty_per_piece", { precision: 12, scale: 3, mode: "number" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -85,6 +98,8 @@ export const workProjectItemsTable = pgTable("work_project_items", {
   sortOrder: integer("sort_order").notNull().default(0),
   parentItemId: integer("parent_item_id").references((): AnyPgColumn => workProjectItemsTable.id, { onDelete: "cascade" }),
   productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
+  rawMaterialId: integer("raw_material_id").references(() => rawMaterialsTable.id, { onDelete: "set null" }),
+  materialQtyPerPiece: numeric("material_qty_per_piece", { precision: 12, scale: 3, mode: "number" }),
 });
 
 // Steps for each project item, instantiated from work_steps at project creation time
