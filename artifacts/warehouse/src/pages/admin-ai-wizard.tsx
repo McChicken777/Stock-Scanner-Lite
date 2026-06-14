@@ -428,10 +428,15 @@ function WizardForm({
         )}
       </div>
 
-      {/* 3. Shape — only when grade has multiple shapes */}
-      {form.materialGrade && availableShapes.length > 1 && (
+      {/* 3. Shape — shown whenever the grade has any shape in the catalogue */}
+      {form.materialGrade && availableShapes.length >= 1 && (
         <div className="space-y-2">
-          <label className="text-sm font-bold">{s()}. Shape</label>
+          <label className="text-sm font-bold">
+            {s()}. Shape
+            {availableShapes.length === 1 && (
+              <span className="font-normal text-muted-foreground text-xs ml-1">(only shape stocked — tap to change/clear)</span>
+            )}
+          </label>
           <div className="flex flex-wrap gap-2">
             {availableShapes.map((sv) => {
               const active = form.shape === sv;
@@ -452,8 +457,16 @@ function WizardForm({
         </div>
       )}
 
-      {/* 4. Size / diameter — only when grade+shape has multiple options */}
-      {form.materialGrade && form.shape && availableProfiles.length > 1 && (
+      {/* Grade selected but no shapes in catalogue — explain why no shape prompt */}
+      {form.materialGrade && availableShapes.length === 0 && (
+        <p className="text-xs text-muted-foreground bg-muted px-2.5 py-2 rounded-lg">
+          No shapes defined for <strong>{getDisplay(form.materialGrade) ?? form.materialGrade}</strong> yet.{" "}
+          <a href="/work/materials" className="text-primary underline">Add a shape and sizes</a> to this grade so you can pick them here.
+        </p>
+      )}
+
+      {/* 4. Size / diameter — shown whenever the grade+shape has any size defined */}
+      {form.materialGrade && form.shape && availableProfiles.length >= 1 && (
         <div className="space-y-2">
           <label className="text-sm font-bold">
             {s()}. Size
@@ -462,6 +475,9 @@ function WizardForm({
             )}
             {(form.shape === "sheet" || form.shape === "plate") && (
               <span className="font-normal text-muted-foreground text-xs ml-1">(thickness)</span>
+            )}
+            {availableProfiles.length === 1 && (
+              <span className="font-normal text-muted-foreground text-xs ml-1">(only size stocked — tap to clear)</span>
             )}
           </label>
           <div className="flex flex-wrap gap-2">
