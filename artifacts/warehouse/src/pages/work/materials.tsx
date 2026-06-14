@@ -19,20 +19,24 @@ interface RawMaterial {
 const RAW_UNITS = ["mm", "m", "kg", "pcs", "L", "m²"];
 
 export const MAT_SHAPES = [
-  { value: "rod",        label: "Round bar / rod",      profileHint: "Ø mm — e.g. 30" },
-  { value: "hex",        label: "Hex bar",              profileHint: "A/F mm — e.g. 27" },
-  { value: "sheet",      label: "Sheet metal",          profileHint: "thickness mm — e.g. 3" },
-  { value: "plate",      label: "Plate",                profileHint: "thickness mm — e.g. 20" },
-  { value: "flat_bar",   label: "Flat bar",             profileHint: "W×H mm — e.g. 50×10" },
-  { value: "tube_round", label: "Round tube",           profileHint: "OD×wall mm — e.g. 60.3×3.6" },
-  { value: "tube_sq",    label: "Square / rect. tube",  profileHint: "W×H×wall mm — e.g. 50×50×3" },
-  { value: "angle",      label: "Angle iron (L)",       profileHint: "A×B×t mm — e.g. 50×50×5" },
-  { value: "channel",    label: "Channel (U/C)",        profileHint: "H×W×t mm — e.g. 100×50×5" },
-  { value: "other",      label: "Other / custom",       profileHint: "describe dimensions" },
+  { value: "rod",        label: "Round bar / rod",      icon: "●", profileHint: "Ø mm — e.g. 30" },
+  { value: "hex",        label: "Hex bar",              icon: "⬡", profileHint: "A/F mm — e.g. 27" },
+  { value: "sheet",      label: "Sheet metal",          icon: "▬", profileHint: "thickness mm — e.g. 3" },
+  { value: "plate",      label: "Plate",                icon: "▬", profileHint: "thickness mm — e.g. 20" },
+  { value: "flat_bar",   label: "Flat bar",             icon: "═", profileHint: "W×H mm — e.g. 50×10" },
+  { value: "tube_round", label: "Round tube",           icon: "○", profileHint: "OD×wall mm — e.g. 60.3×3.6" },
+  { value: "tube_sq",    label: "Square / rect. tube",  icon: "□", profileHint: "W×H×wall mm — e.g. 50×50×3" },
+  { value: "angle",      label: "Angle iron (L)",       icon: "∟", profileHint: "A×B×t mm — e.g. 50×50×5" },
+  { value: "channel",    label: "Channel (U/C)",        icon: "⊏", profileHint: "H×W×t mm — e.g. 100×50×5" },
+  { value: "other",      label: "Other / custom",       icon: "◇", profileHint: "describe dimensions" },
 ] as const;
 
 function shapeLabel(v: string | null) {
   return MAT_SHAPES.find((s) => s.value === v)?.label ?? v ?? "";
+}
+
+function shapeIcon(v: string | null): string {
+  return MAT_SHAPES.find((s) => s.value === v)?.icon ?? "◇";
 }
 
 // Returns the display string for a profile chip — adds Ø prefix for rod/hex
@@ -177,6 +181,13 @@ function MaterialGradeGroup({ grade, shape, items, onRefresh }: {
 
   const addProfile = async () => {
     if (!newProfile.trim()) return;
+    const isDuplicate = items.some((m) =>
+      (m.profile ?? "").toLowerCase() === newProfile.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      toast({ title: `${formatProfile(shape, newProfile.trim()) || newProfile.trim()} already exists in this group`, variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const profileMm = parseFloat(newProfile.replace(/[^\d.]/g, "")) || null;
@@ -246,7 +257,7 @@ function MaterialGradeGroup({ grade, shape, items, onRefresh }: {
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {shape && (
                 <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full">
-                  {shapeLabel(shape)}
+                  {shapeIcon(shape)} {shapeLabel(shape)}
                 </span>
               )}
               <span className="text-[10px] text-muted-foreground">
@@ -328,6 +339,20 @@ function RawMaterialsTab() {
 
   const saveOne = async () => {
     if (!newGrade.trim()) return;
+    const alreadyExists = groups.some(
+      (g) =>
+        g.grade.toLowerCase() === newGrade.trim().toLowerCase() &&
+        (g.shape ?? "") === (newShape ?? "")
+    );
+    if (alreadyExists) {
+      const shapeName = newShape ? ` ${shapeLabel(newShape)}` : "";
+      toast({
+        title: `${newGrade.trim()}${shapeName} already exists`,
+        description: 'Find it below and use "+ Add size" to add more sizes.',
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const profileMm = newProfile ? parseFloat(newProfile.replace(/[^\d.]/g, "")) || null : null;
@@ -357,28 +382,8 @@ function RawMaterialsTab() {
       <p className="text-xs text-muted-foreground">
         Define each material grade once (e.g. S235, 42CrMo4), then add all the sizes your shop stocks. Each size is a separate stock item.
       </p>
-      {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}</div>
-      ) : groups.length === 0 && !adding ? (
-        <div className="text-center py-10 text-muted-foreground">
-          <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
-          <p className="text-sm font-semibold">No materials yet</p>
-          <p className="text-xs mt-0.5">e.g. S235 rod → add Ø30, Ø50, Ø100 as separate sizes</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {groups.map((g) => (
-            <MaterialGradeGroup
-              key={`${g.grade}\0${g.shape ?? ""}`}
-              grade={g.grade}
-              shape={g.shape}
-              items={g.items}
-              onRefresh={refresh}
-            />
-          ))}
-        </div>
-      )}
 
+      {/* Add form at TOP so new cards appear below where the user is looking */}
       {adding ? (
         <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">New material</p>
@@ -422,7 +427,7 @@ function RawMaterialsTab() {
             <select value={newShape} onChange={(e) => { setNewShape(e.target.value); setNewProfile(""); }}
               className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm focus:border-primary focus:outline-none">
               <option value="">Shape (optional)…</option>
-              {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              {MAT_SHAPES.map((s) => <option key={s.value} value={s.value}>{s.icon} {s.label}</option>)}
             </select>
           </div>
           {/* Profile / size */}
@@ -458,6 +463,29 @@ function RawMaterialsTab() {
           <Plus className="h-4 w-4 mr-2" /> Add material
         </Button>
       )}
+
+      {/* Groups list below the form — new cards appear here, right below where user is looking */}
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}</div>
+      ) : groups.length === 0 && !adding ? (
+        <div className="text-center py-10 text-muted-foreground">
+          <FlaskConical className="h-8 w-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm font-semibold">No materials yet</p>
+          <p className="text-xs mt-0.5">e.g. S235 rod → add Ø30, Ø50, Ø100 as separate sizes</p>
+        </div>
+      ) : groups.length > 0 ? (
+        <div className="space-y-2">
+          {groups.map((g) => (
+            <MaterialGradeGroup
+              key={`${g.grade}\0${g.shape ?? ""}`}
+              grade={g.grade}
+              shape={g.shape}
+              items={g.items}
+              onRefresh={refresh}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
