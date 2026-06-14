@@ -92,7 +92,11 @@ function parseLine(raw: string): ParsedLine | null {
     quantity = Math.max(1, parseInt(qMatch[2], 10));
   }
 
-  const rawOpTokens = rawOpsStr ? rawOpsStr.split(/\s+/).filter(Boolean) : [];
+  // Op codes are stored lowercased, so normalize typed tokens to match regardless
+  // of case ("VA"/"Va"/"va" all resolve). Profiles (@name) keep their case.
+  const rawOpTokens = rawOpsStr
+    ? rawOpsStr.split(/\s+/).filter(Boolean).map((tok) => (tok.startsWith("@") ? tok : tok.toLowerCase()))
+    : [];
   const isDitto = rawOpTokens.length === 1 && rawOpTokens[0] === "=";
 
   return {
@@ -415,7 +419,7 @@ function OpSetupPanel({
   const addProfile = () => {
     if (!newProfileName.trim() || !newProfileOps.trim()) return;
     const key = newProfileName.startsWith("@") ? newProfileName : `@${newProfileName}`;
-    const ops = newProfileOps.split(/[\s,]+/).filter(Boolean);
+    const ops = newProfileOps.split(/[\s,]+/).filter(Boolean).map((c) => c.toLowerCase());
     onChange({ ...settings, profiles: { ...settings.profiles, [key]: ops } });
     setNewProfileName("");
     setNewProfileOps("");
@@ -433,7 +437,7 @@ function OpSetupPanel({
       ...settings,
       conditionalExclusions: [
         ...settings.conditionalExclusions,
-        { excludeCode: newExclFrom.trim(), ifHasCode: newExclIf.trim() },
+        { excludeCode: newExclFrom.trim().toLowerCase(), ifHasCode: newExclIf.trim().toLowerCase() },
       ],
     });
     setNewExclFrom("");
