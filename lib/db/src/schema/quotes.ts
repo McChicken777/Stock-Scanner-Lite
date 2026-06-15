@@ -5,7 +5,7 @@ import { productsTable } from "./products";
 import { workProjectsTable } from "./work";
 import { usersTable } from "./users";
 
-export const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "approved", "rejected", "converted"]);
+export const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "approved", "rejected", "converted", "delivered"]);
 
 export const quotesTable = pgTable("quotes", {
   id: serial("id").primaryKey(),

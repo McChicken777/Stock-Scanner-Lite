@@ -17,6 +17,8 @@ interface Company {
   weekendOvertimeEnabled: boolean;
   country: string | null;
   timezone: string;
+  logo: string | null;
+  quoteSignerName: string | null;
   features: {
     inventory: boolean;
     alerts: boolean;
@@ -168,6 +170,7 @@ export default function AdminCompanyPage() {
   const [newShiftName, setNewShiftName] = useState("");
   const [newShiftStart, setNewShiftStart] = useState("07:00");
   const [newShiftEnd, setNewShiftEnd] = useState("15:00");
+  const [signerName, setSignerName] = useState("");
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/company"],
@@ -189,7 +192,8 @@ export default function AdminCompanyPage() {
     if (company) setWorkHours(String((company.workHoursPerDay ?? 480) / 60));
     if (company?.country) setSelectedCountry(company.country);
     if (company?.timezone) setSelectedTimezone(company.timezone);
-  }, [company?.name, company?.workHoursPerDay, company?.country, company?.timezone]);
+    if (company) setSignerName(company.quoteSignerName ?? "");
+  }, [company?.name, company?.workHoursPerDay, company?.country, company?.timezone, company?.quoteSignerName]);
 
   // Auto-fill timezone when country changes
   useEffect(() => {
@@ -197,6 +201,35 @@ export default function AdminCompanyPage() {
       setSelectedTimezone(COUNTRY_TIMEZONES[selectedCountry]);
     }
   }, [selectedCountry]);
+
+  const updateBrandingMutation = useMutation({
+    mutationFn: async (data: { logo?: string | null; quoteSignerName?: string | null }) => {
+      const res = await fetch("/api/company", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      toast({ description: "Quote branding updated" });
+    },
+    onError: (e: Error) => toast({ description: e.message, variant: "destructive" }),
+  });
+
+  const onLogoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/.test(file.type)) { toast({ description: "Use a PNG or JPG image", variant: "destructive" }); return; }
+    if (file.size > 500 * 1024) { toast({ description: "Logo must be under 500KB", variant: "destructive" }); return; }
+    const reader = new FileReader();
+    reader.onload = () => updateBrandingMutation.mutate({ logo: String(reader.result) });
+    reader.readAsDataURL(file);
+  };
 
   const updateHoursMutation = useMutation({
     mutationFn: async (hours: number) => {
@@ -381,6 +414,44 @@ export default function AdminCompanyPage() {
               </Button>
             </div>
           )}
+        </div>
+
+        {/* Quote branding: logo + signer */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quote branding</p>
+            <p className="text-xs text-muted-foreground mt-1">Shown on quote PDFs. Logo: PNG or JPG, under 500KB.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="h-16 w-32 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-muted/30 flex-shrink-0">
+              {company.logo
+                ? <img src={company.logo} alt="Company logo" className="max-h-full max-w-full object-contain" />
+                : <span className="text-[10px] text-muted-foreground">No logo</span>}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="inline-flex items-center justify-center h-9 px-3 rounded-md text-sm font-semibold border-2 border-input bg-background hover:bg-muted cursor-pointer">
+                <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={onLogoFile} />
+                {company.logo ? "Replace logo" : "Upload logo"}
+              </label>
+              {company.logo && (
+                <Button variant="outline" size="sm" className="h-8 text-xs text-destructive border-destructive/30"
+                  onClick={() => updateBrandingMutation.mutate({ logo: null })}>
+                  Remove logo
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Signed by — name on quotes</label>
+            <div className="flex gap-2">
+              <Input value={signerName} onChange={(e) => setSignerName(e.target.value)}
+                placeholder="e.g. John Smith, Owner" className="h-10 flex-1 border-2" />
+              <Button size="sm" className="h-10" disabled={updateBrandingMutation.isPending}
+                onClick={() => updateBrandingMutation.mutate({ quoteSignerName: signerName.trim() || null })}>
+                {updateBrandingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Work hours + Shifts (combined) */}

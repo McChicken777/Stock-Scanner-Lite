@@ -386,7 +386,7 @@ router.put("/:id/status", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const companyId = req.session.companyId!;
     const parsed = z.object({
-      status: z.enum(["draft", "sent", "approved", "rejected"]),
+      status: z.enum(["draft", "sent", "approved", "rejected", "delivered"]),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -395,6 +395,11 @@ router.put("/:id/status", requireAdmin, async (req, res) => {
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     if (existing.status === "converted") {
       res.status(400).json({ error: "Quote already converted" });
+      return;
+    }
+    // Delivered is reachable only from an accepted (approved) quote.
+    if (parsed.data.status === "delivered" && existing.status !== "approved" && existing.status !== "delivered") {
+      res.status(400).json({ error: "Only an accepted quote can be marked delivered" });
       return;
     }
 
@@ -442,6 +447,14 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
       requiresExternalParts: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    // Pushing a quote into production is a Standard+ feature. Lite stops at Delivered.
+    const [planRow] = await db.select({ plan: companiesTable.plan })
+      .from(companiesTable).where(eq(companiesTable.id, companyId));
+    if (!planRow || planRow.plan === "lite" || planRow.plan == null) {
+      res.status(403).json({ error: "Converting a quote to a job order requires a Standard or Pro plan", planRequired: "standard" });
+      return;
+    }
 
     const project = await db.transaction(async (tx) => {
     const [quote] = await tx.select().from(quotesTable)
@@ -622,7 +635,16 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${full.quoteNumber}.pdf"`);
     doc.pipe(res);
 
-    // Header
+    // Header — embed company logo (PNG/JPG base64) top-left if present
+    if (company?.logo) {
+      try {
+        const m = /^data:image\/(png|jpe?g);base64,(.+)$/.exec(company.logo);
+        if (m) {
+          doc.image(Buffer.from(m[2], "base64"), 50, 45, { fit: [130, 55] });
+          doc.y = 45 + 60;
+        }
+      } catch { /* ignore an unreadable logo */ }
+    }
     doc.fontSize(20).font("Helvetica-Bold").text(company?.name ?? "Quote", { align: "left" });
     doc.moveDown(0.3);
     doc.fontSize(22).fillColor("#222").text(`QUOTE ${full.quoteNumber}`, { align: "right" });
@@ -708,6 +730,15 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
       if (y > 700) { doc.addPage(); y = 50; }
       doc.font("Helvetica-Bold").fontSize(10).text("Terms & Conditions", 50, y); y += 14;
       doc.font("Helvetica").fontSize(9).text(full.terms, 50, y, { width: 500 });
+    }
+
+    // Signature block
+    if (company?.quoteSignerName) {
+      let sigY = doc.y + 40;
+      if (sigY > 740) { doc.addPage(); sigY = 60; }
+      doc.moveTo(50, sigY).lineTo(250, sigY).stroke();
+      doc.font("Helvetica").fontSize(9).fillColor("#666").text("Signed by", 50, sigY + 4);
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("black").text(company.quoteSignerName, 50, sigY + 16);
     }
 
     doc.end();

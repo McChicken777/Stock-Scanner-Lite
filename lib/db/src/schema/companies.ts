@@ -64,6 +64,9 @@ export const companiesTable = pgTable("companies", {
   weekendOvertimeEnabled: boolean("weekend_overtime_enabled").notNull().default(true),
   country: text("country"),
   timezone: text("timezone").notNull().default("UTC"),
+  // Branding for quote PDFs: logo is a base64 data URL; quoteSignerName is the typed signer.
+  logo: text("logo"),
+  quoteSignerName: text("quote_signer_name"),
   outlineSettings: jsonb("outline_settings").notNull().$type<OutlineSettings>().$defaultFn(() => ({
     opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {},
   })),

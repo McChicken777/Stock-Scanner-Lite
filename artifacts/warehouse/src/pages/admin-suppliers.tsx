@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Lock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
@@ -24,6 +25,8 @@ interface SupplierProductLink {
   productName: string;
   productCategory: string;
   productItemType: string;
+  bufferStock: number;
+  totalStock: number;
 }
 
 interface Product {
@@ -49,6 +52,7 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
   const { toast } = useToast();
   const { t } = useLang();
+  const { atLeast } = usePlan();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [addProductId, setAddProductId] = useState("");
@@ -103,11 +107,37 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
     return acc;
   }, {});
 
+  const lowItems = links.filter((l) => l.bufferStock > 0 && l.totalStock < l.bufferStock);
+
   return (
     <div className="border-t pt-2 mt-1 space-y-2">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
         <Package2 className="h-3 w-3" /> {t("suppliersProductsSupplied")} ({links.length})
       </p>
+
+      {/* Low-stock summary + one-click order (gated to Standard+) */}
+      {lowItems.length > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+          <span className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {lowItems.length} low — needs reorder
+          </span>
+          {atLeast("standard") ? (
+            <Link href="/work/purchase-orders">
+              <Button size="sm" className="h-7 text-xs font-bold gap-1">
+                <ShoppingCart className="h-3 w-3" /> Order
+              </Button>
+            </Link>
+          ) : (
+            <span
+              title="Upgrade to Standard to raise purchase orders in one click"
+              className="flex items-center gap-1 text-[10px] font-semibold text-amber-700/80"
+            >
+              <Lock className="h-3 w-3" /> Upgrade to order
+            </span>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-xs text-muted-foreground">{t("loading")}</p>
@@ -118,12 +148,22 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
           {Object.entries(byCategory).map(([cat, items]) => (
             <div key={cat} className="space-y-0.5">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{cat}</p>
-              {items.map((link) => (
+              {items.map((link) => {
+                const isLow = link.bufferStock > 0 && link.totalStock < link.bufferStock;
+                return (
                 <div key={link.id} className="flex items-center justify-between pl-2 py-0.5 rounded hover:bg-muted/40">
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium truncate block">{link.productName}</span>
+                    <span className="text-xs font-medium truncate flex items-center gap-1.5">
+                      {link.productName}
+                      {isLow && (
+                        <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide bg-red-100 text-red-700 border border-red-200 rounded-full px-1.5 py-0.5">
+                          Low
+                        </span>
+                      )}
+                    </span>
                     <span className="text-[10px] text-muted-foreground">
                       {[
+                        `${link.totalStock} in stock${link.bufferStock > 0 ? ` / min ${link.bufferStock}` : ""}`,
                         link.supplierSku ? `SKU: ${link.supplierSku}` : null,
                         link.unitPrice != null ? `$${Number(link.unitPrice).toFixed(2)}` : null,
                       ].filter(Boolean).join(" · ")}
@@ -138,7 +178,8 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
                     <X className="h-3 w-3" />
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>

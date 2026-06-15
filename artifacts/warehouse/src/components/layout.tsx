@@ -228,10 +228,18 @@ function AdminDesktopSidebar() {
         <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
         {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} badge={attention?.restockRequests ?? 0} />}
 
+        {/* Inventory — available to all plans (Lite included) */}
+        <SidebarSection label={t("navInventory")} />
+        <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/") || location.startsWith("/item/")} />
+        <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations"} />
+        <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
+        <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />
+        <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
+        {atLeast("standard") && <SideNavItem href="/valuation" icon={FileText} label={t("valuationTitle")} active={location.startsWith("/valuation")} />}
+
         {atLeast("standard") && <SidebarSection label={t("navWork")} />}
         {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
         {atLeast("standard") && <SideNavItem href="/work/materials" icon={PackageOpen} label={t("navMaterials")} active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />}
-        {atLeast("pro") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />}
         {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
         {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
         {atLeast("standard") && <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />}
@@ -254,9 +262,9 @@ function AdminDesktopSidebar() {
         {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label={t("navLeaveRequests")} active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
 
         <SidebarSection label={t("navBusiness")} />
-        <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-        {atLeast("standard") && <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />}
+        <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
         <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
+        <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
       </nav>
 
       {/* Sign out */}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, AlertTriangle, ShoppingCart, CheckCircle2,
   Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
-  Truck, Building2, HelpCircle,
+  Truck, Building2, HelpCircle, Lock,
 } from "lucide-react";
 
 interface ReorderItem {
@@ -236,6 +236,7 @@ function SupplierGroupCard({
 
 export default function ReorderQueuePage() {
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { toast } = useToast();
   const { t } = useLang();
   const queryClient = useQueryClient();
@@ -363,6 +364,23 @@ export default function ReorderQueuePage() {
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  if (!atLeast("standard")) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 gap-3 max-w-md mx-auto">
+        <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center">
+          <Lock className="h-6 w-6 text-amber-600" />
+        </div>
+        <h2 className="text-lg font-black">One-click ordering is a Standard feature</h2>
+        <p className="text-sm text-muted-foreground">
+          On Lite you can see what's running low and who supplies it in the Suppliers tab. Upgrade to Standard to raise purchase orders here in one click.
+        </p>
+        <Link href="/admin/suppliers">
+          <Button className="font-bold gap-1.5"><Truck className="h-4 w-4" /> Go to Suppliers</Button>
+        </Link>
       </div>
     );
   }

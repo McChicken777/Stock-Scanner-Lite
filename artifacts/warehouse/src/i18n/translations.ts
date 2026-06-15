@@ -37,7 +37,8 @@ const KEYS = [
   "statusDueToday", "statusBlocked", "statusReady", "statusActive", "statusIdle",
   "statusApproved", "statusRejected", "statusPending",
   "priorityLow", "priorityNormal", "priorityHigh", "priorityUrgent",
-  "statusDraft", "statusSent", "statusConverted",
+  "statusDraft", "statusSent", "statusConverted", "statusDelivered",
+  "quoteMarkDelivered", "quoteReopen",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   "wizardTitle", "wizardStepIndustry", "wizardStepStations", "wizardStepRoles",
@@ -240,7 +241,7 @@ const KEYS = [
   "tutorialGotIt", "tutorialNext", "tutorialSkip",
 
   // ── Bottom nav / section switcher ─────────────────────────────────────────
-  "navInventory", "navDashboard", "navScan", "navHistory", "navOrders",
+  "navInventory", "navDashboard", "navScan", "navHistory", "navOrders", "navHelp",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   "suppliersAdd", "suppliersNamePlaceholder", "suppliersUpdate",
@@ -502,6 +503,9 @@ const en: Dict = {
   statusDraft: "Draft",
   statusSent: "Sent",
   statusConverted: "Converted",
+  statusDelivered: "Delivered",
+  quoteMarkDelivered: "Mark as Delivered",
+  quoteReopen: "Reopen (back to Accepted)",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   wizardTitle: "Quick Setup",
@@ -938,6 +942,7 @@ const en: Dict = {
   navScan: "Scan",
   navHistory: "History",
   navOrders: "Orders",
+  navHelp: "Help",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   suppliersAdd: "Add Supplier",
@@ -1391,6 +1396,9 @@ const sl: Dict = {
   statusDraft: "Osnutek",
   statusSent: "Poslano",
   statusConverted: "Pretvorjeno",
+  statusDelivered: "Dostavljeno",
+  quoteMarkDelivered: "Označi kot dostavljeno",
+  quoteReopen: "Ponovno odpri (nazaj na odobreno)",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   wizardTitle: "Hitra nastavitev",
@@ -1827,6 +1835,7 @@ const sl: Dict = {
   navScan: "Skeniraj",
   navHistory: "Zgodovina",
   navOrders: "Naročila",
+  navHelp: "Pomoč",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   suppliersAdd: "Dodaj dobavitelja",

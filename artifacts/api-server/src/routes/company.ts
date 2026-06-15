@@ -28,6 +28,12 @@ router.put("/", requireAdmin, async (req, res) => {
       workHoursPerDay: z.number().int().min(60).max(1440).optional(),
       weekendOvertimeEnabled: z.boolean().optional(),
       country: z.string().max(10).nullable().optional(),
+      // Branding: base64 data URL (~500KB cap) + typed signer name for quote PDFs.
+      logo: z.string().max(700000).nullable().optional().refine(
+        (v) => v == null || v === "" || /^data:image\/(png|jpe?g);base64,/.test(v),
+        "Logo must be a PNG or JPG image",
+      ),
+      quoteSignerName: z.string().max(120).nullable().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
@@ -41,6 +47,8 @@ router.put("/", requireAdmin, async (req, res) => {
     if (parsed.data.workHoursPerDay !== undefined) updates.workHoursPerDay = parsed.data.workHoursPerDay;
     if (parsed.data.weekendOvertimeEnabled !== undefined) updates.weekendOvertimeEnabled = parsed.data.weekendOvertimeEnabled;
     if (parsed.data.country !== undefined) updates.country = parsed.data.country;
+    if (parsed.data.logo !== undefined) updates.logo = parsed.data.logo || null;
+    if (parsed.data.quoteSignerName !== undefined) updates.quoteSignerName = parsed.data.quoteSignerName || null;
 
     const [company] = await db.update(companiesTable).set(updates as never).where(eq(companiesTable.id, companyId)).returning();
     // Update session features

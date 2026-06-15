@@ -1,15 +1,32 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import {
   db, purchaseOrdersTable, purchaseOrderItemsTable, productsTable,
   stockTable, locationsTable, suppliersTable, workItemStepsTable, productComponentsTable,
   workProjectsTable, workProjectItemsTable, stockReservationsTable,
-  restockRequestsTable, supplierProductsTable, usersTable,
+  restockRequestsTable, supplierProductsTable, usersTable, companiesTable,
 } from "@workspace/db";
 import { eq, and, sum, sql, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+// One-click ordering (creating purchase orders) is a Standard+ feature. Lite can
+// see suppliers and what's low, but must upgrade to raise orders.
+const requireStandardPlan = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const companyId = req.session.companyId!;
+    const [company] = await db.select({ plan: companiesTable.plan })
+      .from(companiesTable).where(eq(companiesTable.id, companyId));
+    if (!company || company.plan === "lite" || company.plan == null) {
+      res.status(403).json({ error: "Creating purchase orders requires a Standard or Pro plan", planRequired: "standard" });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ error: "Failed to verify plan" });
+  }
+};
 
 // ─── LIST PURCHASE ORDERS ──────────────────────────────────────────────────────
 
@@ -54,7 +71,7 @@ router.get("/", requireAdmin, async (req, res) => {
 
 // ─── CREATE PURCHASE ORDER ─────────────────────────────────────────────────────
 
-router.post("/", requireAdmin, async (req, res) => {
+router.post("/", requireAdmin, requireStandardPlan, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const parsed = z.object({
@@ -82,7 +99,7 @@ router.post("/", requireAdmin, async (req, res) => {
 // ─── BATCH CREATE PO WITH ITEMS ───────────────────────────────────────────────
 // Creates a PO and adds all line items in one request — used by the supplier order view.
 
-router.post("/batch", requireAdmin, async (req, res) => {
+router.post("/batch", requireAdmin, requireStandardPlan, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const parsed = z.object({
