@@ -386,7 +386,7 @@ router.put("/:id/status", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const companyId = req.session.companyId!;
     const parsed = z.object({
-      status: z.enum(["draft", "sent", "approved", "rejected"]),
+      status: z.enum(["draft", "sent", "approved", "rejected", "delivered"]),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -395,6 +395,11 @@ router.put("/:id/status", requireAdmin, async (req, res) => {
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
     if (existing.status === "converted") {
       res.status(400).json({ error: "Quote already converted" });
+      return;
+    }
+    // Delivered is reachable only from an accepted (approved) quote.
+    if (parsed.data.status === "delivered" && existing.status !== "approved" && existing.status !== "delivered") {
+      res.status(400).json({ error: "Only an accepted quote can be marked delivered" });
       return;
     }
 
@@ -442,6 +447,14 @@ router.post("/:id/convert", requireAdmin, async (req, res) => {
       requiresExternalParts: z.boolean().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    // Pushing a quote into production is a Standard+ feature. Lite stops at Delivered.
+    const [planRow] = await db.select({ plan: companiesTable.plan })
+      .from(companiesTable).where(eq(companiesTable.id, companyId));
+    if (!planRow || planRow.plan === "lite" || planRow.plan == null) {
+      res.status(403).json({ error: "Converting a quote to a job order requires a Standard or Pro plan", planRequired: "standard" });
+      return;
+    }
 
     const project = await db.transaction(async (tx) => {
     const [quote] = await tx.select().from(quotesTable)

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useRoute } from "wouter";
 import { useState } from "react";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import type { TranslationKey } from "@/i18n/translations";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 interface QuoteFull {
   id: number;
   quoteNumber: string;
-  status: "draft" | "sent" | "approved" | "rejected" | "converted";
+  status: "draft" | "sent" | "approved" | "rejected" | "converted" | "delivered";
   customerId: number | null;
   customerName: string | null;
   customerContact: string | null;
@@ -55,6 +55,7 @@ const statusBadge: Record<string, string> = {
   approved: "bg-green-100 text-green-700 border-green-300",
   rejected: "bg-red-100 text-red-700 border-red-300",
   converted: "bg-purple-100 text-purple-700 border-purple-300",
+  delivered: "bg-emerald-100 text-emerald-700 border-emerald-300",
 };
 
 const statusLabel: Record<string, TranslationKey> = {
@@ -63,6 +64,7 @@ const statusLabel: Record<string, TranslationKey> = {
   approved: "statusApproved",
   rejected: "statusRejected",
   converted: "statusConverted",
+  delivered: "statusDelivered",
 };
 
 const priorityLabel: Record<string, TranslationKey> = {
@@ -74,6 +76,7 @@ const priorityLabel: Record<string, TranslationKey> = {
 
 export default function QuoteDetailPage() {
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
   const isAdmin = user?.role === "admin";
   const [, params] = useRoute("/quotes/:id");
@@ -346,8 +349,20 @@ export default function QuoteDetailPage() {
               </div>
             )}
             {quote.status === "approved" && !quote.workProjectId && (
-              <Button onClick={() => setConvertOpen(true)} className="w-full h-12 gap-2 font-bold bg-purple-600 hover:bg-purple-700 text-base">
-                <Rocket className="h-5 w-5" /> {t("quoteSendToProduction")}
+              <div className="space-y-2">
+                <Button onClick={() => statusMut.mutate("delivered")} disabled={statusMut.isPending} className="w-full h-11 gap-2 font-bold bg-emerald-600 hover:bg-emerald-700">
+                  <Check className="h-4 w-4" /> {t("quoteMarkDelivered")}
+                </Button>
+                {atLeast("standard") && (
+                  <Button onClick={() => setConvertOpen(true)} className="w-full h-12 gap-2 font-bold bg-purple-600 hover:bg-purple-700 text-base">
+                    <Rocket className="h-5 w-5" /> {t("quoteSendToProduction")}
+                  </Button>
+                )}
+              </div>
+            )}
+            {quote.status === "delivered" && (
+              <Button onClick={() => statusMut.mutate("approved")} disabled={statusMut.isPending} variant="outline" className="w-full h-10 gap-2 font-bold border-2">
+                {t("quoteReopen")}
               </Button>
             )}
 

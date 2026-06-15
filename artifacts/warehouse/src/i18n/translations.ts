@@ -37,7 +37,8 @@ const KEYS = [
   "statusDueToday", "statusBlocked", "statusReady", "statusActive", "statusIdle",
   "statusApproved", "statusRejected", "statusPending",
   "priorityLow", "priorityNormal", "priorityHigh", "priorityUrgent",
-  "statusDraft", "statusSent", "statusConverted",
+  "statusDraft", "statusSent", "statusConverted", "statusDelivered",
+  "quoteMarkDelivered", "quoteReopen",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   "wizardTitle", "wizardStepIndustry", "wizardStepStations", "wizardStepRoles",
@@ -502,6 +503,9 @@ const en: Dict = {
   statusDraft: "Draft",
   statusSent: "Sent",
   statusConverted: "Converted",
+  statusDelivered: "Delivered",
+  quoteMarkDelivered: "Mark as Delivered",
+  quoteReopen: "Reopen (back to Accepted)",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   wizardTitle: "Quick Setup",
@@ -1391,6 +1395,9 @@ const sl: Dict = {
   statusDraft: "Osnutek",
   statusSent: "Poslano",
   statusConverted: "Pretvorjeno",
+  statusDelivered: "Dostavljeno",
+  quoteMarkDelivered: "Označi kot dostavljeno",
+  quoteReopen: "Ponovno odpri (nazaj na odobreno)",
 
   // ── Setup wizard ───────────────────────────────────────────────────────────
   wizardTitle: "Hitra nastavitev",
