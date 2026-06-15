@@ -14,6 +14,7 @@ import Dashboard from "@/pages/dashboard";
 import ScanPage from "@/pages/scan";
 import LocationsPage from "@/pages/locations";
 import LocationPage from "@/pages/location";
+import ItemActionPage from "@/pages/item-action";
 import ProductsPage from "@/pages/products";
 import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
@@ -161,6 +162,7 @@ function ProtectedRoutes() {
         <Route path="/scan" component={ScanPage} />
         <Route path="/locations" component={LocationsPage} />
         <Route path="/location/:id" component={LocationPage} />
+        <Route path="/item/:productId" component={ItemActionPage} />
         <Route path="/products" component={ProductsPage} />
         <Route path="/products/new" component={ProductFormPage} />
         <Route path="/products/:id/edit" component={ProductFormPage} />

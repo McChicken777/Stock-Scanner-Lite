@@ -17,6 +17,26 @@ export default function ScanPage() {
   const [manualMode, setManualMode] = useState(false);
   const [manualId, setManualId] = useState("");
   const requestRef = useRef<number | undefined>(undefined);
+  const handlingRef = useRef(false);
+
+  // Resolve a scanned/typed code to a bin location or a product, then route there.
+  const resolveAndGo = async (raw: string) => {
+    const code = raw.trim();
+    if (!code || handlingRef.current) return;
+    handlingRef.current = true;
+    try {
+      const r = await fetch(`/api/stock/resolve/${encodeURIComponent(code)}`, { credentials: "include" });
+      const d = await r.json();
+      if (d?.type === "location") { setLocation(`/location/${encodeURIComponent(d.id)}`); return; }
+      if (d?.type === "product") { setLocation(`/item/${d.productId}`); return; }
+      setError(`Code not recognised: ${code}`);
+      setManualMode(true);
+      handlingRef.current = false;
+    } catch {
+      // Network/parse failure — fall back to treating it as a location id
+      setLocation(`/location/${encodeURIComponent(code)}`);
+    }
+  };
 
   useEffect(() => {
     if (manualMode) return;
@@ -76,11 +96,9 @@ export default function ScanPage() {
         });
 
         if (code && code.data) {
-          // If we found a code, navigate to it
-          // Wait a tiny bit to prevent rapid multiple scans
-          setTimeout(() => {
-            setLocation(`/location/${encodeURIComponent(code.data)}`);
-          }, 100);
+          // Resolve the code (bin location or item) then route. resolveAndGo guards
+          // against rapid duplicate scans.
+          resolveAndGo(code.data);
           return; // Stop scanning
         }
       }
@@ -91,7 +109,8 @@ export default function ScanPage() {
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualId.trim()) {
-      setLocation(`/location/${encodeURIComponent(manualId.trim())}`);
+      handlingRef.current = false; // allow a fresh manual attempt
+      resolveAndGo(manualId.trim());
     }
   };
 

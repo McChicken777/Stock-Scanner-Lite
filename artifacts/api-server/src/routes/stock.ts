@@ -1,10 +1,77 @@
 import { Router, type IRouter } from "express";
-import { db, stockTable, productsTable, historyTable, locationsTable } from "@workspace/db";
+import { db, stockTable, productsTable, historyTable, locationsTable, stockReservationsTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { sendLowStockAlert } from "../lib/email";
 
 const router: IRouter = Router();
+
+// Resolve a scanned code to a bin location or a product (scan-the-item flow).
+router.get("/resolve/:code", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const code = req.params.code.trim();
+
+    const [loc] = await db.select({ id: locationsTable.id }).from(locationsTable)
+      .where(and(eq(locationsTable.id, code), eq(locationsTable.companyId, companyId)));
+    if (loc) { res.json({ type: "location", id: loc.id }); return; }
+
+    const [byBarcode] = await db.select({ id: productsTable.id, name: productsTable.name }).from(productsTable)
+      .where(and(eq(productsTable.barcode, code), eq(productsTable.companyId, companyId)));
+    if (byBarcode) { res.json({ type: "product", productId: byBarcode.id, productName: byBarcode.name }); return; }
+
+    if (/^\d+$/.test(code)) {
+      const [byId] = await db.select({ id: productsTable.id, name: productsTable.name }).from(productsTable)
+        .where(and(eq(productsTable.id, Number(code)), eq(productsTable.companyId, companyId)));
+      if (byId) { res.json({ type: "product", productId: byId.id, productName: byId.name }); return; }
+    }
+
+    res.json({ type: "none" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to resolve scan code");
+    res.status(500).json({ error: "Failed to resolve code" });
+  }
+});
+
+// Product stock across all locations + reserved/available (item action page).
+router.get("/product/:productId", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const productId = Number(req.params.productId);
+
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const locs = await db.select({ locationId: stockTable.locationId, quantity: stockTable.quantity })
+      .from(stockTable).where(eq(stockTable.productId, productId)).orderBy(stockTable.locationId);
+    const totalStock = locs.reduce((s, l) => s + Number(l.quantity), 0);
+
+    const [resv] = await db
+      .select({ reserved: sql<number>`COALESCE(SUM(${stockReservationsTable.quantity}), 0)`.as("reserved") })
+      .from(stockReservationsTable)
+      .where(and(
+        eq(stockReservationsTable.companyId, companyId),
+        eq(stockReservationsTable.status, "active"),
+        eq(stockReservationsTable.productId, productId),
+      ));
+    const reserved = Number(resv?.reserved ?? 0);
+
+    res.json({
+      productId: product.id,
+      name: product.name,
+      category: product.category,
+      bufferStock: product.bufferStock,
+      totalStock,
+      reserved,
+      available: Math.max(0, totalStock - reserved),
+      locations: locs.map((l) => ({ locationId: l.locationId, quantity: Number(l.quantity) })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get product stock");
+    res.status(500).json({ error: "Failed to get product stock" });
+  }
+});
 
 router.get("/valuation", async (req, res) => {
   try {
