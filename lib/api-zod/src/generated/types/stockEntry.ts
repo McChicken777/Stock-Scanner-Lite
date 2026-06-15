@@ -13,4 +13,10 @@ export interface StockEntry {
   productName: string;
   productCategory: string;
   bufferStock: number;
+  /** Quantity committed to active job reservations (product-level) */
+  reserved?: number;
+  /** On-hand across all locations (product-level) */
+  totalStock?: number;
+  /** totalStock minus reserved, floored at 0 (product-level) */
+  available?: number;
 }

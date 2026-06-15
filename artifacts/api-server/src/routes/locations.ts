@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, locationsTable, stockTable, productsTable, insertLocationSchema } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, locationsTable, stockTable, productsTable, stockReservationsTable, insertLocationSchema } from "@workspace/db";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -66,7 +66,46 @@ router.get("/:locationId", async (req, res) => {
       .from(stockTable)
       .innerJoin(productsTable, eq(stockTable.productId, productsTable.id))
       .where(and(eq(stockTable.locationId, locationId), eq(productsTable.companyId, companyId)));
-    res.json({ ...location, stock });
+
+    // Enrich each entry with product-level reserved / total on-hand / available so
+    // the floor can see what's committed to jobs and what's actually free to take.
+    const productIds = [...new Set(stock.map((s) => s.productId))];
+    const reservedMap = new Map<number, number>();
+    const onHandMap = new Map<number, number>();
+    if (productIds.length > 0) {
+      const reservations = await db
+        .select({
+          productId: stockReservationsTable.productId,
+          reserved: sql<number>`COALESCE(SUM(${stockReservationsTable.quantity}), 0)`.as("reserved"),
+        })
+        .from(stockReservationsTable)
+        .where(and(
+          eq(stockReservationsTable.companyId, companyId),
+          eq(stockReservationsTable.status, "active"),
+          inArray(stockReservationsTable.productId, productIds),
+        ))
+        .groupBy(stockReservationsTable.productId);
+      for (const r of reservations) reservedMap.set(r.productId, Number(r.reserved));
+
+      const onHand = await db
+        .select({
+          productId: stockTable.productId,
+          total: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)`.as("total"),
+        })
+        .from(stockTable)
+        .where(inArray(stockTable.productId, productIds))
+        .groupBy(stockTable.productId);
+      for (const r of onHand) onHandMap.set(r.productId, Number(r.total));
+    }
+
+    const enriched = stock.map((s) => {
+      const reserved = reservedMap.get(s.productId) ?? 0;
+      const totalStock = onHandMap.get(s.productId) ?? Number(s.quantity);
+      const available = Math.max(0, totalStock - reserved);
+      return { ...s, reserved, totalStock, available };
+    });
+
+    res.json({ ...location, stock: enriched });
   } catch (err) {
     req.log.error({ err }, "Failed to get location");
     res.status(500).json({ error: "Failed to get location" });

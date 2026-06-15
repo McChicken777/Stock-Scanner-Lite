@@ -1000,6 +1000,15 @@ components:
           type: string
         bufferStock:
           type: integer
+        reserved:
+          type: number
+          description: Quantity committed to active job reservations (product-level)
+        totalStock:
+          type: number
+          description: On-hand across all locations (product-level)
+        available:
+          type: number
+          description: totalStock minus reserved, floored at 0 (product-level)
       required:
         - locationId
         - productId

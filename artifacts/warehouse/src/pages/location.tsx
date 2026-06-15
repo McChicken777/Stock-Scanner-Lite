@@ -12,20 +12,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
-function StockItem({ 
-  locationId, 
-  productId, 
-  productName, 
-  category, 
-  quantity, 
-  bufferStock 
-}: { 
-  locationId: string, 
-  productId: number, 
-  productName: string, 
-  category: string, 
-  quantity: number, 
-  bufferStock: number 
+function StockItem({
+  locationId,
+  productId,
+  productName,
+  category,
+  quantity,
+  bufferStock,
+  reserved = 0,
+  available,
+}: {
+  locationId: string,
+  productId: number,
+  productName: string,
+  category: string,
+  quantity: number,
+  bufferStock: number,
+  reserved?: number,
+  available?: number,
 }) {
   const [optimisticQty, setOptimisticQty] = useState(quantity);
   const [isEditing, setIsEditing] = useState(false);
@@ -84,13 +88,21 @@ function StockItem({
         <div className="p-4 border-b border-border/50 bg-background/50 flex justify-between items-start">
           <div>
             <h3 className="font-bold text-lg leading-tight">{productName}</h3>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-xs font-medium px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">
                 {category}
               </span>
               <span className="text-xs text-muted-foreground">
                 Min: {bufferStock}
               </span>
+              {reserved > 0 && (
+                <span
+                  title="Committed to active jobs across all locations"
+                  className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full"
+                >
+                  {reserved} reserved · {available ?? 0} free
+                </span>
+              )}
             </div>
           </div>
           {isLow && (
@@ -306,7 +318,7 @@ export default function LocationPage() {
           <>
             <div className="space-y-4">
               {location.stock.map((item) => (
-                <StockItem 
+                <StockItem
                   key={`${item.locationId}-${item.productId}`}
                   locationId={item.locationId}
                   productId={item.productId}
@@ -314,6 +326,8 @@ export default function LocationPage() {
                   category={item.productCategory}
                   quantity={item.quantity}
                   bufferStock={item.bufferStock}
+                  reserved={item.reserved}
+                  available={item.available}
                 />
               ))}
             </div>
