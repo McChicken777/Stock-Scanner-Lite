@@ -201,7 +201,18 @@ export default function QuoteFormPage() {
   const customerValid =
     (customerMode === "existing" && customerId !== null) ||
     (customerMode === "manual" && manualName.trim().length > 0);
-  const canSubmit = customerValid && items.some((it) => it.name.trim());
+  const hasItems = items.some((it) => it.name.trim());
+  const canSubmit = customerValid && hasItems;
+
+  const missingHint = !customerValid && !hasItems
+    ? "Add a customer and at least one line item to create a quote."
+    : !customerValid
+      ? customerMode === "existing" && customers.length === 0
+        ? 'No customers yet — switch to "Enter Manually" above to type a name.'
+        : "Select a customer (or switch to Enter Manually)."
+      : !hasItems
+        ? 'Add at least one line item using "From Catalog" or "Free Text" above.'
+        : null;
 
   const filteredProducts = products.filter((p) => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
@@ -410,6 +421,11 @@ export default function QuoteFormPage() {
             ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t("saving")}</>
             : editingId ? t("quoteFormSaveChanges") : t("quoteFormCreateQuote")}
         </Button>
+        {missingHint && (
+          <p className="text-center text-sm text-muted-foreground bg-muted/40 rounded-lg px-3 py-2 border border-border">
+            ⚠️ {missingHint}
+          </p>
+        )}
       </div>
     </div>
   );
