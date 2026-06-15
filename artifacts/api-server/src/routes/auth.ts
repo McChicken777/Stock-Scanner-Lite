@@ -201,6 +201,26 @@ router.patch("/users/:userId/shift", requireAdmin, async (req, res) => {
   }
 });
 
+router.patch("/users/:userId/password", requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const companyId = req.session.companyId!;
+    const parsed = z.object({ newPassword: z.string().min(4).max(200) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "newPassword (min 4 chars) required" }); return; }
+    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+    const [user] = await db
+      .update(usersTable)
+      .set({ passwordHash })
+      .where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)))
+      .returning({ id: usersTable.id, username: usersTable.username });
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    res.json(user);
+  } catch (err) {
+    req.log.error({ err }, "Failed to change user password");
+    res.status(500).json({ error: "Failed to change password" });
+  }
+});
+
 router.delete("/users/:userId", requireAdmin, async (req, res) => {
   try {
     const userId = Number(req.params.userId);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye, Pencil, Check, Clock } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, HardHat, Loader2, Plus, X, Eye, Pencil, Check, Clock, KeyRound } from "lucide-react";
 
 interface UserEntry {
   id: number;
@@ -94,6 +94,20 @@ async function deleteUser(userId: number) {
   }
 }
 
+async function changeUserPassword(userId: number, newPassword: string) {
+  const res = await fetch(`/api/auth/users/${userId}/password`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(() => ({}));
+    throw new Error(d.error || "Failed to change password");
+  }
+  return res.json();
+}
+
 async function fetchUserRoles(userId: number) {
   const res = await fetch(`/api/tasks/roles/for-user/${userId}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load roles");
@@ -134,10 +148,13 @@ async function unassignUserRole(userId: number, roleId: number) {
 
 export default function AdminUsersPage() {
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [pwUserId, setPwUserId] = useState<number | null>(null);
+  const [pwValue, setPwValue] = useState("");
   const [rolesOpen, setRolesOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newUsername, setNewUsername] = useState("");
@@ -189,6 +206,16 @@ export default function AdminUsersPage() {
     onError: (err) => {
       toast({ title: err instanceof Error ? err.message : "Failed to create user", variant: "destructive" });
     },
+  });
+
+  const passwordMutation = useMutation({
+    mutationFn: ({ userId, newPassword }: { userId: number; newPassword: string }) => changeUserPassword(userId, newPassword),
+    onSuccess: () => {
+      setPwUserId(null);
+      setPwValue("");
+      toast({ title: "Password changed" });
+    },
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Failed to change password", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -414,7 +441,7 @@ export default function AdminUsersPage() {
                 </div>
               </div>
               <div className="flex gap-2 items-center">
-                {u.role === "worker" && (
+                {atLeast("standard") && u.role === "worker" && (
                   <button
                     title={u.isSupervisor ? t("usersRemoveSupervisor") : t("usersGrantSupervisor")}
                     onClick={() => supervisorMutation.mutate({ userId: u.id, isSupervisor: !u.isSupervisor })}
@@ -429,7 +456,7 @@ export default function AdminUsersPage() {
                     {u.isSupervisor ? "Supervisor" : "Supervisor"}
                   </button>
                 )}
-                {u.role === "worker" && companyShifts.length > 0 && (
+                {atLeast("standard") && u.role === "worker" && companyShifts.length > 0 && (
                   <div className="flex items-center gap-1">
                     <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                     <select
@@ -446,7 +473,7 @@ export default function AdminUsersPage() {
                     </select>
                   </div>
                 )}
-                {u.role === "worker" && (
+                {atLeast("standard") && u.role === "worker" && (
                   <Dialog open={rolesOpen && selectedUserId === u.id} onOpenChange={(open) => {
                     if (!open) setSelectedUserId(null);
                     setRolesOpen(open);
@@ -547,6 +574,43 @@ export default function AdminUsersPage() {
                     </DialogContent>
                   </Dialog>
                 )}
+                <Dialog open={pwUserId === u.id} onOpenChange={(open) => { if (!open) { setPwUserId(null); setPwValue(""); } }}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Change password"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => { setPwUserId(u.id); setPwValue(""); }}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="w-[90vw] max-w-sm rounded-xl">
+                    <DialogHeader>
+                      <DialogTitle>{`Change password — ${u.username}`}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                      <Input
+                        type="password"
+                        value={pwValue}
+                        onChange={(e) => setPwValue(e.target.value)}
+                        placeholder="New password (min 4 characters)"
+                        className="h-12 border-2"
+                        autoFocus
+                        onKeyDown={(e) => { if (e.key === "Enter" && pwValue.length >= 4) passwordMutation.mutate({ userId: u.id, newPassword: pwValue }); }}
+                      />
+                      <Button
+                        className="w-full h-11 font-bold"
+                        disabled={pwValue.length < 4 || passwordMutation.isPending}
+                        onClick={() => passwordMutation.mutate({ userId: u.id, newPassword: pwValue })}
+                      >
+                        {passwordMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Change password
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
                 {u.id !== user?.id && (
                   <Button
                     variant="ghost"
@@ -567,7 +631,8 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Production Roles */}
+      {/* Production Roles — Standard+ only */}
+      {atLeast("standard") && (
       <div className="pt-4 border-t space-y-3">
         <div>
           <p className="text-base font-bold flex items-center gap-2"><HardHat className="h-4 w-4 text-purple-600" /> {t("usersProductionRoles")}</p>
@@ -634,6 +699,7 @@ export default function AdminUsersPage() {
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }
