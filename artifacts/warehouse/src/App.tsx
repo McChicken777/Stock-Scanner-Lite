@@ -15,6 +15,7 @@ import ScanPage from "@/pages/scan";
 import LocationsPage from "@/pages/locations";
 import LocationPage from "@/pages/location";
 import ItemActionPage from "@/pages/item-action";
+import HelpPage from "@/pages/help";
 import ProductsPage from "@/pages/products";
 import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
@@ -167,6 +168,7 @@ function ProtectedRoutes() {
         <Route path="/products/new" component={ProductFormPage} />
         <Route path="/products/:id/edit" component={ProductFormPage} />
         <Route path="/history" component={HistoryPage} />
+        <Route path="/help" component={HelpPage} />
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/company" component={AdminCompanyPage} />
         <Route path="/admin/suppliers" component={AdminSuppliersPage} />

@@ -241,7 +241,7 @@ const KEYS = [
   "tutorialGotIt", "tutorialNext", "tutorialSkip",
 
   // ── Bottom nav / section switcher ─────────────────────────────────────────
-  "navInventory", "navDashboard", "navScan", "navHistory", "navOrders",
+  "navInventory", "navDashboard", "navScan", "navHistory", "navOrders", "navHelp",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   "suppliersAdd", "suppliersNamePlaceholder", "suppliersUpdate",
@@ -942,6 +942,7 @@ const en: Dict = {
   navScan: "Scan",
   navHistory: "History",
   navOrders: "Orders",
+  navHelp: "Help",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   suppliersAdd: "Add Supplier",
@@ -1834,6 +1835,7 @@ const sl: Dict = {
   navScan: "Skeniraj",
   navHistory: "Zgodovina",
   navOrders: "Naročila",
+  navHelp: "Pomoč",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   suppliersAdd: "Dodaj dobavitelja",

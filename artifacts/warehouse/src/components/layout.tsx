@@ -264,6 +264,7 @@ function AdminDesktopSidebar() {
         <SidebarSection label={t("navBusiness")} />
         <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
         <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
+        <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
       </nav>
 
       {/* Sign out */}
