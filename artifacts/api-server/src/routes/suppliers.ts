@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, suppliersTable, supplierProductsTable, productsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, suppliersTable, supplierProductsTable, productsTable, stockTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -141,6 +141,11 @@ router.get("/:id/products", requireAuth, async (req, res) => {
       productName: productsTable.name,
       productCategory: productsTable.category,
       productItemType: productsTable.itemType,
+      bufferStock: productsTable.bufferStock,
+      totalStock: sql<number>`COALESCE((
+        SELECT SUM(${stockTable.quantity}) FROM ${stockTable}
+        WHERE ${stockTable.productId} = ${productsTable.id}
+      ), 0)`.as("total_stock"),
     })
       .from(supplierProductsTable)
       .innerJoin(productsTable, eq(supplierProductsTable.productId, productsTable.id))
@@ -149,7 +154,7 @@ router.get("/:id/products", requireAuth, async (req, res) => {
         eq(supplierProductsTable.companyId, companyId),
       ));
 
-    res.json(links);
+    res.json(links.map((l) => ({ ...l, totalStock: Number(l.totalStock ?? 0) })));
   } catch (err) {
     req.log.error({ err }, "Failed to list supplier products");
     res.status(500).json({ error: "Failed to list supplier products" });

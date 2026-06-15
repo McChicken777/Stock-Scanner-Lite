@@ -262,7 +262,7 @@ function AdminDesktopSidebar() {
         {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label={t("navLeaveRequests")} active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
 
         <SidebarSection label={t("navBusiness")} />
-        {atLeast("standard") && <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />}
+        <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
         <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
       </nav>
 
