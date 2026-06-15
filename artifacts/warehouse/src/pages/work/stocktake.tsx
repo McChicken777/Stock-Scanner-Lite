@@ -30,15 +30,15 @@ export default function StocktakePage() {
   const [saved, setSaved] = useState(false);
 
   const { data: materials = [], isLoading } = useQuery<Material[]>({
-    queryKey: ["/api/work/materials"],
-    queryFn: () => apiFetch("/api/work/materials"),
+    queryKey: ["/api/work/materials", "stocktake"],
+    queryFn: () => apiFetch("/api/work/materials?includeRaw=1"),
   });
 
   const saveMutation = useMutation({
     mutationFn: () => {
       const items = Object.entries(counts)
         .filter(([, v]) => v !== "")
-        .map(([productId, v]) => ({ productId: Number(productId), newQuantity: Math.max(0, parseInt(v, 10) || 0) }));
+        .map(([productId, v]) => ({ productId: Number(productId), newQuantity: Math.max(0, parseFloat(v) || 0) }));
       return apiFetch("/api/work/stocktake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -59,7 +59,7 @@ export default function StocktakePage() {
   const changedCount = Object.values(counts).filter((v) => v !== "").length;
   const discrepancies = materials.filter((m) => {
     const v = counts[m.id];
-    return v !== "" && v !== undefined && parseInt(v, 10) !== m.totalStock;
+    return v !== "" && v !== undefined && parseFloat(v) !== m.totalStock;
   });
 
   return (
@@ -93,7 +93,7 @@ export default function StocktakePage() {
           </p>
           <ul className="mt-1 space-y-0.5">
             {discrepancies.map((m) => {
-              const counted = parseInt(counts[m.id], 10);
+              const counted = parseFloat(counts[m.id]);
               const diff = counted - m.totalStock;
               return (
                 <li key={m.id} className="text-xs text-orange-800 flex items-center justify-between">
@@ -136,7 +136,7 @@ export default function StocktakePage() {
           {materials.map((m) => {
             const raw = counts[m.id];
             const touched = raw !== undefined && raw !== "";
-            const counted = touched ? parseInt(raw, 10) : null;
+            const counted = touched ? parseFloat(raw) : null;
             const isOk = touched && counted === m.totalStock;
             const isDiff = touched && counted !== null && !isNaN(counted) && counted !== m.totalStock;
             const isLow = m.bufferStock > 0 && m.totalStock < m.bufferStock;
@@ -174,6 +174,8 @@ export default function StocktakePage() {
                   <input
                     type="number"
                     min="0"
+                    step="any"
+                    inputMode="decimal"
                     placeholder={String(m.totalStock)}
                     value={raw ?? ""}
                     onChange={(e) => {

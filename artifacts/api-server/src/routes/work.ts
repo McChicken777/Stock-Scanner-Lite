@@ -4851,6 +4851,12 @@ router.get("/projects/:id/time-logs", requireAuth, async (req, res) => {
 router.get("/materials", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
+    // By default only consumables (purchased_part). Stock-take passes includeRaw=1
+    // to also include raw-material stock items (itemType "purchase").
+    const includeRaw = req.query.includeRaw === "1" || req.query.includeRaw === "true";
+    const typeFilter = includeRaw
+      ? inArray(productsTable.itemType, ["purchased_part", "purchase"])
+      : eq(productsTable.itemType, "purchased_part");
     const products = await db
       .select({
         id: productsTable.id,
@@ -4864,7 +4870,7 @@ router.get("/materials", requireAuth, async (req, res) => {
       })
       .from(productsTable)
       .leftJoin(stockTable, eq(stockTable.productId, productsTable.id))
-      .where(and(eq(productsTable.companyId, companyId), eq(productsTable.itemType, "purchased_part")))
+      .where(and(eq(productsTable.companyId, companyId), typeFilter))
       .groupBy(productsTable.id)
       .orderBy(productsTable.name);
     res.json(products);
