@@ -25,6 +25,8 @@ export const productsTable = pgTable("products", {
   supplierProductName: text("supplier_product_name"),
   supplierSku: text("supplier_sku"),
   alertEmail: text("alert_email"),
+  // Scannable code (barcode/QR payload) so this item can be scanned directly.
+  barcode: text("barcode"),
   unitCost: numeric("unit_cost", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   salePrice: numeric("sale_price", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "cascade" }),

@@ -4884,7 +4884,7 @@ router.post("/stocktake", requireAuth, async (req, res) => {
     }
     const companyId = req.session.companyId!;
     const parsed = z.object({
-      items: z.array(z.object({ productId: z.number().int(), newQuantity: z.number().int().min(0) })),
+      items: z.array(z.object({ productId: z.number().int(), newQuantity: z.number().min(0) })),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Invalid payload" }); return; }
 

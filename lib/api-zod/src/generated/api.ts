@@ -51,6 +51,20 @@ export const GetLocationResponse = zod.object({
       productName: zod.string(),
       productCategory: zod.string(),
       bufferStock: zod.number(),
+      reserved: zod
+        .number()
+        .optional()
+        .describe(
+          "Quantity committed to active job reservations (product-level)",
+        ),
+      totalStock: zod
+        .number()
+        .optional()
+        .describe("On-hand across all locations (product-level)"),
+      available: zod
+        .number()
+        .optional()
+        .describe("totalStock minus reserved, floored at 0 (product-level)"),
     }),
   ),
 });
@@ -226,6 +240,18 @@ export const GetStockAtLocationResponseItem = zod.object({
   productName: zod.string(),
   productCategory: zod.string(),
   bufferStock: zod.number(),
+  reserved: zod
+    .number()
+    .optional()
+    .describe("Quantity committed to active job reservations (product-level)"),
+  totalStock: zod
+    .number()
+    .optional()
+    .describe("On-hand across all locations (product-level)"),
+  available: zod
+    .number()
+    .optional()
+    .describe("totalStock minus reserved, floored at 0 (product-level)"),
 });
 export const GetStockAtLocationResponse = zod.array(
   GetStockAtLocationResponseItem,
@@ -246,6 +272,12 @@ export const UpdateStockBody = zod.object({
     .optional()
     .describe("Relative change (positive to add, negative to remove)"),
   changedBy: zod.string().nullish(),
+  reason: zod
+    .string()
+    .nullish()
+    .describe(
+      "Why stock changed (received\/consumed\/counted\/adjusted\/transfer_in\/transfer_out)",
+    ),
 });
 
 export const UpdateStockResponse = zod.object({
@@ -277,6 +309,7 @@ export const ListHistoryResponseItem = zod.object({
   newQuantity: zod.number(),
   delta: zod.number(),
   changedBy: zod.string().nullish(),
+  reason: zod.string().nullish(),
   changedAt: zod.coerce.date(),
 });
 export const ListHistoryResponse = zod.array(ListHistoryResponseItem);
@@ -738,6 +771,7 @@ export const GetDashboardSummaryResponse = zod.object({
       newQuantity: zod.number(),
       delta: zod.number(),
       changedBy: zod.string().nullish(),
+      reason: zod.string().nullish(),
       changedAt: zod.coerce.date(),
     }),
   ),

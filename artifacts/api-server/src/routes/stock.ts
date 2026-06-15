@@ -1,10 +1,77 @@
 import { Router, type IRouter } from "express";
-import { db, stockTable, productsTable, historyTable, locationsTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { db, stockTable, productsTable, historyTable, locationsTable, stockReservationsTable } from "@workspace/db";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { sendLowStockAlert } from "../lib/email";
 
 const router: IRouter = Router();
+
+// Resolve a scanned code to a bin location or a product (scan-the-item flow).
+router.get("/resolve/:code", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const code = req.params.code.trim();
+
+    const [loc] = await db.select({ id: locationsTable.id }).from(locationsTable)
+      .where(and(eq(locationsTable.id, code), eq(locationsTable.companyId, companyId)));
+    if (loc) { res.json({ type: "location", id: loc.id }); return; }
+
+    const [byBarcode] = await db.select({ id: productsTable.id, name: productsTable.name }).from(productsTable)
+      .where(and(eq(productsTable.barcode, code), eq(productsTable.companyId, companyId)));
+    if (byBarcode) { res.json({ type: "product", productId: byBarcode.id, productName: byBarcode.name }); return; }
+
+    if (/^\d+$/.test(code)) {
+      const [byId] = await db.select({ id: productsTable.id, name: productsTable.name }).from(productsTable)
+        .where(and(eq(productsTable.id, Number(code)), eq(productsTable.companyId, companyId)));
+      if (byId) { res.json({ type: "product", productId: byId.id, productName: byId.name }); return; }
+    }
+
+    res.json({ type: "none" });
+  } catch (err) {
+    req.log.error({ err }, "Failed to resolve scan code");
+    res.status(500).json({ error: "Failed to resolve code" });
+  }
+});
+
+// Product stock across all locations + reserved/available (item action page).
+router.get("/product/:productId", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const productId = Number(req.params.productId);
+
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const locs = await db.select({ locationId: stockTable.locationId, quantity: stockTable.quantity })
+      .from(stockTable).where(eq(stockTable.productId, productId)).orderBy(stockTable.locationId);
+    const totalStock = locs.reduce((s, l) => s + Number(l.quantity), 0);
+
+    const [resv] = await db
+      .select({ reserved: sql<number>`COALESCE(SUM(${stockReservationsTable.quantity}), 0)`.as("reserved") })
+      .from(stockReservationsTable)
+      .where(and(
+        eq(stockReservationsTable.companyId, companyId),
+        eq(stockReservationsTable.status, "active"),
+        eq(stockReservationsTable.productId, productId),
+      ));
+    const reserved = Number(resv?.reserved ?? 0);
+
+    res.json({
+      productId: product.id,
+      name: product.name,
+      category: product.category,
+      bufferStock: product.bufferStock,
+      totalStock,
+      reserved,
+      available: Math.max(0, totalStock - reserved),
+      locations: locs.map((l) => ({ locationId: l.locationId, quantity: Number(l.quantity) })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get product stock");
+    res.status(500).json({ error: "Failed to get product stock" });
+  }
+});
 
 router.get("/valuation", async (req, res) => {
   try {
@@ -14,7 +81,7 @@ router.get("/valuation", async (req, res) => {
     const totals = await db
       .select({
         productId: stockTable.productId,
-        totalQty: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::int`.as("total_qty"),
+        totalQty: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::numeric`.as("total_qty"),
       })
       .from(stockTable)
       .innerJoin(locationsTable, eq(stockTable.locationId, locationsTable.id))
@@ -79,6 +146,76 @@ router.get("/valuation", async (req, res) => {
   }
 });
 
+// Move stock from one location to another in a single atomic operation, writing
+// linked transfer_out / transfer_in history rows.
+const transferSchema = z.object({
+  fromLocationId: z.string().min(1),
+  toLocationId: z.string().min(1),
+  productId: z.number().int(),
+  quantity: z.number().positive(),
+  changedBy: z.string().nullable().optional(),
+});
+
+router.post("/transfer", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = transferSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { fromLocationId, toLocationId, productId, quantity, changedBy } = parsed.data;
+    if (fromLocationId === toLocationId) { res.status(400).json({ error: "Source and destination must differ" }); return; }
+
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const locs = await db.select({ id: locationsTable.id }).from(locationsTable)
+      .where(and(eq(locationsTable.companyId, companyId), inArray(locationsTable.id, [fromLocationId, toLocationId])));
+    const locSet = new Set(locs.map((l) => l.id));
+    if (!locSet.has(fromLocationId) || !locSet.has(toLocationId)) { res.status(400).json({ error: "Location not found" }); return; }
+
+    const who = changedBy ?? req.session.username ?? null;
+
+    const result = await db.transaction(async (tx) => {
+      const [src] = await tx.select().from(stockTable)
+        .where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      const srcPrev = src?.quantity ?? 0;
+      if (srcPrev < quantity) throw new Error(`Only ${srcPrev} available at ${fromLocationId}`);
+      const srcNew = srcPrev - quantity;
+
+      if (srcNew === 0) {
+        await tx.delete(stockTable).where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      } else {
+        await tx.update(stockTable).set({ quantity: srcNew })
+          .where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      }
+
+      const [dst] = await tx.select().from(stockTable)
+        .where(and(eq(stockTable.locationId, toLocationId), eq(stockTable.productId, productId)));
+      const dstPrev = dst?.quantity ?? 0;
+      const dstNew = dstPrev + quantity;
+      if (dst) {
+        await tx.update(stockTable).set({ quantity: dstNew })
+          .where(and(eq(stockTable.locationId, toLocationId), eq(stockTable.productId, productId)));
+      } else {
+        await tx.insert(stockTable).values({ locationId: toLocationId, productId, quantity: dstNew });
+      }
+
+      await tx.insert(historyTable).values([
+        { locationId: fromLocationId, productId, previousQuantity: srcPrev, newQuantity: srcNew, delta: -quantity, changedBy: who, reason: "transfer_out", companyId },
+        { locationId: toLocationId, productId, previousQuantity: dstPrev, newQuantity: dstNew, delta: quantity, changedBy: who, reason: "transfer_in", companyId },
+      ]);
+
+      return { fromQuantity: srcNew, toQuantity: dstNew };
+    });
+
+    res.json({ fromLocationId, toLocationId, productId, quantity, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to transfer stock";
+    req.log.error({ err }, "Failed to transfer stock");
+    res.status(/available at/.test(msg) ? 400 : 500).json({ error: msg });
+  }
+});
+
 router.get("/:locationId", async (req, res) => {
   try {
     const { locationId } = req.params;
@@ -108,9 +245,10 @@ router.get("/:locationId", async (req, res) => {
 });
 
 const updateStockSchema = z.object({
-  quantity: z.number().int().min(0).optional(),
-  delta: z.number().int().optional(),
+  quantity: z.number().min(0).optional(),
+  delta: z.number().optional(),
   changedBy: z.string().nullable().optional(),
+  reason: z.string().max(40).nullable().optional(),
 });
 
 router.put("/:locationId/:productId", async (req, res) => {
@@ -125,7 +263,7 @@ router.put("/:locationId/:productId", async (req, res) => {
       return;
     }
 
-    const { quantity, delta, changedBy } = parsed.data;
+    const { quantity, delta, changedBy, reason } = parsed.data;
 
     if (quantity === undefined && delta === undefined) {
       res.status(400).json({ error: "Provide either quantity or delta" });
@@ -177,7 +315,8 @@ router.put("/:locationId/:productId", async (req, res) => {
       previousQuantity,
       newQuantity,
       delta: actualDelta,
-      changedBy: changedBy ?? null,
+      changedBy: changedBy ?? req.session.username ?? null,
+      reason: reason ?? null,
       companyId,
     });
 

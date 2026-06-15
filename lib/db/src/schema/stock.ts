@@ -1,4 +1,4 @@
-import { pgTable, text, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { locationsTable } from "./locations";
 import { productsTable } from "./products";
 
@@ -11,7 +11,8 @@ export const stockTable = pgTable(
     productId: integer("product_id")
       .notNull()
       .references(() => productsTable.id, { onDelete: "cascade" }),
-    quantity: integer("quantity").notNull().default(0),
+    // Numeric so fractional stock (mm/m/kg/L) is supported, not just whole units.
+    quantity: numeric("quantity", { precision: 14, scale: 3, mode: "number" }).notNull().default(0),
   },
   (table) => [primaryKey({ columns: [table.locationId, table.productId] })]
 );

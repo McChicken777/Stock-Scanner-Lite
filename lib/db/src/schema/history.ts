@@ -1,4 +1,4 @@
-import { pgTable, text, integer, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, numeric, serial, timestamp } from "drizzle-orm/pg-core";
 import { locationsTable } from "./locations";
 import { productsTable } from "./products";
 import { companiesTable } from "./companies";
@@ -11,10 +11,12 @@ export const historyTable = pgTable("stock_history", {
   productId: integer("product_id")
     .notNull()
     .references(() => productsTable.id, { onDelete: "cascade" }),
-  previousQuantity: integer("previous_quantity").notNull(),
-  newQuantity: integer("new_quantity").notNull(),
-  delta: integer("delta").notNull(),
+  previousQuantity: numeric("previous_quantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  newQuantity: numeric("new_quantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
+  delta: numeric("delta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   changedBy: text("changed_by"),
+  // Why the stock changed: received | consumed | counted | adjusted | transfer_in | transfer_out
+  reason: text("reason"),
   changedAt: timestamp("changed_at").defaultNow().notNull(),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "set null" }),
 });

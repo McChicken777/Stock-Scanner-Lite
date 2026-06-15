@@ -77,6 +77,16 @@ export default function HistoryPage() {
                         </Link>
                       </p>
                       <p className="font-mono">{entry.previousQuantity} → {entry.newQuantity}</p>
+                      {(entry.reason || entry.changedBy) && (
+                        <p className="flex items-center gap-1.5 flex-wrap">
+                          {entry.reason && (
+                            <span className="font-semibold uppercase tracking-wide text-[10px] bg-muted px-1.5 py-0.5 rounded-full">
+                              {entry.reason.replace(/_/g, " ")}
+                            </span>
+                          )}
+                          {entry.changedBy && <span>by {entry.changedBy}</span>}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right">
                       <p>{date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>

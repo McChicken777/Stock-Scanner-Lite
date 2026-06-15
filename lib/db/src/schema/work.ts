@@ -23,6 +23,9 @@ export const rawMaterialsTable = pgTable("raw_materials", {
   profileMm: numeric("profile_mm", { precision: 10, scale: 2, mode: "number" }),
   unit: text("unit").notNull().default("mm"),
   notes: text("notes"),
+  // Linked stock item: each raw-material size owns a products row that holds its
+  // on-hand quantity, location stock and valuation. Created automatically by the API.
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type RawMaterial = typeof rawMaterialsTable.$inferSelect;

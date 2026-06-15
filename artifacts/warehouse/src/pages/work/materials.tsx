@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/auth";
 interface RawMaterial {
   id: number; name: string; displayName: string | null; shape: string | null;
   profile: string | null; profileMm: number | null; unit: string; notes: string | null;
+  productId: number | null; totalStock: number;
 }
 
 const RAW_UNITS = ["mm", "m", "kg", "pcs", "L", "m²"];
@@ -132,12 +133,20 @@ function ProfileChip({ mat, onRefresh }: { mat: RawMaterial; onRefresh: () => vo
   );
 
   return (
-    <div className="group flex items-center gap-0.5 rounded-full border border-border bg-muted px-2.5 py-1.5">
+    <div className="group flex items-center gap-1.5 rounded-full border border-border bg-muted pl-2.5 pr-2 py-1.5">
       <button onClick={() => setEditing(true)}
         className={`text-xs font-semibold hover:text-primary transition-colors ${!displayed ? "text-muted-foreground italic" : ""}`}>
         {displayed || "set size"}
       </button>
-      <button onClick={del} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all ml-0.5">
+      <span
+        title="On-hand stock"
+        className={`text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full ${
+          mat.totalStock > 0 ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+        }`}
+      >
+        {mat.totalStock} {mat.unit}
+      </span>
+      <button onClick={del} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all">
         <X className="h-3 w-3" />
       </button>
     </div>
