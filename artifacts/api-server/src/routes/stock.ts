@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, stockTable, productsTable, historyTable, locationsTable, stockReservationsTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { sendLowStockAlert } from "../lib/email";
 
@@ -143,6 +143,76 @@ router.get("/valuation", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get stock valuation");
     res.status(500).json({ error: "Failed to get stock valuation" });
+  }
+});
+
+// Move stock from one location to another in a single atomic operation, writing
+// linked transfer_out / transfer_in history rows.
+const transferSchema = z.object({
+  fromLocationId: z.string().min(1),
+  toLocationId: z.string().min(1),
+  productId: z.number().int(),
+  quantity: z.number().positive(),
+  changedBy: z.string().nullable().optional(),
+});
+
+router.post("/transfer", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = transferSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { fromLocationId, toLocationId, productId, quantity, changedBy } = parsed.data;
+    if (fromLocationId === toLocationId) { res.status(400).json({ error: "Source and destination must differ" }); return; }
+
+    const [product] = await db.select().from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)));
+    if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+    const locs = await db.select({ id: locationsTable.id }).from(locationsTable)
+      .where(and(eq(locationsTable.companyId, companyId), inArray(locationsTable.id, [fromLocationId, toLocationId])));
+    const locSet = new Set(locs.map((l) => l.id));
+    if (!locSet.has(fromLocationId) || !locSet.has(toLocationId)) { res.status(400).json({ error: "Location not found" }); return; }
+
+    const who = changedBy ?? req.session.username ?? null;
+
+    const result = await db.transaction(async (tx) => {
+      const [src] = await tx.select().from(stockTable)
+        .where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      const srcPrev = src?.quantity ?? 0;
+      if (srcPrev < quantity) throw new Error(`Only ${srcPrev} available at ${fromLocationId}`);
+      const srcNew = srcPrev - quantity;
+
+      if (srcNew === 0) {
+        await tx.delete(stockTable).where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      } else {
+        await tx.update(stockTable).set({ quantity: srcNew })
+          .where(and(eq(stockTable.locationId, fromLocationId), eq(stockTable.productId, productId)));
+      }
+
+      const [dst] = await tx.select().from(stockTable)
+        .where(and(eq(stockTable.locationId, toLocationId), eq(stockTable.productId, productId)));
+      const dstPrev = dst?.quantity ?? 0;
+      const dstNew = dstPrev + quantity;
+      if (dst) {
+        await tx.update(stockTable).set({ quantity: dstNew })
+          .where(and(eq(stockTable.locationId, toLocationId), eq(stockTable.productId, productId)));
+      } else {
+        await tx.insert(stockTable).values({ locationId: toLocationId, productId, quantity: dstNew });
+      }
+
+      await tx.insert(historyTable).values([
+        { locationId: fromLocationId, productId, previousQuantity: srcPrev, newQuantity: srcNew, delta: -quantity, changedBy: who, reason: "transfer_out", companyId },
+        { locationId: toLocationId, productId, previousQuantity: dstPrev, newQuantity: dstNew, delta: quantity, changedBy: who, reason: "transfer_in", companyId },
+      ]);
+
+      return { fromQuantity: srcNew, toQuantity: dstNew };
+    });
+
+    res.json({ fromLocationId, toLocationId, productId, quantity, ...result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to transfer stock";
+    req.log.error({ err }, "Failed to transfer stock");
+    res.status(/available at/.test(msg) ? 400 : 500).json({ error: msg });
   }
 });
 

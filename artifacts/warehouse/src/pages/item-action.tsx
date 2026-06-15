@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Minus, ClipboardCheck, Loader2, PackageOpen, Scan } from "lucide-react";
+import { ArrowLeft, Plus, Minus, ClipboardCheck, ArrowLeftRight, Loader2, PackageOpen, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,12 +19,13 @@ interface ProductStock {
   locations: { locationId: string; quantity: number }[];
 }
 
-type Action = "receive" | "consume" | "count";
+type Action = "receive" | "consume" | "count" | "move";
 
 const ACTIONS: { value: Action; label: string; reason: string; icon: typeof Plus }[] = [
   { value: "receive", label: "Receive", reason: "received", icon: Plus },
   { value: "consume", label: "Consume", reason: "consumed", icon: Minus },
   { value: "count",   label: "Count",   reason: "counted",  icon: ClipboardCheck },
+  { value: "move",    label: "Move",    reason: "moved",    icon: ArrowLeftRight },
 ];
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -43,6 +44,7 @@ export default function ItemActionPage() {
 
   const [action, setAction] = useState<Action>("receive");
   const [locationId, setLocationId] = useState("");
+  const [toLocationId, setToLocationId] = useState("");
   const [qty, setQty] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -59,31 +61,50 @@ export default function ItemActionPage() {
 
   const current = stock?.locations.find((l) => l.locationId === locationId)?.quantity ?? 0;
 
+  const refreshStock = () => {
+    qc.invalidateQueries({ queryKey: ["/api/stock/product", productId] });
+    qc.invalidateQueries({ queryKey: ["/api/raw-materials"] });
+    qc.invalidateQueries({ queryKey: ["/api/work/materials"] });
+  };
+
   const submit = async () => {
     const n = parseFloat(qty);
-    if (!locationId) { toast({ title: "Pick a location", variant: "destructive" }); return; }
-    if (Number.isNaN(n) || n < 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
+    if (!locationId) { toast({ title: action === "move" ? "Pick a source location" : "Pick a location", variant: "destructive" }); return; }
+    if (Number.isNaN(n) || n <= 0) { toast({ title: "Enter a valid quantity", variant: "destructive" }); return; }
 
     const cfg = ACTIONS.find((a) => a.value === action)!;
-    const body: { quantity?: number; delta?: number; changedBy: string | null; reason: string } = {
-      changedBy: user?.username ?? null,
-      reason: cfg.reason,
-    };
-    if (action === "receive") body.delta = n;
-    else if (action === "consume") body.delta = -n;
-    else body.quantity = n; // count = absolute
-
     setSaving(true);
     try {
+      if (action === "move") {
+        if (!toLocationId) { toast({ title: "Pick a destination", variant: "destructive" }); return; }
+        if (toLocationId === locationId) { toast({ title: "Source and destination must differ", variant: "destructive" }); return; }
+        const r = await fetch(`/api/stock/transfer`, {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromLocationId: locationId, toLocationId, productId, quantity: n, changedBy: user?.username ?? null }),
+        });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+        refreshStock();
+        toast({ title: `Moved ${n} — ${locationId} → ${toLocationId}` });
+        setQty("");
+        return;
+      }
+
+      const body: { quantity?: number; delta?: number; changedBy: string | null; reason: string } = {
+        changedBy: user?.username ?? null,
+        reason: cfg.reason,
+      };
+      if (action === "receive") body.delta = n;
+      else if (action === "consume") body.delta = -n;
+      else body.quantity = n; // count = absolute
+
       const r = await fetch(`/api/stock/${encodeURIComponent(locationId)}/${productId}`, {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
-      qc.invalidateQueries({ queryKey: ["/api/stock/product", productId] });
-      qc.invalidateQueries({ queryKey: ["/api/raw-materials"] });
-      qc.invalidateQueries({ queryKey: ["/api/work/materials"] });
+      refreshStock();
       toast({ title: `${cfg.label} recorded — ${stock?.name}` });
       setQty("");
     } catch (e: unknown) {
@@ -153,9 +174,9 @@ export default function ItemActionPage() {
           })}
         </div>
 
-        {/* Location */}
+        {/* Location (source) */}
         <div>
-          <p className="text-xs font-semibold text-muted-foreground mb-1">Location</p>
+          <p className="text-xs font-semibold text-muted-foreground mb-1">{action === "move" ? "From location" : "Location"}</p>
           <select
             value={locationId}
             onChange={(e) => setLocationId(e.target.value)}
@@ -172,6 +193,21 @@ export default function ItemActionPage() {
           )}
         </div>
 
+        {/* Destination (move only) */}
+        {action === "move" && (
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">To location</p>
+            <select
+              value={toLocationId}
+              onChange={(e) => setToLocationId(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border-2 border-input bg-background text-sm focus:border-primary focus:outline-none"
+            >
+              <option value="">Select a destination…</option>
+              {locations.filter((l) => l.id !== locationId).map((l) => <option key={l.id} value={l.id}>{l.id}</option>)}
+            </select>
+          </div>
+        )}
+
         {/* Quantity */}
         <div>
           <p className="text-xs font-semibold text-muted-foreground mb-1">
@@ -186,7 +222,11 @@ export default function ItemActionPage() {
           />
         </div>
 
-        <Button className="w-full h-14 text-base font-bold" disabled={saving || !locationId || !qty} onClick={submit}>
+        <Button
+          className="w-full h-14 text-base font-bold"
+          disabled={saving || !locationId || !qty || (action === "move" && !toLocationId)}
+          onClick={submit}
+        >
           {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Confirm {ACTIONS.find((a) => a.value === action)!.label}</>}
         </Button>
 
