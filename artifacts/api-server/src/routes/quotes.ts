@@ -635,7 +635,16 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${full.quoteNumber}.pdf"`);
     doc.pipe(res);
 
-    // Header
+    // Header — embed company logo (PNG/JPG base64) top-left if present
+    if (company?.logo) {
+      try {
+        const m = /^data:image\/(png|jpe?g);base64,(.+)$/.exec(company.logo);
+        if (m) {
+          doc.image(Buffer.from(m[2], "base64"), 50, 45, { fit: [130, 55] });
+          doc.y = 45 + 60;
+        }
+      } catch { /* ignore an unreadable logo */ }
+    }
     doc.fontSize(20).font("Helvetica-Bold").text(company?.name ?? "Quote", { align: "left" });
     doc.moveDown(0.3);
     doc.fontSize(22).fillColor("#222").text(`QUOTE ${full.quoteNumber}`, { align: "right" });
@@ -721,6 +730,15 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
       if (y > 700) { doc.addPage(); y = 50; }
       doc.font("Helvetica-Bold").fontSize(10).text("Terms & Conditions", 50, y); y += 14;
       doc.font("Helvetica").fontSize(9).text(full.terms, 50, y, { width: 500 });
+    }
+
+    // Signature block
+    if (company?.quoteSignerName) {
+      let sigY = doc.y + 40;
+      if (sigY > 740) { doc.addPage(); sigY = 60; }
+      doc.moveTo(50, sigY).lineTo(250, sigY).stroke();
+      doc.font("Helvetica").fontSize(9).fillColor("#666").text("Signed by", 50, sigY + 4);
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("black").text(company.quoteSignerName, 50, sigY + 16);
     }
 
     doc.end();
