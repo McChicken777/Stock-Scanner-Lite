@@ -31,6 +31,7 @@ router.get("/", async (req, res) => {
         newQuantity: historyTable.newQuantity,
         delta: historyTable.delta,
         changedBy: historyTable.changedBy,
+        reason: historyTable.reason,
         changedAt: historyTable.changedAt,
       })
       .from(historyTable)

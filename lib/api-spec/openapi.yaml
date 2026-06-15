@@ -1029,6 +1029,10 @@ components:
         changedBy:
           type: string
           nullable: true
+        reason:
+          type: string
+          nullable: true
+          description: Why stock changed (received/consumed/counted/adjusted/transfer_in/transfer_out)
       required: []
 
     StockUpdateResult:
@@ -1072,6 +1076,9 @@ components:
         delta:
           type: number
         changedBy:
+          type: string
+          nullable: true
+        reason:
           type: string
           nullable: true
         changedAt:

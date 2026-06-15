@@ -15,6 +15,8 @@ export const historyTable = pgTable("stock_history", {
   newQuantity: numeric("new_quantity", { precision: 14, scale: 3, mode: "number" }).notNull(),
   delta: numeric("delta", { precision: 14, scale: 3, mode: "number" }).notNull(),
   changedBy: text("changed_by"),
+  // Why the stock changed: received | consumed | counted | adjusted | transfer_in | transfer_out
+  reason: text("reason"),
   changedAt: timestamp("changed_at").defaultNow().notNull(),
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "set null" }),
 });

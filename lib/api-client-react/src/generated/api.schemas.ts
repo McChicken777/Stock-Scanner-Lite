@@ -148,6 +148,8 @@ export interface UpdateStockRequest {
   /** Relative change (positive to add, negative to remove) */
   delta?: number;
   changedBy?: string | null;
+  /** Why stock changed (received/consumed/counted/adjusted/transfer_in/transfer_out) */
+  reason?: string | null;
 }
 
 export interface StockUpdateResult {
@@ -168,6 +170,7 @@ export interface HistoryEntry {
   newQuantity: number;
   delta: number;
   changedBy?: string | null;
+  reason?: string | null;
   changedAt: string;
 }
 

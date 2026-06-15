@@ -272,6 +272,12 @@ export const UpdateStockBody = zod.object({
     .optional()
     .describe("Relative change (positive to add, negative to remove)"),
   changedBy: zod.string().nullish(),
+  reason: zod
+    .string()
+    .nullish()
+    .describe(
+      "Why stock changed (received\/consumed\/counted\/adjusted\/transfer_in\/transfer_out)",
+    ),
 });
 
 export const UpdateStockResponse = zod.object({
@@ -303,6 +309,7 @@ export const ListHistoryResponseItem = zod.object({
   newQuantity: zod.number(),
   delta: zod.number(),
   changedBy: zod.string().nullish(),
+  reason: zod.string().nullish(),
   changedAt: zod.coerce.date(),
 });
 export const ListHistoryResponse = zod.array(ListHistoryResponseItem);
@@ -764,6 +771,7 @@ export const GetDashboardSummaryResponse = zod.object({
       newQuantity: zod.number(),
       delta: zod.number(),
       changedBy: zod.string().nullish(),
+      reason: zod.string().nullish(),
       changedAt: zod.coerce.date(),
     }),
   ),

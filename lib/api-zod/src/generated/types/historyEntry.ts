@@ -15,5 +15,6 @@ export interface HistoryEntry {
   newQuantity: number;
   delta: number;
   changedBy?: string | null;
+  reason?: string | null;
   changedAt: Date;
 }

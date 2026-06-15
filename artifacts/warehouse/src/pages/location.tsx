@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth";
 import { Link } from "wouter";
 
 function StockItem({
@@ -38,21 +39,25 @@ function StockItem({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { t } = useLang();
-  
+  const { user } = useAuth();
+
   // Ref for debouncing rapidly tapped buttons
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  // Reason for the pending change — "adjusted" for +/- taps, "counted" for a typed count
+  const reasonRef = useRef<string>("adjusted");
 
-  const handleUpdate = (newQty: number) => {
+  const handleUpdate = (newQty: number, reason: string = "adjusted") => {
     // Optimistic UI update immediately
     setOptimisticQty(newQty);
-    
+    reasonRef.current = reason;
+
     // Clear previous timeout
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
+
     // Debounce the actual API call
     timeoutRef.current = setTimeout(() => {
       updateStock.mutate(
-        { locationId, productId, data: { quantity: newQty } },
+        { locationId, productId, data: { quantity: newQty, changedBy: user?.username ?? null, reason: reasonRef.current } },
         {
           onSuccess: () => {
             // Revalidate to get the fresh data
@@ -75,7 +80,7 @@ function StockItem({
   const handleSaveEdit = () => {
     const parsed = parseFloat(editValue);
     if (!isNaN(parsed) && parsed >= 0) {
-      handleUpdate(parsed);
+      handleUpdate(parsed, "counted");
     }
     setIsEditing(false);
   };

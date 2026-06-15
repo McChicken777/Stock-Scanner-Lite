@@ -111,6 +111,7 @@ const updateStockSchema = z.object({
   quantity: z.number().min(0).optional(),
   delta: z.number().optional(),
   changedBy: z.string().nullable().optional(),
+  reason: z.string().max(40).nullable().optional(),
 });
 
 router.put("/:locationId/:productId", async (req, res) => {
@@ -125,7 +126,7 @@ router.put("/:locationId/:productId", async (req, res) => {
       return;
     }
 
-    const { quantity, delta, changedBy } = parsed.data;
+    const { quantity, delta, changedBy, reason } = parsed.data;
 
     if (quantity === undefined && delta === undefined) {
       res.status(400).json({ error: "Provide either quantity or delta" });
@@ -177,7 +178,8 @@ router.put("/:locationId/:productId", async (req, res) => {
       previousQuantity,
       newQuantity,
       delta: actualDelta,
-      changedBy: changedBy ?? null,
+      changedBy: changedBy ?? req.session.username ?? null,
+      reason: reason ?? null,
       companyId,
     });
 
