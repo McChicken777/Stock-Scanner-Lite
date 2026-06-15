@@ -879,7 +879,7 @@ components:
           type: string
           format: date-time
         totalStock:
-          type: integer
+          type: number
           description: Total quantity across all locations
         isLowStock:
           type: boolean
@@ -993,7 +993,7 @@ components:
         productId:
           type: integer
         quantity:
-          type: integer
+          type: number
         productName:
           type: string
         productCategory:
@@ -1012,10 +1012,10 @@ components:
       type: object
       properties:
         quantity:
-          type: integer
+          type: number
           description: New absolute quantity
         delta:
-          type: integer
+          type: number
           description: Relative change (positive to add, negative to remove)
         changedBy:
           type: string
@@ -1030,9 +1030,9 @@ components:
         productId:
           type: integer
         quantity:
-          type: integer
+          type: number
         totalStock:
-          type: integer
+          type: number
         isLowStock:
           type: boolean
         alertSent:
@@ -1057,11 +1057,11 @@ components:
         productName:
           type: string
         previousQuantity:
-          type: integer
+          type: number
         newQuantity:
-          type: integer
+          type: number
         delta:
-          type: integer
+          type: number
         changedBy:
           type: string
           nullable: true

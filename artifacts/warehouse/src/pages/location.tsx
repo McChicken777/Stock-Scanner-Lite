@@ -69,7 +69,7 @@ function StockItem({
   };
 
   const handleSaveEdit = () => {
-    const parsed = parseInt(editValue, 10);
+    const parsed = parseFloat(editValue);
     if (!isNaN(parsed) && parsed >= 0) {
       handleUpdate(parsed);
     }

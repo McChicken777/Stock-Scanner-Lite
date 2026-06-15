@@ -14,7 +14,7 @@ router.get("/valuation", async (req, res) => {
     const totals = await db
       .select({
         productId: stockTable.productId,
-        totalQty: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::int`.as("total_qty"),
+        totalQty: sql<number>`COALESCE(SUM(${stockTable.quantity}), 0)::numeric`.as("total_qty"),
       })
       .from(stockTable)
       .innerJoin(locationsTable, eq(stockTable.locationId, locationsTable.id))
@@ -108,8 +108,8 @@ router.get("/:locationId", async (req, res) => {
 });
 
 const updateStockSchema = z.object({
-  quantity: z.number().int().min(0).optional(),
-  delta: z.number().int().optional(),
+  quantity: z.number().min(0).optional(),
+  delta: z.number().optional(),
   changedBy: z.string().nullable().optional(),
 });
 
