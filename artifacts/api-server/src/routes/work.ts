@@ -2131,6 +2131,7 @@ async function getProjectWithItems(projectId: number) {
   type ProcWithRole = typeof workItemStepsTable.$inferSelect & {
     roleName: string | null;
     activeStartTime: string | null;
+    stationDefaultOutputLocationId: string | null;
   };
   let procedures: ProcWithRole[] = [];
   if (itemIds.length > 0) {
@@ -2139,9 +2140,11 @@ async function getProjectWithItems(projectId: number) {
         step: workItemStepsTable,
         roleName: rolesTable.name,
         activeStartTime: workTimeLogsTable.startTime,
+        stationDefaultOutputLocationId: stationTypesTable.defaultOutputLocationId,
       })
       .from(workItemStepsTable)
       .leftJoin(rolesTable, eq(rolesTable.id, workItemStepsTable.roleId))
+      .leftJoin(stationTypesTable, eq(stationTypesTable.id, workItemStepsTable.stationTypeId))
       .leftJoin(
         workTimeLogsTable,
         and(eq(workTimeLogsTable.stepId, workItemStepsTable.id), isNull(workTimeLogsTable.endTime)),
@@ -2152,6 +2155,7 @@ async function getProjectWithItems(projectId: number) {
       ...r.step,
       roleName: r.roleName ?? null,
       activeStartTime: r.activeStartTime ? r.activeStartTime.toISOString() : null,
+      stationDefaultOutputLocationId: r.stationDefaultOutputLocationId ?? null,
     }));
   }
 

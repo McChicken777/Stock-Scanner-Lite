@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db, stationTypesTable, workstationsTable, workItemStepsTable,
   workProjectItemsTable, workProjectsTable, workTimeLogsTable, usersTable,
-  rolesTable, userRolesTable,
+  rolesTable, userRolesTable, partLocationsTable,
 } from "@workspace/db";
 import { eq, and, asc, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -84,6 +84,7 @@ router.post("/types", requireAdmin, async (req, res) => {
       name: z.string().min(1),
       color: z.string().default("#6366f1"),
       roleId: z.number().int().nullable().optional(),
+      defaultOutputLocationId: z.string().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Name required" }); return; }
 
@@ -95,6 +96,7 @@ router.post("/types", requireAdmin, async (req, res) => {
       name: parsed.data.name,
       color: parsed.data.color,
       roleId: parsed.data.roleId ?? null,
+      defaultOutputLocationId: parsed.data.defaultOutputLocationId ?? null,
       flowOrder: existing.length,
     }).returning();
     res.status(201).json({ ...type, workstations: [], roleName: null, isMyStation: false });
@@ -130,6 +132,7 @@ router.put("/types/:id", requireAdmin, async (req, res) => {
       name: z.string().min(1).optional(),
       color: z.string().optional(),
       roleId: z.number().int().nullable().optional(),
+      defaultOutputLocationId: z.string().nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
     const [type] = await db.update(stationTypesTable).set(parsed.data)
@@ -348,6 +351,27 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
       : [];
     const claimedByMap = new Map(openLogs.map((l) => [l.stepId, l.username]));
 
+    // Fetch pickup locations: the most recent partLocations entry for the preceding completed step of each item
+    const prevStepIds: number[] = [];
+    for (const s of candidateSteps) {
+      const siblings = itemStepMap.get(s.itemId) ?? [];
+      const prevCompleted = siblings
+        .filter((sib) => sib.sortOrder < s.sortOrder && sib.status === "completed")
+        .sort((a, b) => b.sortOrder - a.sortOrder)[0];
+      if (prevCompleted) prevStepIds.push(prevCompleted.id);
+    }
+    const pickupLocations = prevStepIds.length
+      ? await db.select().from(partLocationsTable)
+          .where(inArray(partLocationsTable.stepId, prevStepIds))
+      : [];
+    // Build map: stepId → most recent pickup location
+    const pickupByStepId = new Map<number, typeof pickupLocations[0]>();
+    for (const pl of pickupLocations) {
+      if (pl.stepId != null && !pickupByStepId.has(pl.stepId)) {
+        pickupByStepId.set(pl.stepId, pl);
+      }
+    }
+
     // Filter: keep in_progress always; keep not_started only if all prior steps completed
     const steps = candidateSteps.filter((s) => {
       if (s.status === "in_progress") return true;
@@ -356,7 +380,20 @@ router.get("/queue/:typeId", requireAuth, async (req, res) => {
         (sib) => sib.sortOrder < s.sortOrder && sib.status !== "completed"
       );
       return priorIncomplete.length === 0;
-    }).map((s) => ({ ...s, claimedByUsername: claimedByMap.get(s.stepId) ?? null }));
+    }).map((s) => {
+      const siblings = itemStepMap.get(s.itemId) ?? [];
+      const prevCompleted = siblings
+        .filter((sib) => sib.sortOrder < s.sortOrder && sib.status === "completed")
+        .sort((a, b) => b.sortOrder - a.sortOrder)[0];
+      const pickupLocation = prevCompleted ? (pickupByStepId.get(prevCompleted.id) ?? null) : null;
+      return {
+        ...s,
+        claimedByUsername: claimedByMap.get(s.stepId) ?? null,
+        pickupLocation: pickupLocation
+          ? { locationType: pickupLocation.locationType, locationValue: pickupLocation.locationValue }
+          : null,
+      };
+    });
 
     // Group by project → items → steps
     const projectMap = new Map<number, {

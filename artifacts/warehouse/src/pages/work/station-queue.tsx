@@ -5,7 +5,7 @@ import { useLang } from "@/contexts/lang";
 import { format, differenceInDays, isPast } from "date-fns";
 import {
   ChevronLeft, ChevronDown, ChevronUp, Monitor, CheckCircle2,
-  Clock, Loader2, Inbox, Play, User, Timer, ShieldCheck,
+  Clock, Loader2, Inbox, Play, User, Timer, ShieldCheck, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,7 @@ interface QueueStep {
   projectId: number; projectName: string;
   projectDeadline: string; projectPriority: string;
   qcEnabled: boolean; qcInstructions: string | null; qcPhotoUrl: string | null;
+  pickupLocation: { locationType: string; locationValue: string | null } | null;
 }
 
 interface QueueItem  { itemId: number; itemName: string; steps: QueueStep[]; }
@@ -186,6 +187,14 @@ function StepRow({
     <div className={`flex items-center gap-3 px-4 py-3 ${isInProgress ? "bg-blue-50/60 border-l-4 border-blue-400" : ""}`}>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold">{step.stepName}</p>
+        {step.pickupLocation?.locationValue && (
+          <p className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 rounded-full px-2 py-0.5 mt-0.5 w-fit">
+            <MapPin className="h-3 w-3" />
+            {step.pickupLocation.locationType === "with_worker"
+              ? "Parts delivered by previous worker"
+              : `Pick up from: ${step.pickupLocation.locationValue}`}
+          </p>
+        )}
         <div className="flex items-center gap-2 flex-wrap mt-0.5">
           {step.durationEstimate && !isInProgress && (
             <span className="text-xs text-muted-foreground">~{step.durationEstimate} min</span>

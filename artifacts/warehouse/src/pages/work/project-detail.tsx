@@ -11,7 +11,9 @@ import {
   ArrowLeft, Play, Square, Clock, CheckCircle2, Circle, AlertCircle,
   ChevronDown, ChevronUp, RotateCcw, Pencil, Trash2, Plus, Palette, X, Check,
   PackageCheck, Truck, Printer, FileText, User, Layers, Timer, ArrowRight, Lock, History, FlaskConical,
+  MapPin,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { format, differenceInDays, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
 import { RalColorInput } from "./project-form";
@@ -30,6 +32,8 @@ interface Procedure {
   activeStartTime: string | null;
   dagBlockerNames?: string[];
   dagBlocked?: boolean;
+  stationTypeId?: number | null;
+  stationDefaultOutputLocationId?: string | null;
 }
 
 interface NextUp {
@@ -208,13 +212,41 @@ function ProcedureRow({
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Error", variant: "destructive" }),
   });
 
+  const [showStopDialog, setShowStopDialog] = useState(false);
+  const [stopLocationId, setStopLocationId] = useState<string>("");
+
+  const { data: locationList } = useQuery<{ id: string; description?: string | null }[]>({
+    queryKey: ["/api/locations"],
+    queryFn: () => fetch("/api/locations", { credentials: "include" }).then((r) => r.json()),
+    enabled: showStopDialog,
+    staleTime: 60_000,
+  });
+
   const stopMutation = useMutation({
-    mutationFn: () => fetch(`/api/work/procedures/${proc.id}/stop`, { method: "POST", credentials: "include" }).then(async (r) => {
-      const d = await r.json(); if (!r.ok) throw new Error(d.error); return d;
-    }),
-    onSuccess: invalidate,
+    mutationFn: (body?: { wipLocation?: { locationType: string; locationValue: string } }) =>
+      fetch(`/api/work/procedures/${proc.id}/stop`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined,
+      }).then(async (r) => {
+        const d = await r.json(); if (!r.ok) throw new Error(d.error); return d;
+      }),
+    onSuccess: () => { setShowStopDialog(false); invalidate(); },
     onError: (err) => toast({ title: err instanceof Error ? err.message : "Error", variant: "destructive" }),
   });
+
+  function openStopDialog() {
+    setStopLocationId(proc.stationDefaultOutputLocationId ?? "");
+    setShowStopDialog(true);
+  }
+
+  function confirmStop() {
+    const body = stopLocationId
+      ? { wipLocation: { locationType: "warehouse", locationValue: stopLocationId } }
+      : undefined;
+    stopMutation.mutate(body);
+  }
 
   const resetMutation = useMutation({
     mutationFn: () => fetch(`/api/work/procedures/${proc.id}/reset`, { method: "POST", credentials: "include" }).then(async (r) => {
@@ -283,9 +315,44 @@ function ProcedureRow({
           <p className="text-xs text-muted-foreground"><Clock className="inline h-3 w-3 mr-0.5" />{formatSeconds(proc.totalTimeSeconds)}</p>
         )}
       </div>
+      {/* Stop dialog: record where parts are being left */}
+      <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-primary" /> Where are you leaving the parts?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <select
+              value={stopLocationId}
+              onChange={(e) => setStopLocationId(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
+            >
+              <option value="">— Select location (optional) —</option>
+              {locationList?.map((l) => (
+                <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 h-10 font-bold bg-red-600 hover:bg-red-700"
+                disabled={stopMutation.isPending}
+                onClick={confirmStop}
+              >
+                {stopMutation.isPending ? "Stopping…" : "Complete step"}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-10 text-muted-foreground" onClick={() => stopMutation.mutate(undefined)}>
+                Skip
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center gap-1.5">
         {isActive ? (
-          <Button size="sm" onClick={() => stopMutation.mutate()} disabled={stopMutation.isPending} className="h-9 px-3 bg-red-600 hover:bg-red-700 font-bold gap-1">
+          <Button size="sm" onClick={openStopDialog} disabled={stopMutation.isPending} className="h-9 px-3 bg-red-600 hover:bg-red-700 font-bold gap-1">
             <Square className="h-3.5 w-3.5" /> Stop
           </Button>
         ) : proc.status !== "completed" ? (

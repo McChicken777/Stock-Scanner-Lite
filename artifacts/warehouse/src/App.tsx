@@ -16,6 +16,8 @@ import LocationsPage from "@/pages/locations";
 import LocationPage from "@/pages/location";
 import ItemActionPage from "@/pages/item-action";
 import HelpPage from "@/pages/help";
+import InventoryHomePage from "@/pages/inventory-home";
+import LocationsPrintSheetPage from "@/pages/locations-print-sheet";
 import ProductsPage from "@/pages/products";
 import ProductFormPage from "@/pages/product-form";
 import HistoryPage from "@/pages/history";
@@ -157,9 +159,11 @@ function ProtectedRoutes() {
       )}
     <AppLayout>
       <Switch>
-        {/* Admin home — Lite goes to Customers, Standard/Pro goes to Jobs */}
-        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/customers"} /></Route>
+        {/* Admin home — Lite goes to Inventory home, Standard/Pro goes to Jobs */}
+        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/inventory"} /></Route>
         <Route path="/dashboard" component={Dashboard} />
+        <Route path="/inventory" component={InventoryHomePage} />
+        <Route path="/locations/print-sheet" component={LocationsPrintSheetPage} />
         <Route path="/scan" component={ScanPage} />
         <Route path="/locations" component={LocationsPage} />
         <Route path="/location/:id" component={LocationPage} />

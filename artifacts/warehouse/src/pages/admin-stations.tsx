@@ -4,7 +4,7 @@ import { useLang } from "@/contexts/lang";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Trash2, Loader2, GripVertical, ChevronDown, ChevronUp,
-  Settings2, Monitor, X, Check, Pencil, ChevronRight, HardHat,
+  Settings2, Monitor, X, Check, Pencil, ChevronRight, HardHat, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,9 +26,12 @@ interface StationType {
   flowOrder: number;
   roleId: number | null;
   roleName: string | null;
+  defaultOutputLocationId: string | null;
   pendingCount: number;
   workstations: Workstation[];
 }
+
+interface LocationItem { id: string; description?: string | null }
 
 interface Role {
   id: number;
@@ -67,10 +70,17 @@ export default function AdminStationsPage() {
     queryFn: () => apiFetch("/api/tasks/roles"),
   });
 
+  const { data: locations = [] } = useQuery<LocationItem[]>({
+    queryKey: ["/api/locations"],
+    queryFn: () => apiFetch("/api/locations"),
+    staleTime: 60_000,
+  });
+
   // New station type form
   const [newTypeName, setNewTypeName] = useState("");
   const [newTypeColor, setNewTypeColor] = useState("#6366f1");
   const [newTypeRoleId, setNewTypeRoleId] = useState<string>("");
+  const [newTypeLocationId, setNewTypeLocationId] = useState<string>("");
   const [addingType, setAddingType] = useState(false);
 
   // Expanded station types
@@ -83,6 +93,7 @@ export default function AdminStationsPage() {
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
   const [editRoleId, setEditRoleId] = useState<string>("");
+  const [editLocationId, setEditLocationId] = useState<string>("");
 
   // New workstation form per type
   const [addingWsFor, setAddingWsFor] = useState<number | null>(null);
@@ -93,21 +104,21 @@ export default function AdminStationsPage() {
   const dragIdx = useRef<number | null>(null);
 
   const createTypeMutation = useMutation({
-    mutationFn: (data: { name: string; color: string; roleId: number | null }) =>
+    mutationFn: (data: { name: string; color: string; roleId: number | null; defaultOutputLocationId?: string | null }) =>
       apiFetch("/api/stations/types", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
       invalidate();
-      setAddingType(false); setNewTypeName(""); setNewTypeColor("#6366f1"); setNewTypeRoleId("");
+      setAddingType(false); setNewTypeName(""); setNewTypeColor("#6366f1"); setNewTypeRoleId(""); setNewTypeLocationId("");
       toast({ title: "Station type added" });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   const updateTypeMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { name?: string; color?: string; roleId?: number | null } }) =>
+    mutationFn: ({ id, data }: { id: number; data: { name?: string; color?: string; roleId?: number | null; defaultOutputLocationId?: string | null } }) =>
       apiFetch(`/api/stations/types/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -167,12 +178,18 @@ export default function AdminStationsPage() {
     setEditName(type.name);
     setEditColor(type.color);
     setEditRoleId(type.roleId != null ? String(type.roleId) : "");
+    setEditLocationId(type.defaultOutputLocationId ?? "");
   }
 
   function saveEdit(id: number) {
     updateTypeMutation.mutate({
       id,
-      data: { name: editName, color: editColor, roleId: editRoleId ? Number(editRoleId) : null },
+      data: {
+        name: editName,
+        color: editColor,
+        roleId: editRoleId ? Number(editRoleId) : null,
+        defaultOutputLocationId: editLocationId || null,
+      },
     });
   }
 
@@ -230,7 +247,7 @@ export default function AdminStationsPage() {
                         ))}
                       </div>
                     </div>
-                    {/* Row 2: role picker + save/cancel */}
+                    {/* Row 2: role picker */}
                     <div className="flex items-center gap-2">
                       <HardHat className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       <select
@@ -240,6 +257,18 @@ export default function AdminStationsPage() {
                       >
                         <option value="">No role linked</option>
                         {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    </div>
+                    {/* Row 3: output location + save/cancel */}
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <select
+                        value={editLocationId}
+                        onChange={(e) => setEditLocationId(e.target.value)}
+                        className="flex-1 h-7 px-2 rounded border border-input bg-background text-xs"
+                      >
+                        <option value="">No default output location</option>
+                        {locations.map((l) => <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>)}
                       </select>
                       <button onClick={() => saveEdit(type.id)} className="text-green-600 hover:text-green-700">
                         <Check className="h-4 w-4" />
@@ -256,6 +285,11 @@ export default function AdminStationsPage() {
                       {type.roleName && (
                         <span className="ml-2 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-1.5 py-0.5 inline-flex items-center gap-0.5">
                           <HardHat className="h-2.5 w-2.5" />{type.roleName}
+                        </span>
+                      )}
+                      {type.defaultOutputLocationId && (
+                        <span className="ml-1 text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-1.5 py-0.5 inline-flex items-center gap-0.5">
+                          <MapPin className="h-2.5 w-2.5" />{type.defaultOutputLocationId}
                         </span>
                       )}
                     </div>
@@ -385,6 +419,18 @@ export default function AdminStationsPage() {
                   {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>
+              {/* Default output location */}
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <select
+                  value={newTypeLocationId}
+                  onChange={(e) => setNewTypeLocationId(e.target.value)}
+                  className="flex-1 h-9 px-3 rounded-lg border-2 border-input bg-background text-sm"
+                >
+                  <option value="">No default output location</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>)}
+                </select>
+              </div>
               <div className="flex gap-2 flex-wrap">
                 {PRESET_COLORS.map((c) => (
                   <button
@@ -398,11 +444,11 @@ export default function AdminStationsPage() {
               <div className="flex gap-2">
                 <Button size="sm" className="h-9 font-bold"
                   disabled={!newTypeName.trim() || createTypeMutation.isPending}
-                  onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor, roleId: newTypeRoleId ? Number(newTypeRoleId) : null })}>
+                  onClick={() => createTypeMutation.mutate({ name: newTypeName.trim(), color: newTypeColor, roleId: newTypeRoleId ? Number(newTypeRoleId) : null, defaultOutputLocationId: newTypeLocationId || null })}>
                   {createTypeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : t("add")}
                 </Button>
                 <Button size="sm" variant="outline" className="h-9"
-                  onClick={() => { setAddingType(false); setNewTypeName(""); setNewTypeRoleId(""); }}>{t("cancel")}</Button>
+                  onClick={() => { setAddingType(false); setNewTypeName(""); setNewTypeRoleId(""); setNewTypeLocationId(""); }}>{t("cancel")}</Button>
               </div>
             </div>
           ) : (
