@@ -82,6 +82,7 @@ export default function QuoteFormPage() {
   const [terms, setTerms] = useState("");
   const [discount, setDiscount] = useState("0");
   const [taxRate, setTaxRate] = useState("0");
+  const [issuerId, setIssuerId] = useState<number | null>(null);
   const [items, setItems] = useState<LineItem[]>([]);
 
   const [productSearch, setProductSearch] = useState("");
@@ -95,6 +96,12 @@ export default function QuoteFormPage() {
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: async () => (await fetch("/api/products", { credentials: "include" })).json(),
+  });
+
+  const { data: issuers = [] } = useQuery<{ id: number; name: string; email: string | null; phone: string | null }[]>({
+    queryKey: ["/api/quote-issuers"],
+    queryFn: () => fetch("/api/quote-issuers", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
   });
 
   const { data: company } = useQuery<{ currency: string }>({
@@ -126,6 +133,7 @@ export default function QuoteFormPage() {
       setTerms(existing.terms ?? "");
       setDiscount(String(existing.discount ?? 0));
       setTaxRate(String(existing.taxRate ?? 0));
+      setIssuerId((existing as any).issuerId ?? null);
       setItems(existing.items.map((it) => ({
         productId: it.productId,
         name: it.name,
@@ -137,7 +145,8 @@ export default function QuoteFormPage() {
   }, [existing, editingId]);
 
   const subtotal = items.reduce((sum, it) => sum + (it.quantity * it.unitPrice), 0);
-  const afterDiscount = Math.max(0, subtotal - Number(discount || 0));
+  // discount is a percentage (0–100)
+  const afterDiscount = Math.max(0, subtotal * (1 - Number(discount || 0) / 100));
   const taxAmount = +(afterDiscount * (Number(taxRate || 0) / 100)).toFixed(2);
   const total = +(afterDiscount + taxAmount).toFixed(2);
 
@@ -176,6 +185,7 @@ export default function QuoteFormPage() {
         terms: terms || null,
         discount: Number(discount || 0),
         taxRate: Number(taxRate || 0),
+        issuerId: issuerId ?? null,
         items: items.filter((it) => it.name.trim()).map((it, idx) => ({
           productId: it.productId,
           name: it.name.trim(),
@@ -281,6 +291,23 @@ export default function QuoteFormPage() {
               <Label className="text-xs font-bold">{t("fieldAddress")}</Label>
               <Textarea value={manualAddress} onChange={(e) => setManualAddress(e.target.value)} className="border-2 min-h-[50px]" />
             </div>
+          </div>
+        )}
+
+        {/* Issued by */}
+        {issuers.length > 0 && (
+          <div className="space-y-2">
+            <Label className="text-sm font-bold">Issued by</Label>
+            <select
+              value={issuerId ?? ""}
+              onChange={(e) => setIssuerId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full h-12 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">— No issuer —</option>
+              {issuers.map((iss) => (
+                <option key={iss.id} value={iss.id}>{iss.name}{iss.email ? ` (${iss.email})` : ""}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -391,7 +418,8 @@ export default function QuoteFormPage() {
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormDiscountDollar")}</Label>
-            <Input type="number" step="0.01" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-8 border-2 text-sm flex-1" />
+            <Input type="number" step="0.1" min="0" max="100" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-8 border-2 text-sm flex-1" />
+            {Number(discount) > 0 && <span className="text-xs font-mono text-muted-foreground flex-shrink-0">-{fmt(subtotal - afterDiscount)}</span>}
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormTaxPercent")}</Label>

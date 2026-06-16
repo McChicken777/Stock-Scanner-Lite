@@ -4,6 +4,7 @@ import { customersTable } from "./customers";
 import { productsTable } from "./products";
 import { workProjectsTable } from "./work";
 import { usersTable } from "./users";
+import { quoteIssuersTable } from "./quote-issuers";
 
 export const quoteStatusEnum = pgEnum("quote_status", ["draft", "sent", "approved", "rejected", "converted", "delivered"]);
 
@@ -26,6 +27,7 @@ export const quotesTable = pgTable("quotes", {
   taxRate: numeric("tax_rate", { precision: 5, scale: 2, mode: "number" }).notNull().default(0),
   taxAmount: numeric("tax_amount", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
   total: numeric("total", { precision: 12, scale: 2, mode: "number" }).notNull().default(0),
+  issuerId: integer("issuer_id").references(() => quoteIssuersTable.id, { onDelete: "set null" }),
   workProjectId: integer("work_project_id").references(() => workProjectsTable.id, { onDelete: "set null" }),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

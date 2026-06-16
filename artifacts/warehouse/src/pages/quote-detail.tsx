@@ -42,9 +42,11 @@ interface QuoteFull {
   taxAmount: number | string;
   total: number | string;
   workProjectId: number | null;
+  issuerId: number | null;
   createdAt: string;
   updatedAt: string;
   customer: { id: number; name: string; email: string | null; phone: string | null } | null;
+  issuer: { id: number; name: string; email: string | null; phone: string | null } | null;
   items: { id: number; name: string; description: string | null; quantity: number | string; unitPrice: number | string; lineTotal: number | string; productId: number | null }[];
   revisions: { id: number; revisionNumber: number; note: string | null; createdAt: string; snapshot: { quote: Record<string, unknown>; items: Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number }> } }[];
 }
@@ -229,6 +231,18 @@ export default function QuoteDetailPage() {
           </div>
         </div>
 
+        {/* Issuer */}
+        {quote.issuer && (
+          <div className="bg-card border-2 border-border rounded-xl p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Issued by</p>
+            <p className="text-sm font-semibold">{quote.issuer.name}</p>
+            <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
+              {quote.issuer.email && <p>{quote.issuer.email}</p>}
+              {quote.issuer.phone && <p>{quote.issuer.phone}</p>}
+            </div>
+          </div>
+        )}
+
         {/* Line items */}
         <div className="bg-card border-2 border-border rounded-xl divide-y divide-border">
           {quote.items.map((it) => (
@@ -248,7 +262,7 @@ export default function QuoteDetailPage() {
         {/* Totals */}
         <div className="bg-muted/30 border-2 border-border rounded-xl p-3 space-y-1.5 text-sm">
           <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="font-mono">{fmt(quote.subtotal)}</span></div>
-          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")}</span><span className="font-mono">-{fmt(quote.discount)}</span></div>}
+          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")} ({Number(quote.discount)}%)</span><span className="font-mono">-{fmt(Number(quote.subtotal) * Number(quote.discount) / 100)}</span></div>}
           {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="font-mono">{fmt(quote.taxAmount)}</span></div>}
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
             <span>{t("quoteTotal")}</span><span className="font-mono">{fmt(quote.total)}</span>

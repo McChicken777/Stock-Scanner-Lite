@@ -13,6 +13,7 @@ export * from "./purchasing";
 export * from "./attendance";
 export * from "./customers";
 export * from "./quotes";
+export * from "./quote-issuers";
 export * from "./holidays";
 export * from "./leave-requests";
 export * from "./analytics";

@@ -4,6 +4,7 @@ import {
   productsTable, workProjectsTable, workProjectItemsTable, workItemStepsTable,
   workTemplatesTable, workStepsTable, productComponentsTable, companiesTable,
   rolesTable, inboundTable, templateStepDependenciesTable, stepDependenciesTable,
+  quoteIssuersTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -34,15 +35,17 @@ const quoteSchema = z.object({
   validUntil: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   terms: z.string().nullable().optional(),
-  discount: z.number().min(0).default(0),
+  discount: z.number().min(0).max(100).default(0),
   taxRate: z.number().min(0).max(100).default(0),
+  issuerId: z.number().int().nullable().optional(),
   items: z.array(itemInputSchema).default([]),
   revisionNote: z.string().nullable().optional(),
 });
 
 function computeTotals(items: { quantity: number; unitPrice: number }[], discount: number, taxRate: number) {
   const subtotal = items.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
-  const afterDiscount = Math.max(0, subtotal - discount);
+  // discount is a percentage (0–100)
+  const afterDiscount = Math.max(0, subtotal * (1 - discount / 100));
   const taxAmount = +(afterDiscount * (taxRate / 100)).toFixed(2);
   const total = +(afterDiscount + taxAmount).toFixed(2);
   return { subtotal: +subtotal.toFixed(2), taxAmount, total };
@@ -109,7 +112,12 @@ async function loadQuoteFull(quoteId: number, companyId: number) {
   const revisions = await db.select().from(quoteRevisionsTable)
     .where(eq(quoteRevisionsTable.quoteId, quoteId))
     .orderBy(desc(quoteRevisionsTable.revisionNumber));
-  return { ...quote, items, customer, revisions };
+  let issuer = null;
+  if (quote.issuerId) {
+    const [iss] = await db.select().from(quoteIssuersTable).where(eq(quoteIssuersTable.id, quote.issuerId));
+    issuer = iss ? { id: iss.id, name: iss.name, email: iss.email, phone: iss.phone } : null;
+  }
+  return { ...quote, items, customer, revisions, issuer };
 }
 
 async function recordRevision(quoteId: number, userId: number | undefined, note: string | null) {
@@ -237,6 +245,7 @@ router.post("/", requireAdmin, async (req, res) => {
         taxRate: d.taxRate,
         taxAmount: totals.taxAmount,
         total: totals.total,
+        issuerId: d.issuerId ?? null,
         companyId,
       }).returning();
 
@@ -352,6 +361,7 @@ router.put("/:id", requireAdmin, async (req, res) => {
       taxRate: d.taxRate,
       taxAmount: totals.taxAmount,
       total: totals.total,
+      issuerId: d.issuerId ?? null,
       updatedAt: new Date(),
     }).where(eq(quotesTable.id, id));
 
@@ -656,6 +666,13 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
       } catch { /* ignore an unreadable logo */ }
     }
     doc.fontSize(20).font("Helvetica-Bold").text(company?.name ?? "Quote", { align: "left" });
+    if (full.issuer) {
+      doc.font("Helvetica").fontSize(9).fillColor("#444");
+      doc.text(`Issued by: ${full.issuer.name}`, { align: "left" });
+      if (full.issuer.email) doc.text(full.issuer.email, { align: "left" });
+      if (full.issuer.phone) doc.text(full.issuer.phone, { align: "left" });
+      doc.fillColor("black");
+    }
     doc.moveDown(0.3);
     doc.fontSize(22).fillColor("#222").text(`QUOTE ${full.quoteNumber}`, { align: "right" });
     doc.fillColor("black").fontSize(10).font("Helvetica");
@@ -715,8 +732,9 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     doc.text(fmtMoney(full.subtotal), 470, y, { width: 80, align: "right" });
     y += 16;
     if (Number(full.discount) > 0) {
-      doc.text("Discount:", 350, y, { width: 120, align: "right" });
-      doc.text(`-${fmtMoney(full.discount)}`, 470, y, { width: 80, align: "right" });
+      const discountAmt = Number(full.subtotal) * Number(full.discount) / 100;
+      doc.text(`Discount (${Number(full.discount)}%):`, 350, y, { width: 120, align: "right" });
+      doc.text(`-${fmtMoney(discountAmt)}`, 470, y, { width: 80, align: "right" });
       y += 16;
     }
     if (Number(full.taxRate) > 0) {
@@ -742,8 +760,8 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
       doc.font("Helvetica").fontSize(9).text(full.terms, 50, y, { width: 500 });
     }
 
-    // Signature block
-    if (company?.quoteSignerName) {
+    // Signature block — only shown when no per-quote issuer is set
+    if (!full.issuer && company?.quoteSignerName) {
       let sigY = doc.y + 40;
       if (sigY > 740) { doc.addPage(); sigY = 60; }
       doc.moveTo(50, sigY).lineTo(250, sigY).stroke();
