@@ -67,6 +67,7 @@ export const companiesTable = pgTable("companies", {
   // Branding for quote PDFs: logo is a base64 data URL; quoteSignerName is the typed signer.
   logo: text("logo"),
   quoteSignerName: text("quote_signer_name"),
+  currency: text("currency").notNull().default("USD"),
   outlineSettings: jsonb("outline_settings").notNull().$type<OutlineSettings>().$defaultFn(() => ({
     opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {},
   })),
