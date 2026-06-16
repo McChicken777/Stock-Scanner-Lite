@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,6 +157,7 @@ function crossesMidnight(start: string, end: string): boolean {
 export default function AdminCompanyPage() {
   const { user } = useAuth();
   const { t } = useLang();
+  const { atLeast } = usePlan();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState("");
@@ -454,8 +455,8 @@ export default function AdminCompanyPage() {
           </div>
         </div>
 
-        {/* Work hours + Shifts (combined) */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-5">
+        {/* Work hours + Shifts (combined) — Standard/Pro only */}
+        {atLeast("standard") && <div className="bg-card border-2 border-border rounded-xl p-4 space-y-5">
           {/* Standard work hours */}
           <div className="space-y-3">
             <div>
@@ -567,10 +568,10 @@ export default function AdminCompanyPage() {
               </div>
             )}
           </div>
-        </div>
+        </div>}
 
-        {/* Scheduling Rules */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+        {/* Scheduling Rules — Standard/Pro only */}
+        {atLeast("standard") && <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyScheduling")}</p>
@@ -674,10 +675,10 @@ export default function AdminCompanyPage() {
               {t("companyImportHolidays")} {importYear} {COUNTRIES.find(c => c.code === selectedCountry)?.label}
             </Button>
           )}
-        </div>
+        </div>}
 
-        {/* Holidays management */}
-        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+        {/* Holidays management — Standard/Pro only */}
+        {atLeast("standard") && <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyHolidays")}</p>
@@ -734,7 +735,7 @@ export default function AdminCompanyPage() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Plan — read-only for admins */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-3">

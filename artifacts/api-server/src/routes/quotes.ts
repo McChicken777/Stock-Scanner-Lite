@@ -640,8 +640,14 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
       try {
         const m = /^data:image\/(png|jpe?g);base64,(.+)$/.exec(company.logo);
         if (m) {
-          doc.image(Buffer.from(m[2], "base64"), 50, 45, { fit: [130, 55] });
-          doc.y = 45 + 60;
+          const imgBuf = Buffer.from(m[2], "base64");
+          const img = (doc as any).openImage(imgBuf) as { width: number; height: number };
+          const MAX_W = 200, MAX_H = 90;
+          const scale = Math.min(MAX_W / img.width, MAX_H / img.height, 1);
+          const dW = Math.round(img.width * scale);
+          const dH = Math.round(img.height * scale);
+          doc.image(imgBuf, 50, 45, { width: dW, height: dH });
+          doc.y = 45 + dH + 8;
         }
       } catch { /* ignore an unreadable logo */ }
     }
