@@ -213,6 +213,7 @@ function ProcedureRow({
   });
 
   const [showStopDialog, setShowStopDialog] = useState(false);
+  const [stopLocationType, setStopLocationType] = useState<"warehouse" | "with_worker">("warehouse");
   const [stopLocationId, setStopLocationId] = useState<string>("");
 
   const { data: locationList } = useQuery<{ id: string; description?: string | null }[]>({
@@ -237,15 +238,19 @@ function ProcedureRow({
   });
 
   function openStopDialog() {
+    setStopLocationType("warehouse");
     setStopLocationId(proc.stationDefaultOutputLocationId ?? "");
     setShowStopDialog(true);
   }
 
   function confirmStop() {
-    const body = stopLocationId
-      ? { wipLocation: { locationType: "warehouse", locationValue: stopLocationId } }
-      : undefined;
-    stopMutation.mutate(body);
+    if (stopLocationType === "with_worker") {
+      stopMutation.mutate({ wipLocation: { locationType: "with_worker", locationValue: "With worker" } });
+    } else if (stopLocationId) {
+      stopMutation.mutate({ wipLocation: { locationType: "warehouse", locationValue: stopLocationId } });
+    } else {
+      stopMutation.mutate(undefined);
+    }
   }
 
   const resetMutation = useMutation({
@@ -324,16 +329,34 @@ function ProcedureRow({
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
-            <select
-              value={stopLocationId}
-              onChange={(e) => setStopLocationId(e.target.value)}
-              className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
-            >
-              <option value="">— Select location (optional) —</option>
-              {locationList?.map((l) => (
-                <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>
+            <div className="grid grid-cols-2 gap-2">
+              {(["warehouse", "with_worker"] as const).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setStopLocationType(type)}
+                  className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${
+                    stopLocationType === type
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {type === "warehouse" ? <MapPin className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                  {type === "warehouse" ? "Warehouse location" : "With me"}
+                </button>
               ))}
-            </select>
+            </div>
+            {stopLocationType === "warehouse" && (
+              <select
+                value={stopLocationId}
+                onChange={(e) => setStopLocationId(e.target.value)}
+                className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
+              >
+                <option value="">— Select location (optional) —</option>
+                {locationList?.map((l) => (
+                  <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>
+                ))}
+              </select>
+            )}
             <div className="flex gap-2">
               <Button
                 className="flex-1 h-10 font-bold bg-red-600 hover:bg-red-700"
