@@ -42,6 +42,42 @@ router.post("/", requireAdmin, async (req, res) => {
   }
 });
 
+router.post("/bulk", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const body = req.body as { locations?: unknown };
+    if (!Array.isArray(body.locations) || body.locations.length === 0) {
+      res.status(400).json({ error: "locations array required" });
+      return;
+    }
+    if (body.locations.length > 200) {
+      res.status(400).json({ error: "Maximum 200 locations per request" });
+      return;
+    }
+    const rows = (body.locations as { id?: unknown; description?: unknown }[]).map((r) => ({
+      id: String(r.id ?? "").trim().toUpperCase(),
+      description: r.description ? String(r.description).trim() || null : null,
+      companyId,
+    })).filter((r) => r.id.length >= 2);
+
+    if (rows.length === 0) {
+      res.status(400).json({ error: "No valid location IDs provided" });
+      return;
+    }
+
+    const inserted = await db
+      .insert(locationsTable)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({ id: locationsTable.id });
+
+    res.json({ created: inserted.length, skipped: rows.length - inserted.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to bulk create locations");
+    res.status(500).json({ error: "Failed to bulk create locations" });
+  }
+});
+
 router.get("/:locationId", async (req, res) => {
   try {
     const { locationId } = req.params;
@@ -114,7 +150,7 @@ router.get("/:locationId", async (req, res) => {
 
 router.delete("/:locationId", requireAdmin, async (req, res) => {
   try {
-    const { locationId } = req.params;
+    const locationId = String(req.params.locationId);
     const companyId = req.session.companyId!;
     await db.delete(locationsTable).where(and(eq(locationsTable.id, locationId), eq(locationsTable.companyId, companyId)));
     res.status(204).send();

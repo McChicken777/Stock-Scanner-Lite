@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, integer, serial, pgEnum, boolean, jsonb, nume
 import { usersTable } from "./users";
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
+import { locationsTable } from "./locations";
 
 export const workPriorityEnum = pgEnum("work_priority", ["low", "normal", "high", "urgent"]);
 export const workProjectStatusEnum = pgEnum("work_project_status", ["in_progress", "completed"]);
@@ -48,6 +49,7 @@ export const stationTypesTable = pgTable("station_types", {
   color: text("color").notNull().default("#6366f1"),
   flowOrder: integer("flow_order").notNull().default(0),
   roleId: integer("role_id").references(() => rolesTable.id, { onDelete: "set null" }),
+  defaultOutputLocationId: text("default_output_location_id").references(() => locationsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

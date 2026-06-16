@@ -226,14 +226,17 @@ function AdminDesktopSidebar() {
         <SidebarSection label={t("navMain")} />
         {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navJobs")} active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
         <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
+        <SideNavItem href="/quotes" icon={FileText} label={t("navQuotes")} active={location.startsWith("/quotes")} />
         {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} badge={attention?.restockRequests ?? 0} />}
 
         {/* Inventory — available to all plans (Lite included) */}
         <SidebarSection label={t("navInventory")} />
-        <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/") || location.startsWith("/item/")} />
-        <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations"} />
+        {/* Lite: home + core 3; Standard/Pro: full 5-item set with Scan entry point */}
+        {!atLeast("standard") && <SideNavItem href="/inventory" icon={LayoutDashboard} label="Inventory home" active={location === "/inventory"} />}
+        {atLeast("standard") && <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/") || location.startsWith("/item/")} />}
+        <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations" || location.startsWith("/locations/")} />
         <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-        <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />
+        {atLeast("standard") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />}
         <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
         {atLeast("standard") && <SideNavItem href="/valuation" icon={FileText} label={t("valuationTitle")} active={location.startsWith("/valuation")} />}
 
@@ -382,6 +385,7 @@ function AdminBottomNav() {
   const [location] = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { logout, user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
 
   const { data: attention } = useQuery<AttentionCounts>({
@@ -403,17 +407,33 @@ function AdminBottomNav() {
     location.startsWith("/work/template-outline");
   const isCustomersActive =
     location.startsWith("/customers") ||
-    location.startsWith("/quotes") ||
     location.startsWith("/orders");
+  const isQuotesActive = location.startsWith("/quotes");
   const isPurchasingActive =
     location.startsWith("/work/reorder") ||
     location.startsWith("/work/purchase-orders");
+  const isInventoryActive =
+    location === "/inventory" ||
+    location.startsWith("/scan") ||
+    location.startsWith("/location") ||
+    location.startsWith("/item/") ||
+    location.startsWith("/products") ||
+    location.startsWith("/history") ||
+    location.startsWith("/locations");
 
-  const tabs = [
-    { key: "jobs", href: "/work/projects", icon: FolderKanban, label: t("navJobs"), active: isJobsActive },
-    { key: "customers", href: "/customers", icon: Store, label: t("navCustomers"), active: isCustomersActive },
-    { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: t("navPurchasing"), active: isPurchasingActive },
-  ];
+  // Lite: Inventory · Customers · Quotes · Settings
+  // Standard/Pro: Jobs · Customers · Purchasing · Settings
+  const tabs = atLeast("standard")
+    ? [
+        { key: "jobs", href: "/work/projects", icon: FolderKanban, label: t("navJobs"), active: isJobsActive },
+        { key: "customers", href: "/customers", icon: Store, label: t("navCustomers"), active: isCustomersActive },
+        { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: t("navPurchasing"), active: isPurchasingActive },
+      ]
+    : [
+        { key: "inventory", href: "/inventory", icon: Package2, label: "Inventory", active: isInventoryActive },
+        { key: "customers", href: "/customers", icon: Store, label: t("navCustomers"), active: isCustomersActive },
+        { key: "quotes", href: "/quotes", icon: FileText, label: t("navQuotes"), active: isQuotesActive },
+      ];
 
   return (
     <>
