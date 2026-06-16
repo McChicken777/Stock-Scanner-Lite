@@ -90,6 +90,15 @@ export default function QuoteDetailPage() {
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
 
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+  const currency = company?.currency ?? "USD";
+  const fmt = (amount: number | string) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(amount));
+
   const { data: quote, isLoading } = useQuery<QuoteFull>({
     queryKey: ["/api/quotes", id],
     queryFn: async () => {
@@ -228,21 +237,21 @@ export default function QuoteDetailPage() {
                 <p className="font-semibold text-sm">{it.name}</p>
                 {it.description && <p className="text-xs text-muted-foreground">{it.description}</p>}
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {Number(it.quantity)} × ${Number(it.unitPrice).toFixed(2)}
+                  {Number(it.quantity)} × {fmt(it.unitPrice)}
                 </p>
               </div>
-              <p className="font-mono font-bold text-sm">${Number(it.lineTotal).toFixed(2)}</p>
+              <p className="font-mono font-bold text-sm">{fmt(it.lineTotal)}</p>
             </div>
           ))}
         </div>
 
         {/* Totals */}
         <div className="bg-muted/30 border-2 border-border rounded-xl p-3 space-y-1.5 text-sm">
-          <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="font-mono">${Number(quote.subtotal).toFixed(2)}</span></div>
-          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")}</span><span className="font-mono">-${Number(quote.discount).toFixed(2)}</span></div>}
-          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="font-mono">${Number(quote.taxAmount).toFixed(2)}</span></div>}
+          <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="font-mono">{fmt(quote.subtotal)}</span></div>
+          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")}</span><span className="font-mono">-{fmt(quote.discount)}</span></div>}
+          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="font-mono">{fmt(quote.taxAmount)}</span></div>}
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
-            <span>{t("quoteTotal")}</span><span className="font-mono">${Number(quote.total).toFixed(2)}</span>
+            <span>{t("quoteTotal")}</span><span className="font-mono">{fmt(quote.total)}</span>
           </div>
         </div>
 
@@ -290,7 +299,7 @@ export default function QuoteDetailPage() {
                     >
                       <span className="font-semibold text-left">v{r.revisionNumber} · {r.note ?? t("quoteRevisionEdited")}</span>
                       <span className="text-muted-foreground flex items-center gap-2">
-                        {snapTotal != null && <span className="font-mono">${Number(snapTotal).toFixed(2)}</span>}
+                        {snapTotal != null && <span className="font-mono">{fmt(snapTotal)}</span>}
                         {format(new Date(r.createdAt), "dd MMM HH:mm")}
                         <span className="text-[10px]">{isOpen ? "▲" : "▼"}</span>
                       </span>
@@ -301,7 +310,7 @@ export default function QuoteDetailPage() {
                           r.snapshot.items.map((it, i) => (
                             <div key={i} className="flex justify-between text-[11px] font-mono">
                               <span className="truncate pr-2">{it.name} × {it.quantity}</span>
-                              <span>${Number(it.lineTotal).toFixed(2)}</span>
+                              <span>{fmt(it.lineTotal)}</span>
                             </div>
                           ))
                         ) : (

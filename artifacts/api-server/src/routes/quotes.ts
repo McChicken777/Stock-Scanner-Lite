@@ -635,6 +635,10 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${full.quoteNumber}.pdf"`);
     doc.pipe(res);
 
+    const currencyCode = company?.currency ?? "USD";
+    const fmtMoney = (n: number | string) =>
+      new Intl.NumberFormat("en-US", { style: "currency", currency: currencyCode, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n));
+
     // Header — embed company logo (PNG/JPG base64) top-left if present
     if (company?.logo) {
       try {
@@ -698,8 +702,8 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
         doc.fillColor("black").fontSize(10);
       }
       doc.text(String(Number(it.quantity)), colX.qty, y, { width: 50, align: "right" });
-      doc.text(`$${Number(it.unitPrice).toFixed(2)}`, colX.price, y, { width: 70, align: "right" });
-      doc.text(`$${lineTotal.toFixed(2)}`, colX.total, y, { width: 80, align: "right" });
+      doc.text(fmtMoney(it.unitPrice), colX.price, y, { width: 70, align: "right" });
+      doc.text(fmtMoney(lineTotal), colX.total, y, { width: 80, align: "right" });
       y = doc.y + 8;
     }
 
@@ -708,21 +712,21 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
     y += 8;
     doc.font("Helvetica").fontSize(10);
     doc.text("Subtotal:", 350, y, { width: 120, align: "right" });
-    doc.text(`$${Number(full.subtotal).toFixed(2)}`, 470, y, { width: 80, align: "right" });
+    doc.text(fmtMoney(full.subtotal), 470, y, { width: 80, align: "right" });
     y += 16;
     if (Number(full.discount) > 0) {
       doc.text("Discount:", 350, y, { width: 120, align: "right" });
-      doc.text(`-$${Number(full.discount).toFixed(2)}`, 470, y, { width: 80, align: "right" });
+      doc.text(`-${fmtMoney(full.discount)}`, 470, y, { width: 80, align: "right" });
       y += 16;
     }
     if (Number(full.taxRate) > 0) {
       doc.text(`Tax (${Number(full.taxRate)}%):`, 350, y, { width: 120, align: "right" });
-      doc.text(`$${Number(full.taxAmount).toFixed(2)}`, 470, y, { width: 80, align: "right" });
+      doc.text(fmtMoney(full.taxAmount), 470, y, { width: 80, align: "right" });
       y += 16;
     }
     doc.font("Helvetica-Bold").fontSize(12);
     doc.text("Total:", 350, y, { width: 120, align: "right" });
-    doc.text(`$${Number(full.total).toFixed(2)}`, 470, y, { width: 80, align: "right" });
+    doc.text(fmtMoney(full.total), 470, y, { width: 80, align: "right" });
     y += 30;
 
     // Notes & terms

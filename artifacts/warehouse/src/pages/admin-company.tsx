@@ -19,6 +19,7 @@ interface Company {
   timezone: string;
   logo: string | null;
   quoteSignerName: string | null;
+  currency: string;
   features: {
     inventory: boolean;
     alerts: boolean;
@@ -41,6 +42,25 @@ interface CompanyShift {
   startTime: string;
   endTime: string;
 }
+
+const CURRENCIES = [
+  { code: "USD", label: "US Dollar ($)" },
+  { code: "EUR", label: "Euro (€)" },
+  { code: "GBP", label: "British Pound (£)" },
+  { code: "CHF", label: "Swiss Franc (Fr)" },
+  { code: "JPY", label: "Japanese Yen (¥)" },
+  { code: "CAD", label: "Canadian Dollar (CA$)" },
+  { code: "AUD", label: "Australian Dollar (A$)" },
+  { code: "NOK", label: "Norwegian Krone (kr)" },
+  { code: "SEK", label: "Swedish Krona (kr)" },
+  { code: "DKK", label: "Danish Krone (kr)" },
+  { code: "PLN", label: "Polish Złoty (zł)" },
+  { code: "CZK", label: "Czech Koruna (Kč)" },
+  { code: "HUF", label: "Hungarian Forint (Ft)" },
+  { code: "RSD", label: "Serbian Dinar (din)" },
+  { code: "RON", label: "Romanian Leu (lei)" },
+  { code: "HRK", label: "Croatian Kuna (kn)" },
+];
 
 const COUNTRIES = [
   { code: "AU", label: "Australia" },
@@ -204,7 +224,7 @@ export default function AdminCompanyPage() {
   }, [selectedCountry]);
 
   const updateBrandingMutation = useMutation({
-    mutationFn: async (data: { logo?: string | null; quoteSignerName?: string | null }) => {
+    mutationFn: async (data: { logo?: string | null; quoteSignerName?: string | null; currency?: string }) => {
       const res = await fetch("/api/company", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -452,6 +472,18 @@ export default function AdminCompanyPage() {
                 {updateBrandingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               </Button>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-muted-foreground">Default currency</label>
+            <select
+              value={company.currency ?? "USD"}
+              onChange={(e) => updateBrandingMutation.mutate({ currency: e.target.value })}
+              className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.code} — {c.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 

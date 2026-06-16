@@ -97,6 +97,15 @@ export default function QuoteFormPage() {
     queryFn: async () => (await fetch("/api/products", { credentials: "include" })).json(),
   });
 
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+  const currency = company?.currency ?? "USD";
+  const fmt = (amount: number) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+
   const { data: existing } = useQuery<QuoteData>({
     queryKey: ["/api/quotes", editingId],
     queryFn: async () => (await fetch(`/api/quotes/${editingId}`, { credentials: "include" })).json(),
@@ -326,7 +335,7 @@ export default function QuoteFormPage() {
                       </div>
                       <div>
                         <Label className="text-[10px] font-bold text-muted-foreground">{t("quoteTotal")}</Label>
-                        <p className="h-9 flex items-center font-mono font-bold text-sm">${(it.quantity * it.unitPrice).toFixed(2)}</p>
+                        <p className="h-9 flex items-center font-mono font-bold text-sm">{fmt(it.quantity * it.unitPrice)}</p>
                       </div>
                     </div>
                   </div>
@@ -366,7 +375,7 @@ export default function QuoteFormPage() {
                     className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border bg-background hover:border-primary hover:bg-primary/10 transition-colors"
                   >
                     <p className="text-sm font-medium truncate">{p.name}</p>
-                    <span className="text-xs font-mono font-bold text-primary">${Number(p.salePrice ?? 0).toFixed(2)}</span>
+                    <span className="text-xs font-mono font-bold text-primary">{fmt(Number(p.salePrice ?? 0))}</span>
                   </button>
                 ))}
               </div>
@@ -378,7 +387,7 @@ export default function QuoteFormPage() {
         <div className="border-2 border-border rounded-xl p-3 space-y-2 bg-muted/20">
           <div className="flex justify-between text-sm">
             <span className="font-semibold">{t("quoteSubtotal")}</span>
-            <span className="font-mono">${subtotal.toFixed(2)}</span>
+            <span className="font-mono">{fmt(subtotal)}</span>
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormDiscountDollar")}</Label>
@@ -387,11 +396,11 @@ export default function QuoteFormPage() {
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormTaxPercent")}</Label>
             <Input type="number" step="0.01" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} className="h-8 border-2 text-sm flex-1" />
-            <span className="text-xs font-mono">${taxAmount.toFixed(2)}</span>
+            <span className="text-xs font-mono">{fmt(taxAmount)}</span>
           </div>
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
             <span>{t("quoteTotal")}</span>
-            <span className="font-mono">${total.toFixed(2)}</span>
+            <span className="font-mono">{fmt(total)}</span>
           </div>
         </div>
 
