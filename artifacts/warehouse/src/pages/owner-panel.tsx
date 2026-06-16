@@ -11,6 +11,7 @@ import {
   Building2, Plus, ChevronDown, ChevronUp, Users, Loader2,
   Pencil, Check, X, KeyRound, Trash2, UserPlus, Crown, FileDown,
   Tablet, QrCode, Wifi, WifiOff, CreditCard, Hash, RefreshCw,
+  Link2, Copy, Send, Clock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,200 @@ async function fetchCompanyUsers(companyId: number): Promise<CompanyUser[]> {
   const res = await fetch(`/api/owner/companies/${companyId}/users`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to load users");
   return res.json();
+}
+
+// ── Invite Management ────────────────────────────────────────────────────────
+
+interface Invite {
+  id: number;
+  token: string;
+  companyName: string | null;
+  plan: string;
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+  url: string;
+}
+
+function InviteSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [plan, setPlan] = useState<"lite" | "standard" | "pro">("lite");
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const { data: invites = [], isLoading } = useQuery<Invite[]>({
+    queryKey: ["/api/owner/invites"],
+    queryFn: () => fetch("/api/owner/invites", { credentials: "include" }).then((r) => r.json()),
+    enabled: expanded,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/owner/invites", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyName: companyName.trim() || undefined, plan }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Failed");
+      return d as Invite;
+    },
+    onSuccess: (inv) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/invites"] });
+      setCompanyName("");
+      copyToClipboard(inv.url, inv.id);
+      toast({ title: "Invite link created and copied!" });
+    },
+    onError: (err) => toast({ title: err instanceof Error ? err.message : "Error", variant: "destructive" }),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await fetch(`/api/owner/invites/${id}`, { method: "DELETE", credentials: "include" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/invites"] });
+      toast({ title: "Invite revoked" });
+    },
+  });
+
+  function copyToClipboard(url: string, id: number) {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }
+
+  const pendingInvites = invites.filter((i) => !i.used);
+  const usedInvites = invites.filter((i) => i.used);
+
+  return (
+    <div className="bg-card border-2 border-border rounded-xl overflow-hidden">
+      <button className="w-full p-4 flex items-center gap-3 text-left" onClick={() => setExpanded((e) => !e)}>
+        <Send className="h-5 w-5 text-primary flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-base">Invite Links</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Create a registration link to send to a new customer
+          </p>
+        </div>
+        {expanded ? <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border px-4 pb-4 pt-3 space-y-4">
+          {/* Create new invite */}
+          <div className="bg-muted/30 rounded-lg p-3 space-y-3 border border-border">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">New invite</p>
+            <div className="space-y-2">
+              <Input
+                placeholder="Company name (optional pre-fill)"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                className="h-9 border-2 text-sm"
+              />
+              <div className="grid grid-cols-3 gap-2">
+                {(["lite", "standard", "pro"] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPlan(p)}
+                    className={cn(
+                      "h-9 rounded-lg border-2 font-bold text-xs uppercase transition-all",
+                      plan === p ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button
+              className="w-full h-9 font-bold gap-1.5 text-sm"
+              disabled={createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+            >
+              {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              Create &amp; copy link
+            </Button>
+          </div>
+
+          {/* Active invites */}
+          {isLoading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <>
+              {pendingInvites.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Active ({pendingInvites.length})</p>
+                  {pendingInvites.map((inv) => (
+                    <div key={inv.id} className="bg-background border border-border rounded-lg p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm truncate">{inv.companyName || <span className="text-muted-foreground italic">No company name</span>}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Badge variant="outline" className="text-[10px] uppercase font-bold">{inv.plan}</Badge>
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                              <Clock className="h-2.5 w-2.5" />
+                              Expires {format(new Date(inv.expiresAt), "dd MMM yyyy")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs gap-1"
+                            onClick={() => copyToClipboard(inv.url, inv.id)}
+                          >
+                            {copiedId === inv.id ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                            {copiedId === inv.id ? "Copied" : "Copy"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                            onClick={() => revokeMutation.mutate(inv.id)}
+                            disabled={revokeMutation.isPending}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="bg-muted/50 rounded px-2 py-1 font-mono text-[10px] break-all text-muted-foreground">
+                        {inv.url}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {usedInvites.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Used ({usedInvites.length})</p>
+                  {usedInvites.map((inv) => (
+                    <div key={inv.id} className="px-3 py-2 rounded-lg border border-border bg-muted/20 flex items-center justify-between gap-2 opacity-60">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{inv.companyName || "—"}</p>
+                        <p className="text-[10px] text-muted-foreground">{inv.plan} · used</p>
+                      </div>
+                      <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pendingInvites.length === 0 && usedInvites.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-3">No invites yet</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Create Company Modal ─────────────────────────────────────────────────────
@@ -758,6 +953,10 @@ export default function OwnerPanelPage() {
       </div>
 
       <div className="p-4 space-y-3 pb-24">
+        {/* Invite management */}
+        <InviteSection />
+
+        {/* Companies */}
         {isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

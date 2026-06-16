@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useRoute } from "wouter";
 import { useLang } from "@/contexts/lang";
-import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2 } from "lucide-react";
+import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers } from "lucide-react";
 import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -171,6 +171,144 @@ function StockItem({
   );
 }
 
+function FillStockDialog({ locationId, currentStock }: {
+  locationId: string;
+  currentStock: Array<{ productId: number; quantity: number }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [qtys, setQtys] = useState<Record<number, string>>({});
+  const [saving, setSaving] = useState(false);
+  const { data: products, isLoading } = useListProducts({ query: { queryKey: getListProductsQueryKey(), enabled: open } });
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  function onOpenChange(v: boolean) {
+    setOpen(v);
+    if (v) {
+      // Pre-fill current quantities
+      const initial: Record<number, string> = {};
+      for (const s of currentStock) initial[s.productId] = String(s.quantity);
+      setQtys(initial);
+      setSearch("");
+    }
+  }
+
+  const currentMap = new Map(currentStock.map((s) => [s.productId, s.quantity]));
+  const filtered = products?.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.category.toLowerCase().includes(search.toLowerCase())
+  ) ?? [];
+  // Show products already stocked first
+  const sorted = [...filtered].sort((a, b) => {
+    const aHas = currentMap.has(a.id) ? 0 : 1;
+    const bHas = currentMap.has(b.id) ? 0 : 1;
+    return aHas - bHas;
+  });
+
+  async function handleSave() {
+    const entries: Array<{ locationId: string; productId: number; quantity: number; changedBy: string | null }> = [];
+    for (const [pidStr, qtyStr] of Object.entries(qtys)) {
+      const productId = Number(pidStr);
+      const qty = parseFloat(qtyStr);
+      if (isNaN(qty) || qty < 0) continue;
+      const current = currentMap.get(productId) ?? -1;
+      if (qty === current) continue; // unchanged
+      entries.push({ locationId, productId, quantity: qty, changedBy: user?.username ?? null });
+    }
+    if (entries.length === 0) { setOpen(false); return; }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/stock/bulk", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries, reason: "counted" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });
+      toast({ title: `Stock updated — ${data.inserted + data.updated} product${data.inserted + data.updated !== 1 ? "s" : ""} set` });
+      setOpen(false);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const changedCount = Object.entries(qtys).filter(([pid, qtyStr]) => {
+    const qty = parseFloat(qtyStr);
+    return !isNaN(qty) && qty >= 0 && qty !== (currentMap.get(Number(pid)) ?? -1);
+  }).length;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button size="lg" variant="outline" className="w-full h-12 text-sm font-bold border-2 gap-2">
+          <Layers className="h-5 w-5" /> Set quantities
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="p-4 border-b">
+          <DialogTitle>Set stock quantities</DialogTitle>
+        </DialogHeader>
+        <div className="p-4 border-b bg-muted/30">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 h-11"
+            />
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          ) : sorted.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8 text-sm">No products found</p>
+          ) : sorted.map((p) => {
+            const current = currentMap.get(p.id);
+            const val = qtys[p.id] ?? "";
+            const changed = val !== "" && parseFloat(val) !== (current ?? -1);
+            return (
+              <div key={p.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${changed ? "border-primary bg-primary/5" : "border-border"}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{p.name}</p>
+                  <p className="text-xs text-muted-foreground">{p.category}{current !== undefined ? ` · currently ${current}` : ""}</p>
+                </div>
+                <Input
+                  type="number"
+                  min="0"
+                  value={val}
+                  placeholder={current !== undefined ? String(current) : "0"}
+                  onChange={(e) => setQtys((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                  onFocus={(e) => e.target.select()}
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                  className="w-20 h-9 text-center font-bold border-2"
+                />
+              </div>
+            );
+          })}
+        </div>
+        <div className="p-4 border-t bg-background flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button className="flex-1 font-bold gap-1.5" onClick={handleSave} disabled={saving || changedCount === 0}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {changedCount > 0 ? `Save ${changedCount} change${changedCount !== 1 ? "s" : ""}` : "No changes"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AddProductDialog({ locationId }: { locationId: string }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -317,7 +455,10 @@ export default function LocationPage() {
         {location.stock.length === 0 ? (
           <div className="bg-muted/30 border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 text-center">
             <p className="text-muted-foreground font-medium mb-4">{t("locationNoProducts")}</p>
-            <AddProductDialog locationId={location.id} />
+            <div className="space-y-2">
+              <AddProductDialog locationId={location.id} />
+              <FillStockDialog locationId={location.id} currentStock={[]} />
+            </div>
           </div>
         ) : (
           <>
@@ -336,9 +477,13 @@ export default function LocationPage() {
                 />
               ))}
             </div>
-            
-            <div className="pt-4">
+
+            <div className="pt-4 space-y-2">
               <AddProductDialog locationId={location.id} />
+              <FillStockDialog
+                locationId={location.id}
+                currentStock={location.stock.map((s) => ({ productId: s.productId, quantity: s.quantity }))}
+              />
             </div>
           </>
         )}

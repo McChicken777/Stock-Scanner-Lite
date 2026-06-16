@@ -346,4 +346,103 @@ router.put("/:locationId/:productId", async (req, res) => {
   }
 });
 
+// Bulk upsert — set quantities for multiple product+location pairs in one call.
+// Used for initial stock setup and the multi-product location fill dialog.
+const bulkStockSchema = z.object({
+  entries: z.array(z.object({
+    locationId: z.string().min(1).max(50),
+    productId: z.number().int().positive(),
+    quantity: z.number().min(0),
+    changedBy: z.string().nullable().optional(),
+  })).min(1).max(500),
+  reason: z.enum(["initial_entry", "received", "counted"]).default("initial_entry"),
+});
+
+router.post("/bulk", async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = bulkStockSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid input" });
+      return;
+    }
+
+    const { entries, reason } = parsed.data;
+
+    // Verify all locationIds and productIds belong to this company
+    const locationIds = [...new Set(entries.map((e) => e.locationId))];
+    const productIds = [...new Set(entries.map((e) => e.productId))];
+
+    const validLocations = await db
+      .select({ id: locationsTable.id })
+      .from(locationsTable)
+      .where(and(inArray(locationsTable.id, locationIds), eq(locationsTable.companyId, companyId)));
+    const validLocationSet = new Set(validLocations.map((l) => l.id));
+
+    const validProducts = await db
+      .select({ id: productsTable.id })
+      .from(productsTable)
+      .where(and(inArray(productsTable.id, productIds), eq(productsTable.companyId, companyId)));
+    const validProductSet = new Set(validProducts.map((p) => p.id));
+
+    const validEntries = entries.filter(
+      (e) => validLocationSet.has(e.locationId) && validProductSet.has(e.productId),
+    );
+    const skipped = entries.length - validEntries.length;
+
+    let inserted = 0;
+    let updated = 0;
+    let deleted = 0;
+
+    for (const entry of validEntries) {
+      const [existing] = await db
+        .select({ quantity: stockTable.quantity })
+        .from(stockTable)
+        .where(and(eq(stockTable.locationId, entry.locationId), eq(stockTable.productId, entry.productId)));
+
+      const previousQuantity = existing ? Number(existing.quantity) : 0;
+      const newQuantity = entry.quantity;
+      const delta = newQuantity - previousQuantity;
+
+      if (newQuantity === 0) {
+        if (existing) {
+          await db.delete(stockTable)
+            .where(and(eq(stockTable.locationId, entry.locationId), eq(stockTable.productId, entry.productId)));
+          deleted++;
+        }
+      } else if (existing) {
+        await db.update(stockTable)
+          .set({ quantity: newQuantity })
+          .where(and(eq(stockTable.locationId, entry.locationId), eq(stockTable.productId, entry.productId)));
+        updated++;
+      } else {
+        await db.insert(stockTable).values({
+          locationId: entry.locationId,
+          productId: entry.productId,
+          quantity: newQuantity,
+        });
+        inserted++;
+      }
+
+      if (delta !== 0) {
+        await db.insert(historyTable).values({
+          locationId: entry.locationId,
+          productId: entry.productId,
+          previousQuantity,
+          newQuantity,
+          delta,
+          changedBy: entry.changedBy ?? req.session.username ?? null,
+          reason,
+          companyId,
+        });
+      }
+    }
+
+    res.json({ inserted, updated, deleted, skipped });
+  } catch (err) {
+    req.log.error({ err }, "Failed to bulk update stock");
+    res.status(500).json({ error: "Failed to bulk update stock" });
+  }
+});
+
 export default router;

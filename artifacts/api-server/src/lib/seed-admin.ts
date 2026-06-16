@@ -33,41 +33,40 @@ export async function seedAdminUser() {
     await db.update(workProjectsTable).set({ companyId: defaultCompanyId }).where(isNull(workProjectsTable.companyId));
     await db.update(historyTable).set({ companyId: defaultCompanyId }).where(isNull(historyTable.companyId));
 
-    // 3. Ensure default admin exists with correct password
-    const [existingAdmin] = await db
-      .select()
-      .from(usersTable)
-      .where(sql`${usersTable.username} = 'admin'`);
+    // 3. Seed default admin only when SEED_ADMIN_PASSWORD is set and no admin exists yet.
+    //    Never auto-reset an existing admin's password — that would be a security risk.
+    const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
+    const seedAdminUsername = process.env.SEED_ADMIN_USERNAME || "admin";
+    if (seedAdminPassword) {
+      const [existingAdmin] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(sql`${usersTable.username} = ${seedAdminUsername}`);
 
-    const adminPasswordHash = await bcrypt.hash("admin123", 12);
-    if (!existingAdmin) {
-      await db.insert(usersTable).values({
-        username: "admin",
-        passwordHash: adminPasswordHash,
-        role: "admin",
-        companyId: defaultCompanyId,
-      });
-      logger.info("Default admin user created (username: admin, password: admin123)");
-    } else {
-      // Verify the stored hash still works; reset it if not (e.g. after a DB restore)
-      const hashOk = await bcrypt.compare("admin123", existingAdmin.passwordHash);
-      if (!hashOk) {
-        await db.update(usersTable)
-          .set({ passwordHash: adminPasswordHash })
-          .where(sql`${usersTable.username} = 'admin'`);
-        logger.warn("Admin password hash was invalid — reset to admin123");
+      if (!existingAdmin) {
+        const passwordHash = await bcrypt.hash(seedAdminPassword, 12);
+        await db.insert(usersTable).values({
+          username: seedAdminUsername,
+          passwordHash,
+          role: "admin",
+          companyId: defaultCompanyId,
+        });
+        logger.info({ username: seedAdminUsername }, "Default admin seeded");
       }
+    } else {
+      logger.info("No SEED_ADMIN_PASSWORD set — skipping default admin seeding");
     }
 
-    // 4. Ensure owner account exists (companyId = null, role = owner)
+    // 4. Ensure owner account exists (companyId = null, role = owner).
+    //    Only created once; never auto-reset.
     const ownerUsername = process.env.OWNER_USERNAME || "owner";
-    const ownerPassword = process.env.OWNER_PASSWORD || "owner123";
+    const ownerPassword = process.env.OWNER_PASSWORD;
     const [existingOwner] = await db
-      .select()
+      .select({ id: usersTable.id })
       .from(usersTable)
       .where(sql`${usersTable.role} = 'owner'`);
 
-    if (!existingOwner) {
+    if (!existingOwner && ownerPassword) {
       const passwordHash = await bcrypt.hash(ownerPassword, 12);
       await db.insert(usersTable).values({
         username: ownerUsername,
