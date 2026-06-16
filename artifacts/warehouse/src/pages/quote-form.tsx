@@ -359,6 +359,8 @@ export default function QuoteFormPage() {
                           type="number" step="0.01" min="0"
                           value={it.quantity}
                           onChange={(e) => updateItem(idx, { quantity: Number(e.target.value) })}
+                          onFocus={(e) => e.target.select()}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           className="h-9 border-2 text-sm"
                         />
                       </div>
@@ -368,6 +370,8 @@ export default function QuoteFormPage() {
                           type="number" step="0.01" min="0"
                           value={it.unitPrice}
                           onChange={(e) => updateItem(idx, { unitPrice: Number(e.target.value) })}
+                          onFocus={(e) => e.target.select()}
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           className="h-9 border-2 text-sm"
                         />
                       </div>
@@ -429,12 +433,12 @@ export default function QuoteFormPage() {
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormDiscountDollar")}</Label>
-            <Input type="number" step="0.1" min="0" max="100" value={discount} onChange={(e) => setDiscount(e.target.value)} className="h-8 border-2 text-sm flex-1" />
+            <Input type="number" step="0.1" min="0" max="100" value={discount} onChange={(e) => setDiscount(e.target.value)} onFocus={(e) => e.target.select()} onWheel={(e) => (e.target as HTMLInputElement).blur()} className="h-8 border-2 text-sm flex-1" />
             {Number(discount) > 0 && <span className="text-xs font-mono text-muted-foreground flex-shrink-0">-{fmt(subtotal - afterDiscount)}</span>}
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs font-bold flex-shrink-0">{t("quoteFormTaxPercent")}</Label>
-            <Input type="number" step="0.01" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} className="h-8 border-2 text-sm flex-1" />
+            <Input type="number" step="0.01" min="0" max="100" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} onFocus={(e) => e.target.select()} onWheel={(e) => (e.target as HTMLInputElement).blur()} className="h-8 border-2 text-sm flex-1" />
             <span className="text-xs font-mono">{fmt(taxAmount)}</span>
           </div>
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">

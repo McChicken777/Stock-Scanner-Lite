@@ -6,7 +6,7 @@ import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock, Users } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock, Users, Edit2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -198,10 +198,13 @@ export default function AdminCompanyPage() {
   const [newShiftName, setNewShiftName] = useState("");
   const [newShiftStart, setNewShiftStart] = useState("07:00");
   const [newShiftEnd, setNewShiftEnd] = useState("15:00");
-  const [signerName, setSignerName] = useState("");
   const [newIssuerName, setNewIssuerName] = useState("");
   const [newIssuerEmail, setNewIssuerEmail] = useState("");
   const [newIssuerPhone, setNewIssuerPhone] = useState("");
+  const [editingIssuerId, setEditingIssuerId] = useState<number | null>(null);
+  const [editIssuerName, setEditIssuerName] = useState("");
+  const [editIssuerEmail, setEditIssuerEmail] = useState("");
+  const [editIssuerPhone, setEditIssuerPhone] = useState("");
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/company"],
@@ -232,8 +235,7 @@ export default function AdminCompanyPage() {
     if (company) setWorkHours(String((company.workHoursPerDay ?? 480) / 60));
     if (company?.country) setSelectedCountry(company.country);
     if (company?.timezone) setSelectedTimezone(company.timezone);
-    if (company) setSignerName(company.quoteSignerName ?? "");
-  }, [company?.name, company?.workHoursPerDay, company?.country, company?.timezone, company?.quoteSignerName]);
+  }, [company?.name, company?.workHoursPerDay, company?.country, company?.timezone]);
 
   // Auto-fill timezone when country changes
   useEffect(() => {
@@ -243,7 +245,7 @@ export default function AdminCompanyPage() {
   }, [selectedCountry]);
 
   const updateBrandingMutation = useMutation({
-    mutationFn: async (data: { logo?: string | null; quoteSignerName?: string | null; currency?: string }) => {
+    mutationFn: async (data: { logo?: string | null; currency?: string }) => {
       const res = await fetch("/api/company", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -265,7 +267,7 @@ export default function AdminCompanyPage() {
     e.target.value = "";
     if (!file) return;
     if (!/^image\/(png|jpe?g)$/.test(file.type)) { toast({ description: "Use a PNG or JPG image", variant: "destructive" }); return; }
-    if (file.size > 500 * 1024) { toast({ description: "Logo must be under 500KB", variant: "destructive" }); return; }
+    if (file.size > 2 * 1024 * 1024) { toast({ description: "Logo must be under 2MB", variant: "destructive" }); return; }
     const reader = new FileReader();
     reader.onload = () => updateBrandingMutation.mutate({ logo: String(reader.result) });
     reader.readAsDataURL(file);
@@ -427,6 +429,24 @@ export default function AdminCompanyPage() {
     onError: () => toast({ title: "Failed to remove issuer", variant: "destructive" }),
   });
 
+  const updateIssuerMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: { name: string; email?: string; phone?: string } }) => {
+      const res = await fetch(`/api/quote-issuers/${id}`, {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quote-issuers"] });
+      setEditingIssuerId(null);
+      toast({ title: "Issuer updated" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
   if (user?.role !== "admin") {
     return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("adminOnly")}</p></div>;
   }
@@ -487,7 +507,7 @@ export default function AdminCompanyPage() {
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quote branding</p>
-            <p className="text-xs text-muted-foreground mt-1">Shown on quote PDFs. Logo: PNG or JPG, under 500KB.</p>
+            <p className="text-xs text-muted-foreground mt-1">Shown on quote PDFs. Logo: PNG or JPG, under 2MB.</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="h-16 w-32 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-muted/30 flex-shrink-0">
@@ -506,17 +526,6 @@ export default function AdminCompanyPage() {
                   Remove logo
                 </Button>
               )}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">Signed by — name on quotes</label>
-            <div className="flex gap-2">
-              <Input value={signerName} onChange={(e) => setSignerName(e.target.value)}
-                placeholder="e.g. John Smith, Owner" className="h-10 flex-1 border-2" />
-              <Button size="sm" className="h-10" disabled={updateBrandingMutation.isPending}
-                onClick={() => updateBrandingMutation.mutate({ quoteSignerName: signerName.trim() || null })}>
-                {updateBrandingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              </Button>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -546,20 +555,54 @@ export default function AdminCompanyPage() {
           {issuers.length > 0 && (
             <div className="space-y-1.5">
               {issuers.map((issuer) => (
-                <div key={issuer.id} className="flex items-start justify-between p-2.5 rounded-lg border bg-background text-sm">
-                  <div>
-                    <p className="font-semibold">{issuer.name}</p>
-                    {issuer.email && <p className="text-xs text-muted-foreground">{issuer.email}</p>}
-                    {issuer.phone && <p className="text-xs text-muted-foreground">{issuer.phone}</p>}
+                editingIssuerId === issuer.id ? (
+                  <div key={issuer.id} className="p-2.5 rounded-lg border bg-muted/20 space-y-2 text-sm">
+                    <Input value={editIssuerName} onChange={(e) => setEditIssuerName(e.target.value)}
+                      placeholder="Name" className="h-8 text-sm border-2" />
+                    <Input value={editIssuerEmail} onChange={(e) => setEditIssuerEmail(e.target.value)}
+                      placeholder="Email" type="email" className="h-8 text-sm border-2" />
+                    <Input value={editIssuerPhone} onChange={(e) => setEditIssuerPhone(e.target.value)}
+                      placeholder="Phone" className="h-8 text-sm border-2" />
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 h-8 gap-1"
+                        disabled={!editIssuerName.trim() || updateIssuerMutation.isPending}
+                        onClick={() => updateIssuerMutation.mutate({ id: issuer.id, data: {
+                          name: editIssuerName.trim(),
+                          ...(editIssuerEmail.trim() ? { email: editIssuerEmail.trim() } : {}),
+                          ...(editIssuerPhone.trim() ? { phone: editIssuerPhone.trim() } : {}),
+                        }})}>
+                        {updateIssuerMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        Save
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => setEditingIssuerId(null)}>
+                        {t("cancel")}
+                      </Button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => deleteIssuerMutation.mutate(issuer.id)}
-                    disabled={deleteIssuerMutation.isPending}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                ) : (
+                  <div key={issuer.id} className="flex items-start justify-between p-2.5 rounded-lg border bg-background text-sm">
+                    <div>
+                      <p className="font-semibold">{issuer.name}</p>
+                      {issuer.email && <p className="text-xs text-muted-foreground">{issuer.email}</p>}
+                      {issuer.phone && <p className="text-xs text-muted-foreground">{issuer.phone}</p>}
+                    </div>
+                    <div className="flex gap-0.5 flex-shrink-0">
+                      <button
+                        onClick={() => { setEditingIssuerId(issuer.id); setEditIssuerName(issuer.name); setEditIssuerEmail(issuer.email ?? ""); setEditIssuerPhone(issuer.phone ?? ""); }}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteIssuerMutation.mutate(issuer.id)}
+                        disabled={deleteIssuerMutation.isPending}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
               ))}
             </div>
           )}

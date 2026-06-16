@@ -28,8 +28,8 @@ router.put("/", requireAdmin, async (req, res) => {
       workHoursPerDay: z.number().int().min(60).max(1440).optional(),
       weekendOvertimeEnabled: z.boolean().optional(),
       country: z.string().max(10).nullable().optional(),
-      // Branding: base64 data URL (~500KB cap) + typed signer name for quote PDFs.
-      logo: z.string().max(700000).nullable().optional().refine(
+      // Branding: base64 data URL (~2MB cap) + typed signer name for quote PDFs.
+      logo: z.string().max(2_900_000).nullable().optional().refine(
         (v) => v == null || v === "" || /^data:image\/(png|jpe?g);base64,/.test(v),
         "Logo must be a PNG or JPG image",
       ),

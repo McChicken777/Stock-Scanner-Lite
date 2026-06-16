@@ -656,7 +656,7 @@ router.get("/:id/pdf", requireAuth, async (req, res) => {
         if (m) {
           const imgBuf = Buffer.from(m[2], "base64");
           const img = (doc as any).openImage(imgBuf) as { width: number; height: number };
-          const MAX_W = 200, MAX_H = 90;
+          const MAX_W = 260, MAX_H = 110;
           const scale = Math.min(MAX_W / img.width, MAX_H / img.height, 1);
           const dW = Math.round(img.width * scale);
           const dH = Math.round(img.height * scale);
