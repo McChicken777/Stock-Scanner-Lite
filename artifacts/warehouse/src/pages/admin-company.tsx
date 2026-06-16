@@ -6,7 +6,7 @@ import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -41,6 +41,13 @@ interface CompanyShift {
   name: string;
   startTime: string;
   endTime: string;
+}
+
+interface QuoteIssuer {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
 }
 
 const CURRENCIES = [
@@ -192,6 +199,9 @@ export default function AdminCompanyPage() {
   const [newShiftStart, setNewShiftStart] = useState("07:00");
   const [newShiftEnd, setNewShiftEnd] = useState("15:00");
   const [signerName, setSignerName] = useState("");
+  const [newIssuerName, setNewIssuerName] = useState("");
+  const [newIssuerEmail, setNewIssuerEmail] = useState("");
+  const [newIssuerPhone, setNewIssuerPhone] = useState("");
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/company"],
@@ -206,6 +216,15 @@ export default function AdminCompanyPage() {
   const { data: shifts = [] } = useQuery<CompanyShift[]>({
     queryKey: ["/api/settings/shifts"],
     queryFn: fetchShifts,
+  });
+
+  const { data: issuers = [] } = useQuery<QuoteIssuer[]>({
+    queryKey: ["/api/quote-issuers"],
+    queryFn: async () => {
+      const res = await fetch("/api/quote-issuers", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
   });
 
   useEffect(() => {
@@ -381,6 +400,33 @@ export default function AdminCompanyPage() {
     onError: () => toast({ title: "Failed to delete shift", variant: "destructive" }),
   });
 
+  const addIssuerMutation = useMutation({
+    mutationFn: async (data: { name: string; email?: string; phone?: string }) => {
+      const res = await fetch("/api/quote-issuers", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quote-issuers"] });
+      setNewIssuerName(""); setNewIssuerEmail(""); setNewIssuerPhone("");
+      toast({ title: "Issuer added" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const deleteIssuerMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/quote-issuers/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/quote-issuers"] }),
+    onError: () => toast({ title: "Failed to remove issuer", variant: "destructive" }),
+  });
+
   if (user?.role !== "admin") {
     return <div className="p-6 text-center text-muted-foreground mt-20"><p>{t("adminOnly")}</p></div>;
   }
@@ -484,6 +530,74 @@ export default function AdminCompanyPage() {
                 <option key={c.code} value={c.code}>{c.code} — {c.label}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Quote issuers — all plans */}
+        <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quote issuers</p>
+              <p className="text-xs text-muted-foreground mt-0.5">People who issue quotes — selectable per quote and shown on PDFs.</p>
+            </div>
+          </div>
+
+          {issuers.length > 0 && (
+            <div className="space-y-1.5">
+              {issuers.map((issuer) => (
+                <div key={issuer.id} className="flex items-start justify-between p-2.5 rounded-lg border bg-background text-sm">
+                  <div>
+                    <p className="font-semibold">{issuer.name}</p>
+                    {issuer.email && <p className="text-xs text-muted-foreground">{issuer.email}</p>}
+                    {issuer.phone && <p className="text-xs text-muted-foreground">{issuer.phone}</p>}
+                  </div>
+                  <button
+                    onClick={() => deleteIssuerMutation.mutate(issuer.id)}
+                    disabled={deleteIssuerMutation.isPending}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
+            <p className="text-xs font-bold text-muted-foreground">Add issuer</p>
+            <Input
+              placeholder="Name (required)"
+              value={newIssuerName}
+              onChange={(e) => setNewIssuerName(e.target.value)}
+              className="h-9 text-sm border-2"
+            />
+            <Input
+              placeholder="Email (optional)"
+              type="email"
+              value={newIssuerEmail}
+              onChange={(e) => setNewIssuerEmail(e.target.value)}
+              className="h-9 text-sm border-2"
+            />
+            <Input
+              placeholder="Phone (optional)"
+              value={newIssuerPhone}
+              onChange={(e) => setNewIssuerPhone(e.target.value)}
+              className="h-9 text-sm border-2"
+            />
+            <Button
+              size="sm"
+              className="w-full h-9 gap-2"
+              disabled={!newIssuerName.trim() || addIssuerMutation.isPending}
+              onClick={() => addIssuerMutation.mutate({
+                name: newIssuerName.trim(),
+                ...(newIssuerEmail.trim() ? { email: newIssuerEmail.trim() } : {}),
+                ...(newIssuerPhone.trim() ? { phone: newIssuerPhone.trim() } : {}),
+              })}
+            >
+              {addIssuerMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Add issuer
+            </Button>
           </div>
         </div>
 
