@@ -162,7 +162,7 @@ function ProtectedRoutes() {
     <AppLayout>
       <Switch>
         {/* Admin home — Lite goes to Inventory home, Standard/Pro goes to Jobs */}
-        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/inventory"} /></Route>
+        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/dashboard"} /></Route>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/inventory" component={InventoryHomePage} />
         <Route path="/locations/print-sheet" component={LocationsPrintSheetPage} />

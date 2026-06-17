@@ -13,6 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth";
+import { usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 
 const ITEM_TYPES = [
@@ -90,6 +91,7 @@ export default function ProductFormPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
   const categoryListId = useRef(`cat-list-${Math.random().toString(36).slice(2)}`).current;
@@ -231,6 +233,7 @@ export default function ProductFormPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
+            {atLeast("standard") && (
             <FormField
               control={form.control}
               name="itemType"
@@ -263,6 +266,7 @@ export default function ProductFormPage() {
                 </FormItem>
               )}
             />
+            )}
 
             <FormField
               control={form.control}
