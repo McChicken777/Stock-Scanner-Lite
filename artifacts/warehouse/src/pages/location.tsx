@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useRoute } from "wouter";
 import { useLang } from "@/contexts/lang";
-import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers } from "lucide-react";
+import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check } from "lucide-react";
 import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ function StockItem({
   const [optimisticQty, setOptimisticQty] = useState(quantity);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
+  const [flagState, setFlagState] = useState<"idle" | "loading" | "done">("idle");
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -45,6 +46,30 @@ function StockItem({
   const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   // Reason for the pending change — "adjusted" for +/- taps, "counted" for a typed count
   const reasonRef = useRef<string>("adjusted");
+  const flagResetRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  async function handleFlag() {
+    if (flagState !== "idle") return;
+    setFlagState("loading");
+    try {
+      const res = await fetch("/api/work/shortage-flags", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId,
+          productName,
+          note: `Flagged from location ${locationId} — qty: ${optimisticQty}`,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setFlagState("done");
+      flagResetRef.current = setTimeout(() => setFlagState("idle"), 3000);
+    } catch {
+      toast({ title: "Could not submit flag", variant: "destructive" });
+      setFlagState("idle");
+    }
+  }
 
   const handleUpdate = (newQty: number, reason: string = "adjusted") => {
     // Optimistic UI update immediately
@@ -110,11 +135,32 @@ function StockItem({
               )}
             </div>
           </div>
-          {isLow && (
-            <span className="text-xs font-bold text-destructive uppercase tracking-wider">
-              Low Stock
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isLow && (
+              <span className="text-xs font-bold text-destructive uppercase tracking-wider">
+                Low Stock
+              </span>
+            )}
+            <button
+              onClick={handleFlag}
+              title="Flag as running low"
+              className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors ${
+                flagState === "done"
+                  ? "text-green-500"
+                  : isLow
+                  ? "text-orange-500 hover:bg-orange-100 active:bg-orange-200"
+                  : "text-muted-foreground/50 hover:text-orange-400 hover:bg-muted active:bg-muted"
+              }`}
+            >
+              {flagState === "loading" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : flagState === "done" ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <AlertTriangle className="h-4 w-4" />
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="flex h-20 items-stretch bg-background">
