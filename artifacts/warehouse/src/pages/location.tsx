@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { useRoute } from "wouter";
+import { useState, useRef, useEffect } from "react";
+import { useRoute, useSearch } from "wouter";
 import { useLang } from "@/contexts/lang";
 import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check } from "lucide-react";
 import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
@@ -434,17 +434,138 @@ function AddProductDialog({ locationId }: { locationId: string }) {
   );
 }
 
+interface PromptStockItem {
+  productId: number;
+  productName: string;
+  productCategory: string;
+  quantity: number;
+  bufferStock: number;
+}
+
+function ScanLowStockPrompt({
+  locationId,
+  stock,
+  open,
+  onOpenChange,
+}: {
+  locationId: string;
+  stock: PromptStockItem[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  // Per-product flag state: idle → loading → done
+  const [flagged, setFlagged] = useState<Record<number, "idle" | "loading" | "done">>({});
+  const { toast } = useToast();
+
+  async function flag(item: PromptStockItem) {
+    if (flagged[item.productId] === "loading" || flagged[item.productId] === "done") return;
+    setFlagged((s) => ({ ...s, [item.productId]: "loading" }));
+    try {
+      const res = await fetch("/api/work/shortage-flags", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: item.productId,
+          productName: item.productName,
+          note: `Flagged from location ${locationId} — qty: ${item.quantity}`,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setFlagged((s) => ({ ...s, [item.productId]: "done" }));
+    } catch {
+      toast({ title: "Could not flag item", variant: "destructive" });
+      setFlagged((s) => ({ ...s, [item.productId]: "idle" }));
+    }
+  }
+
+  // Show low-stock items first
+  const sorted = [...stock].sort((a, b) => {
+    const aLow = a.quantity < a.bufferStock ? 0 : 1;
+    const bLow = b.quantity < b.bufferStock ? 0 : 1;
+    return aLow - bLow;
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="p-4 border-b">
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-orange-500" />
+            Running low on anything here?
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground pt-1">
+            Tap any item that needs reordering — it'll be added to the order list.
+          </p>
+        </DialogHeader>
+        <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
+          {sorted.map((item) => {
+            const state = flagged[item.productId] ?? "idle";
+            const isLow = item.quantity < item.bufferStock;
+            return (
+              <div
+                key={item.productId}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${
+                  state === "done" ? "border-green-300 bg-green-50" : isLow ? "border-orange-300 bg-orange-50" : "border-border"
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{item.productName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.quantity} in stock{item.bufferStock > 0 ? ` · min ${item.bufferStock}` : ""}
+                    {isLow && <span className="text-orange-600 font-semibold"> · low</span>}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={state === "done" ? "outline" : isLow ? "default" : "outline"}
+                  className={`h-9 font-bold gap-1.5 flex-shrink-0 ${state === "done" ? "border-green-300 text-green-700" : isLow ? "bg-orange-500 hover:bg-orange-600" : ""}`}
+                  disabled={state !== "idle"}
+                  onClick={() => flag(item)}
+                >
+                  {state === "loading" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : state === "done" ? (
+                    <><Check className="h-4 w-4" /> Flagged</>
+                  ) : (
+                    <><AlertTriangle className="h-4 w-4" /> Flag low</>
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+        <div className="p-4 border-t bg-background">
+          <Button className="w-full font-bold" onClick={() => onOpenChange(false)}>Done</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function LocationPage() {
   const [, params] = useRoute("/location/:id");
   const id = params?.id ? decodeURIComponent(params.id) : "";
   const { t } = useLang();
+  const search = useSearch();
+  const cameFromScan = new URLSearchParams(search).get("scanned") === "1";
+  const [promptOpen, setPromptOpen] = useState(false);
   
   const { data: location, isLoading, isError } = useGetLocation(id, {
-    query: { 
+    query: {
       enabled: !!id,
       queryKey: getGetLocationQueryKey(id)
     }
   });
+
+  // After a scan, auto-open the "running low?" prompt once the location loads with stock.
+  const promptShownRef = useRef(false);
+  useEffect(() => {
+    if (cameFromScan && !promptShownRef.current && location && location.stock.length > 0) {
+      promptShownRef.current = true;
+      setPromptOpen(true);
+    }
+  }, [cameFromScan, location]);
 
   if (isLoading) {
     return (
@@ -480,6 +601,18 @@ export default function LocationPage() {
 
   return (
     <div className="flex flex-col min-h-full pb-6">
+      <ScanLowStockPrompt
+        locationId={location.id}
+        open={promptOpen}
+        onOpenChange={setPromptOpen}
+        stock={location.stock.map((s) => ({
+          productId: s.productId,
+          productName: s.productName,
+          productCategory: s.productCategory,
+          quantity: s.quantity,
+          bufferStock: s.bufferStock,
+        }))}
+      />
       <div className="bg-secondary text-secondary-foreground p-4 sticky top-0 z-20 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
