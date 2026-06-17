@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Package, MapPin, AlertTriangle, Activity,
   FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
-  Flag, AlertCircle, Inbox, FolderKanban,
+  Flag, AlertCircle, Inbox, FolderKanban, ScanLine, ClipboardList,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { useAuth } from "@/contexts/auth";
+import { usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 
 
@@ -66,6 +67,7 @@ function fmtDate(dateStr: string): string {
 export default function Dashboard() {
   const { t } = useLang();
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const isAdmin = user?.role === "admin";
 
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
@@ -184,6 +186,26 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* ── Lite quick actions ── */}
+      {!atLeast("standard") && (
+        <div className="grid grid-cols-2 gap-3">
+          <Link href="/scan">
+            <div className="rounded-xl bg-primary text-primary-foreground p-4 flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
+              <ScanLine className="h-6 w-6" />
+              <p className="font-bold text-sm">Scan location</p>
+              <p className="text-xs opacity-75">Update stock by scanning</p>
+            </div>
+          </Link>
+          <Link href="/work/stocktake">
+            <div className="rounded-xl border-2 border-border bg-card p-4 flex flex-col gap-2 cursor-pointer hover:bg-muted active:scale-95 transition-all">
+              <ClipboardList className="h-6 w-6 text-primary" />
+              <p className="font-bold text-sm">Count stock</p>
+              <p className="text-xs text-muted-foreground">Manually correct quantities</p>
+            </div>
+          </Link>
+        </div>
+      )}
+
       {quoteCounts && (
         <Card className="border-2 border-purple-200 bg-purple-50/40">
           <CardHeader className="pb-2">
@@ -217,8 +239,8 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* ── Admin sections ── */}
-      {isAdmin && (
+      {/* ── Admin sections (Standard+ only) ── */}
+      {isAdmin && atLeast("standard") && (
         <>
           {/* Open Projects KPI */}
           <Link href="/work/projects">

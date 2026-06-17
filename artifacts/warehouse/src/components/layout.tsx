@@ -223,52 +223,74 @@ function AdminDesktopSidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        <SidebarSection label={t("navMain")} />
-        {atLeast("standard") && <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navJobs")} active={isJobsActive} badge={attention?.overdueJobs ?? 0} />}
-        <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
-        <SideNavItem href="/quotes" icon={FileText} label={t("navQuotes")} active={location.startsWith("/quotes")} />
-        {atLeast("standard") && <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} badge={attention?.restockRequests ?? 0} />}
+        {!atLeast("standard") ? (
+          // ── Lite nav ────────────────────────────────────────────────────────
+          <>
+            <SidebarSection label={t("navMain")} />
+            <SideNavItem href="/dashboard" icon={LayoutDashboard} label={t("navDashboard")} active={location === "/dashboard" || location === "/"} />
 
-        {/* Inventory — available to all plans (Lite included) */}
-        <SidebarSection label={t("navInventory")} />
-        {/* Lite: home + core 3; Standard/Pro: full 5-item set with Scan entry point */}
-        {!atLeast("standard") && <SideNavItem href="/inventory" icon={LayoutDashboard} label="Inventory home" active={location === "/inventory"} />}
-        {atLeast("standard") && <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/") || location.startsWith("/item/")} />}
-        <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations" || location.startsWith("/locations/")} />
-        <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-        {atLeast("standard") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />}
-        <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
-        {atLeast("standard") && <SideNavItem href="/valuation" icon={FileText} label={t("valuationTitle")} active={location.startsWith("/valuation")} />}
-        <SideNavItem href="/admin/stock-import" icon={PackageOpen} label={t("navStockImport")} active={location.startsWith("/admin/stock-import")} />
+            <SidebarSection label={t("navInventory")} />
+            <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations" || location.startsWith("/locations/")} />
+            <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
+            <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
 
-        {atLeast("standard") && <SidebarSection label={t("navWork")} />}
-        {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}
-        {atLeast("standard") && <SideNavItem href="/work/materials" icon={PackageOpen} label={t("navMaterials")} active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />}
-        {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
-        {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
-        {atLeast("standard") && <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />}
-        <Link href="/admin/ai-wizard">
-          <div className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer",
-            location.startsWith("/admin/ai-wizard")
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-          )}>
-            <Sparkles className="h-[18px] w-[18px] flex-shrink-0" strokeWidth={location.startsWith("/admin/ai-wizard") ? 2.5 : 2} />
-            <span className="flex-1 truncate">AI Wizard</span>
-            <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-amber-400 text-amber-900 rounded-full flex-shrink-0">TEST</span>
-          </div>
-        </Link>
+            <SidebarSection label={t("navPeople")} />
+            <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
 
-        <SidebarSection label={t("navPeople")} />
-        <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
-        {atLeast("standard") && <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} />}
-        {atLeast("standard") && <SideNavItem href="/admin/leave-inbox" icon={Inbox} label={t("navLeaveRequests")} active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />}
+            <SidebarSection label={t("navBusiness")} />
+            <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
+            <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
+            <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
+          </>
+        ) : (
+          // ── Standard / Pro nav ──────────────────────────────────────────────
+          <>
+            <SidebarSection label={t("navMain")} />
+            <SideNavItem href="/work/projects" icon={FolderKanban} label={t("navJobs")} active={isJobsActive} badge={attention?.overdueJobs ?? 0} />
+            <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={isCustomersActive} />
+            <SideNavItem href="/quotes" icon={FileText} label={t("navQuotes")} active={location.startsWith("/quotes")} />
+            <SideNavItem href="/work/purchase-orders" icon={ShoppingCart} label={t("navPurchasing")} active={isPurchasingActive} badge={attention?.restockRequests ?? 0} />
 
-        <SidebarSection label={t("navBusiness")} />
-        <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
-        <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
-        <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
+            <SidebarSection label={t("navInventory")} />
+            <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/") || location.startsWith("/item/")} />
+            <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations" || location.startsWith("/locations/")} />
+            <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
+            <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />
+            <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
+            <SideNavItem href="/valuation" icon={FileText} label={t("valuationTitle")} active={location.startsWith("/valuation")} />
+            <SideNavItem href="/admin/stock-import" icon={PackageOpen} label={t("navStockImport")} active={location.startsWith("/admin/stock-import")} />
+
+            <SidebarSection label={t("navWork")} />
+            <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />
+            <SideNavItem href="/work/materials" icon={PackageOpen} label={t("navMaterials")} active={location.startsWith("/work/materials") && !location.startsWith("/work/stocktake")} />
+            {atLeast("pro") && <SideNavItem href="/admin/stations" icon={Layers} label={t("navProductionFlow")} active={location.startsWith("/admin/stations")} />}
+            {atLeast("pro") && <SideNavItem href="/work/queues" icon={CheckSquare} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />}
+            <SideNavItem href="/analytics" icon={BarChart2} label={t("navAnalytics")} active={location.startsWith("/analytics")} />
+            <Link href="/admin/ai-wizard">
+              <div className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer",
+                location.startsWith("/admin/ai-wizard")
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              )}>
+                <Sparkles className="h-[18px] w-[18px] flex-shrink-0" strokeWidth={location.startsWith("/admin/ai-wizard") ? 2.5 : 2} />
+                <span className="flex-1 truncate">AI Wizard</span>
+                <span className="text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-amber-400 text-amber-900 rounded-full flex-shrink-0">TEST</span>
+              </div>
+            </Link>
+
+            <SidebarSection label={t("navPeople")} />
+            <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
+            <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} />
+            <SideNavItem href="/admin/leave-inbox" icon={Inbox} label={t("navLeaveRequests")} active={location.startsWith("/admin/leave-inbox")} badge={attention?.leaveRequests ?? 0} />
+
+            <SidebarSection label={t("navBusiness")} />
+            <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
+            <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
+          </>
+        )}
       </nav>
 
       {/* Sign out */}
@@ -422,7 +444,7 @@ function AdminBottomNav() {
     location.startsWith("/history") ||
     location.startsWith("/locations");
 
-  // Lite: Inventory · Customers · Quotes · Settings
+  // Lite: Dashboard · Customers · Quotes · Settings
   // Standard/Pro: Jobs · Customers · Purchasing · Settings
   const tabs = atLeast("standard")
     ? [
@@ -431,7 +453,7 @@ function AdminBottomNav() {
         { key: "purchasing", href: "/work/purchase-orders", icon: ShoppingCart, label: t("navPurchasing"), active: isPurchasingActive },
       ]
     : [
-        { key: "inventory", href: "/inventory", icon: Package2, label: "Inventory", active: isInventoryActive },
+        { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, label: t("navDashboard"), active: location === "/dashboard" || location === "/" },
         { key: "customers", href: "/customers", icon: Store, label: t("navCustomers"), active: isCustomersActive },
         { key: "quotes", href: "/quotes", icon: FileText, label: t("navQuotes"), active: isQuotesActive },
       ];
@@ -478,53 +500,57 @@ function AdminBottomNav() {
           </SheetHeader>
 
           <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
-            {/* Work section */}
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">{t("navWork")}</p>
-            <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navJobTemplates")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descJobTemplates")}</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/work/materials" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <PackageOpen className="h-5 w-5 text-amber-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navMaterials")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descMaterials")}</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/admin/stations" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Layers className="h-5 w-5 text-indigo-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navProductionFlow")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descProductionFlow")}</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/work/queues" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <CheckSquare className="h-5 w-5 text-teal-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navStationQueues")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descStationQueues")}</p>
-                </div>
-              </div>
-            </Link>
-            <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navAnalytics")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descAnalytics")}</p>
-                </div>
-              </div>
-            </Link>
+            {/* Work section — Standard+ only */}
+            {atLeast("standard") && (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1">{t("navWork")}</p>
+                <Link href="/work/templates" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <BookTemplate className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navJobTemplates")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descJobTemplates")}</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/work/materials" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <PackageOpen className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navMaterials")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descMaterials")}</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/admin/stations" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <Layers className="h-5 w-5 text-indigo-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navProductionFlow")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descProductionFlow")}</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/work/queues" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <CheckSquare className="h-5 w-5 text-teal-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navStationQueues")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descStationQueues")}</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/analytics" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <BarChart2 className="h-5 w-5 text-violet-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navAnalytics")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descAnalytics")}</p>
+                    </div>
+                  </div>
+                </Link>
+              </>
+            )}
 
             {/* People section */}
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navPeople")}</p>
