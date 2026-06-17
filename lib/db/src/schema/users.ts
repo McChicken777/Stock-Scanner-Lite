@@ -15,6 +15,8 @@ export const usersTable = pgTable("users", {
   companyId: integer("company_id").references(() => companiesTable.id, { onDelete: "set null" }),
   shiftId: integer("shift_id").references(() => companyShiftsTable.id, { onDelete: "set null" }),
   kioskPinHash: text("kiosk_pin_hash"),
+  email: text("email"),
+  emailVerified: boolean("email_verified").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

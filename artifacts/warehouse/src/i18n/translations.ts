@@ -375,6 +375,9 @@ const KEYS = [
   "outlineExcludePrefix", "outlineIfHas", "outlineExcludeEntry",
   "outlineProfilesSection", "outlineProfilesDesc",
 
+  // ── Stock import ──────────────────────────────────────────────────────────
+  "navStockImport",
+
   // ── Misc ──────────────────────────────────────────────────────────────────
   "langLabel",
 ] as const;
@@ -1275,6 +1278,9 @@ const en: Dict = {
   outlineExcludeEntry: "Exclude {a} if has {b}",
   outlineProfilesSection: "Part Profiles",
   outlineProfilesDesc: "Shorthand for common op combinations. Type @name in the editor.",
+
+  // ── Stock import ──────────────────────────────────────────────────────────
+  navStockImport: "Import Stock",
 };
 
 const sl: Dict = {
@@ -2169,6 +2175,9 @@ const sl: Dict = {
   outlineExcludeEntry: "Izključi {a} če vsebuje {b}",
   outlineProfilesSection: "Profili delov",
   outlineProfilesDesc: "Bližnjica za pogoste kombinacije op. kodov. Vtipkajte @ime v urejevalniku.",
+
+  // ── Stock import ──────────────────────────────────────────────────────────
+  navStockImport: "Uvoz zaloge",
 };
 
 export const translations: Record<Lang, Dict> = { en, sl };

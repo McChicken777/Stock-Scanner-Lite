@@ -239,6 +239,7 @@ function AdminDesktopSidebar() {
         {atLeast("standard") && <SideNavItem href="/work/stocktake" icon={ClipboardList} label={t("navStockTake")} active={location.startsWith("/work/stocktake")} />}
         <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
         {atLeast("standard") && <SideNavItem href="/valuation" icon={FileText} label={t("valuationTitle")} active={location.startsWith("/valuation")} />}
+        <SideNavItem href="/admin/stock-import" icon={PackageOpen} label={t("navStockImport")} active={location.startsWith("/admin/stock-import")} />
 
         {atLeast("standard") && <SidebarSection label={t("navWork")} />}
         {atLeast("standard") && <SideNavItem href="/work/templates" icon={BookTemplate} label={t("navJobTemplates")} active={location.startsWith("/work/templates") || location.startsWith("/work/template-outline")} />}

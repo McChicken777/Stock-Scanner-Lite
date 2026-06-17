@@ -66,6 +66,8 @@ import QuoteDetailPage from "@/pages/quote-detail";
 import AnalyticsPage from "@/pages/analytics";
 import KioskPage from "@/pages/kiosk";
 import AdminAiWizardPage from "@/pages/admin-ai-wizard";
+import JoinPage from "@/pages/join";
+import StockImportPage from "@/pages/stock-import";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -215,6 +217,7 @@ function ProtectedRoutes() {
 
         {/* AI Template Wizard (TEST) */}
         <Route path="/admin/ai-wizard" component={AdminAiWizardPage} />
+        <Route path="/admin/stock-import" component={StockImportPage} />
 
         {/* Customers & Quotes */}
         <Route path="/customers" component={CustomersPage} />
@@ -278,6 +281,7 @@ function App() {
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Switch>
                 <Route path="/kiosk" component={KioskPage} />
+                <Route path="/join/:token" component={JoinPage} />
                 <Route component={ProtectedRoutes} />
               </Switch>
             </WouterRouter>

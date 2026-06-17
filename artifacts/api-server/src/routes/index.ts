@@ -25,6 +25,7 @@ import stationsRouter from "./stations";
 import adminRouter from "./admin";
 import kioskRouter from "./kiosk";
 import rawMaterialsRouter from "./raw-materials";
+import joinRouter from "./join";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -55,5 +56,6 @@ router.use("/stations", requireAuth, stationsRouter);
 router.use("/admin", requireAuth, adminRouter);
 router.use("/kiosk", kioskRouter);
 router.use("/raw-materials", requireAuth, rawMaterialsRouter);
+router.use("/join", joinRouter); // public — no requireAuth
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, companiesTable, PLAN_FEATURES, kioskStationsTable, workstationsTable, stationTypesTable, nfcCardsTable } from "@workspace/db";
-import { eq, sql, and, asc } from "drizzle-orm";
+import { db, usersTable, companiesTable, PLAN_FEATURES, kioskStationsTable, workstationsTable, stationTypesTable, nfcCardsTable, companyInvitesTable } from "@workspace/db";
+import { eq, sql, and, asc, isNull } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
@@ -379,6 +379,61 @@ router.delete("/workers/:userId/kiosk-pin", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to clear PIN");
     res.status(500).json({ error: "Failed to clear PIN" });
+  }
+});
+
+// ─── COMPANY INVITE LINKS ─────────────────────────────────────────────────────
+
+// Create an invite link
+router.post("/invites", async (req, res) => {
+  try {
+    const parsed = z.object({
+      companyName: z.string().min(1).max(120).optional(),
+      plan: z.enum(["lite", "standard", "pro"]).default("lite"),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
+
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const [invite] = await db.insert(companyInvitesTable).values({
+      token: randomUUID(),
+      companyName: parsed.data.companyName ?? null,
+      plan: parsed.data.plan,
+      createdBy: req.session.userId!,
+      expiresAt,
+    }).returning();
+
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    res.status(201).json({ ...invite, url: `${baseUrl}/join/${invite.token}` });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create invite");
+    res.status(500).json({ error: "Failed to create invite" });
+  }
+});
+
+// List all invites
+router.get("/invites", async (req, res) => {
+  try {
+    const invites = await db.select().from(companyInvitesTable).orderBy(companyInvitesTable.createdAt);
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+    res.json(invites.map((i) => ({
+      ...i,
+      used: i.usedAt !== null,
+      url: `${baseUrl}/join/${i.token}`,
+    })));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list invites");
+    res.status(500).json({ error: "Failed to list invites" });
+  }
+});
+
+// Revoke / delete an invite
+router.delete("/invites/:id", async (req, res) => {
+  try {
+    await db.delete(companyInvitesTable).where(eq(companyInvitesTable.id, Number(req.params.id)));
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to revoke invite");
+    res.status(500).json({ error: "Failed to revoke invite" });
   }
 });
 

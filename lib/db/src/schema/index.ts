@@ -18,3 +18,4 @@ export * from "./holidays";
 export * from "./leave-requests";
 export * from "./analytics";
 export * from "./kiosk";
+export * from "./company-invites";
