@@ -12,6 +12,7 @@ import {
   Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
   Truck, Building2, HelpCircle, Lock, Globe, ExternalLink,
 } from "lucide-react";
+import { buildMailtoLink, buildCartUrl } from "@/lib/ordering";
 
 interface ReorderItem {
   id: number;
@@ -62,42 +63,6 @@ async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
   return res.json();
-}
-
-function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: ReorderItem[]) {
-  const subject = `Purchase Order #${poId} — Order Request`;
-  const rows = items.map((item) => {
-    const sku = item.supplierSku ? ` (SKU: ${item.supplierSku})` : "";
-    const price = item.unitCost > 0 ? ` @ $${Number(item.unitCost).toFixed(2)} each` : "";
-    return `  • ${item.name}${sku} — Qty: ${item.shortfall}${price}`;
-  }).join("\n");
-  const total = items.reduce((s, i) => s + i.estimatedReorderCost, 0);
-  const totalLine = total > 0 ? `\n\nEstimated total: $${total.toFixed(2)}` : "";
-  const body = `Dear ${supplierName},\n\nPlease process the following purchase order:\n\nPO #${poId}\n\n${rows}${totalLine}\n\nPlease confirm receipt and expected delivery date.\n\nThank you`;
-  return `mailto:${supplierEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function buildCartUrl(storeUrl: string, platform: string | null, items: Array<{ storeProductId: string | null; qty: number }>) {
-  const base = storeUrl.replace(/\/$/, "");
-  const itemsWithId = items.filter((i) => i.storeProductId);
-  if (itemsWithId.length === 0) return base;
-
-  if (platform === "shopify") {
-    // Shopify native: /cart/variantId:qty,variantId2:qty2
-    const parts = itemsWithId.map((i) => `${i.storeProductId}:${i.qty}`).join(",");
-    return `${base}/cart/${parts}`;
-  }
-  if (platform === "woocommerce") {
-    // WooCommerce: /?add-to-cart=ID&quantity=Q (single), or multi via query string (needs plugin)
-    if (itemsWithId.length === 1) {
-      return `${base}/?add-to-cart=${itemsWithId[0].storeProductId}&quantity=${itemsWithId[0].qty}`;
-    }
-    // Multi-item: use WC cart page and add each item (best-effort, works with some plugins)
-    const params = itemsWithId.map((i) => `add-to-cart=${i.storeProductId}&quantity=${i.qty}`).join("&");
-    return `${base}/cart/?${params}`;
-  }
-  // Custom/other: just open the store URL
-  return base;
 }
 
 const statusColors: Record<string, string> = {
@@ -383,7 +348,12 @@ export default function ReorderQueuePage() {
 
   function handleOrderCreated(poId: number, supplierEmail: string | null, supplierName: string | null, items: ReorderItem[]) {
     if (supplierEmail && supplierName) {
-      const mailtoUrl = buildMailtoLink(supplierEmail, supplierName, poId, items);
+      const mailtoUrl = buildMailtoLink(supplierEmail, supplierName, poId, items.map((i) => ({
+        name: i.name,
+        supplierSku: i.supplierSku,
+        quantity: i.shortfall,
+        unitCost: i.unitCost,
+      })));
       setEmailPrompt({ poId, mailtoUrl, supplierName });
     }
   }

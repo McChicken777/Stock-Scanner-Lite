@@ -4,9 +4,11 @@ import { useLang } from "@/contexts/lang";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Lock, Globe } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, ExternalLink, Loader2, TrendingDown, Truck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
+import { buildMailtoLink, buildCartUrl } from "@/lib/ordering";
 
 interface Supplier {
   id: number;
@@ -56,7 +58,6 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId: number; supplierOrderMethod: string }) {
   const { toast } = useToast();
   const { t } = useLang();
-  const { atLeast } = usePlan();
   const queryClient = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [addProductId, setAddProductId] = useState("");
@@ -120,27 +121,13 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
         <Package2 className="h-3 w-3" /> {t("suppliersProductsSupplied")} ({links.length})
       </p>
 
-      {/* Low-stock summary + one-click order (gated to Standard+) */}
+      {/* Low-stock summary — ordering happens in the "Needs reorder" section at the top of the page */}
       {lowItems.length > 0 && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
           <span className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {lowItems.length} low — needs reorder
+            {lowItems.length} low — see "Needs reorder" above to order
           </span>
-          {atLeast("standard") ? (
-            <Link href="/work/purchase-orders">
-              <Button size="sm" className="h-7 text-xs font-bold gap-1">
-                <ShoppingCart className="h-3 w-3" /> Order
-              </Button>
-            </Link>
-          ) : (
-            <span
-              title="Upgrade to Standard to raise purchase orders in one click"
-              className="flex items-center gap-1 text-[10px] font-semibold text-amber-700/80"
-            >
-              <Lock className="h-3 w-3" /> Upgrade to order
-            </span>
-          )}
         </div>
       )}
 
@@ -268,6 +255,360 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
   );
 }
 
+// ─── Low-stock ordering (grouped by supplier) ────────────────────────────────────
+
+interface ReorderQueueItem {
+  id: number;
+  name: string;
+  category: string;
+  shortfall: number;
+  available: number;
+  minStock: number;
+  unitCost: number;
+  supplierId: number | null;
+  supplierSku: string | null;
+  supplierName: string | null;
+  supplierEmail: string | null;
+  supplierOrderMethod: string;
+  supplierStoreUrl: string | null;
+  supplierStorePlatform: string | null;
+  storeProductId: string | null;
+  pendingPo: { poId: number; quantity: number; status: string } | null;
+}
+
+interface OrderGroup {
+  supplierId: number | null;
+  supplierName: string | null;
+  supplierEmail: string | null;
+  orderMethod: string;
+  storeUrl: string | null;
+  storePlatform: string | null;
+  items: ReorderQueueItem[];
+}
+
+function SupplierOrderCard({ group }: { group: OrderGroup }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [quantities, setQuantities] = useState<Record<number, number>>(
+    Object.fromEntries(group.items.map((i) => [i.id, Math.max(1, i.shortfall)]))
+  );
+  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<"review" | "done">("review");
+  const [resultPoId, setResultPoId] = useState<number | null>(null);
+  const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
+
+  const isWebStore = group.orderMethod === "web_store";
+  const hasSupplier = group.supplierId != null;
+  const itemsToOrder = group.items.filter((i) => !i.pendingPo);
+  const allPending = itemsToOrder.length === 0;
+  const total = itemsToOrder.reduce(
+    (s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0),
+    0
+  );
+  const missingStoreIds = isWebStore ? itemsToOrder.filter((i) => !i.storeProductId) : [];
+
+  const markOrderedMutation = useMutation({
+    mutationFn: (poId: number) =>
+      apiFetch(`/api/purchase-orders/${poId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "ordered" }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      toast({ title: "Order marked as placed" });
+      setOpen(false);
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const batchMutation = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/purchase-orders/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId: group.supplierId,
+          items: itemsToOrder.map((i) => ({
+            productId: i.id,
+            quantityOrdered: Math.max(1, quantities[i.id] ?? i.shortfall),
+            unitPrice: i.unitCost > 0 ? i.unitCost : null,
+          })),
+        }),
+      }),
+    onSuccess: (po: { id: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      setResultPoId(po.id);
+      if (isWebStore && group.storeUrl) {
+        const cartItems = itemsToOrder.map((i) => ({
+          storeProductId: i.storeProductId,
+          qty: Math.max(1, quantities[i.id] ?? i.shortfall),
+        }));
+        window.open(buildCartUrl(group.storeUrl, group.storePlatform, cartItems), "_blank", "noopener,noreferrer");
+      } else if (group.supplierEmail && group.supplierName) {
+        setMailtoUrl(
+          buildMailtoLink(
+            group.supplierEmail,
+            group.supplierName,
+            po.id,
+            itemsToOrder.map((i) => ({
+              name: i.name,
+              supplierSku: i.supplierSku,
+              quantity: quantities[i.id] ?? i.shortfall,
+              unitCost: i.unitCost,
+            }))
+          )
+        );
+      }
+      setPhase("done");
+      toast({ title: `PO #${po.id} created` });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  function openReview() {
+    setPhase("review");
+    setResultPoId(null);
+    setMailtoUrl(null);
+    setOpen(true);
+  }
+
+  const cartUrl =
+    isWebStore && group.storeUrl
+      ? buildCartUrl(
+          group.storeUrl,
+          group.storePlatform,
+          itemsToOrder.map((i) => ({ storeProductId: i.storeProductId, qty: quantities[i.id] ?? i.shortfall }))
+        )
+      : null;
+
+  return (
+    <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3">
+        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? (isWebStore ? "bg-purple-100" : "bg-blue-100") : "bg-muted"}`}>
+          {hasSupplier
+            ? isWebStore
+              ? <Globe className="h-4 w-4 text-purple-700" />
+              : <Building2 className="h-4 w-4 text-blue-700" />
+            : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm truncate">{group.supplierName ?? "No supplier assigned"}</p>
+          <p className="text-xs text-muted-foreground">
+            {group.items.length} item{group.items.length !== 1 ? "s" : ""} low
+            {total > 0 && ` · est. $${total.toFixed(2)}`}
+          </p>
+        </div>
+        <span className={`flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0 ${isWebStore ? "text-purple-700 bg-purple-50 border border-purple-200" : "text-blue-600 bg-blue-50 border border-blue-200"}`}>
+          {isWebStore ? <><Globe className="h-3 w-3" /> web store</> : <><Mail className="h-3 w-3" /> email</>}
+        </span>
+      </div>
+
+      {/* Item list */}
+      <div className="border-t border-border divide-y divide-border/60">
+        {group.items.map((item) => (
+          <div key={item.id} className="px-4 py-2 flex items-center gap-3 text-sm">
+            <div className="flex-1 min-w-0">
+              <p className="font-medium truncate">{item.name}</p>
+              <p className="text-xs text-red-600 font-semibold">
+                {item.available} / {item.minStock} min — short {item.shortfall}
+                {item.pendingPo && <span className="text-blue-600 ml-1">· PO #{item.pendingPo.poId} pending</span>}
+              </p>
+            </div>
+            {item.unitCost > 0 && <span className="text-xs text-muted-foreground">${Number(item.unitCost).toFixed(2)} ea</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* Action */}
+      <div className="border-t border-border bg-muted/20 px-4 py-3">
+        {allPending ? (
+          <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
+            <CheckCircle2 className="h-4 w-4" /> All items already on order
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            className={`h-9 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+            onClick={openReview}
+          >
+            <ShoppingCart className="h-3.5 w-3.5" /> Review & order {itemsToOrder.length} item{itemsToOrder.length !== 1 ? "s" : ""}
+          </Button>
+        )}
+      </div>
+
+      {/* Review / confirm dialog */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
+          <DialogHeader className="p-4 border-b">
+            <DialogTitle className="flex items-center gap-2">
+              {isWebStore ? <Globe className="h-5 w-5 text-purple-600" /> : <Mail className="h-5 w-5 text-blue-600" />}
+              {phase === "review" ? "Review order" : `PO #${resultPoId} created`}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground pt-1">
+              {phase === "review"
+                ? <>Ordering from <span className="font-semibold">{group.supplierName ?? "no supplier"}</span> {isWebStore ? "via web store" : "by email"}. Adjust quantities, then confirm.</>
+                : isWebStore
+                  ? "We opened the store cart in a new tab. Finish checkout there, then mark the order as placed."
+                  : "Open your email app to send the order, then it's tracked as a draft PO."}
+            </p>
+          </DialogHeader>
+
+          <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
+            {phase === "review" && missingStoreIds.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+                {missingStoreIds.length} item{missingStoreIds.length !== 1 ? "s have" : " has"} no store product ID and won't be auto-added to the cart. Add IDs in the supplier's product list.
+              </div>
+            )}
+            {itemsToOrder.map((item) => {
+              const qty = quantities[item.id] ?? item.shortfall;
+              const lineTotal = item.unitCost > 0 ? qty * item.unitCost : 0;
+              return (
+                <div key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.unitCost > 0 ? `$${Number(item.unitCost).toFixed(2)} ea` : "no price"}
+                      {lineTotal > 0 && ` · $${lineTotal.toFixed(2)}`}
+                      {isWebStore && !item.storeProductId && <span className="text-amber-600"> · no store ID</span>}
+                    </p>
+                  </div>
+                  {phase === "review" ? (
+                    <input
+                      type="number"
+                      min={1}
+                      value={qty}
+                      onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: Math.max(1, Number(e.target.value)) }))}
+                      className="w-16 h-9 text-sm text-center border-2 border-border rounded-lg font-bold outline-none focus:border-primary"
+                    />
+                  ) : (
+                    <span className="text-sm font-bold w-16 text-center">×{qty}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="p-4 border-t bg-background space-y-2">
+            {total > 0 && (
+              <div className="flex items-center justify-between text-sm font-bold">
+                <span>Estimated total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
+            )}
+            {phase === "review" ? (
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button
+                  className={`flex-1 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                  disabled={batchMutation.isPending}
+                  onClick={() => batchMutation.mutate()}
+                >
+                  {batchMutation.isPending
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> {isWebStore ? "Opening cart…" : "Creating…"}</>
+                    : isWebStore
+                      ? <><Globe className="h-4 w-4" /> Confirm & open cart</>
+                      : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
+                </Button>
+              </div>
+            ) : isWebStore ? (
+              <div className="flex gap-2">
+                {cartUrl && (
+                  <a href={cartUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                    <Button variant="outline" className="w-full font-semibold gap-1.5 border-purple-300 text-purple-700">
+                      <ExternalLink className="h-4 w-4" /> Reopen cart
+                    </Button>
+                  </a>
+                )}
+                <Button
+                  className="flex-1 font-bold gap-1.5 bg-purple-600 hover:bg-purple-700"
+                  disabled={markOrderedMutation.isPending || resultPoId == null}
+                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
+                >
+                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Order placed
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Done</Button>
+                {mailtoUrl && (
+                  <a href={mailtoUrl} className="flex-1" onClick={() => setOpen(false)}>
+                    <Button className="w-full font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
+                      <Mail className="h-4 w-4" /> Open email
+                    </Button>
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function LowStockOrdering() {
+  const { data: queue = [], isLoading } = useQuery<ReorderQueueItem[]>({
+    queryKey: ["/api/work/reorder-queue"],
+    queryFn: () => apiFetch("/api/work/reorder-queue"),
+    refetchInterval: 60000,
+  });
+
+  // Group by supplier
+  const groups: OrderGroup[] = [];
+  const map = new Map<string, OrderGroup>();
+  for (const item of queue) {
+    const key = item.supplierId != null ? String(item.supplierId) : "__none__";
+    if (!map.has(key)) {
+      const g: OrderGroup = {
+        supplierId: item.supplierId,
+        supplierName: item.supplierName,
+        supplierEmail: item.supplierEmail,
+        orderMethod: item.supplierOrderMethod ?? "email",
+        storeUrl: item.supplierStoreUrl ?? null,
+        storePlatform: item.supplierStorePlatform ?? null,
+        items: [],
+      };
+      map.set(key, g);
+      groups.push(g);
+    }
+    map.get(key)!.items.push(item);
+  }
+  groups.sort((a, b) => {
+    if (a.supplierId == null && b.supplierId != null) return 1;
+    if (a.supplierId != null && b.supplierId == null) return -1;
+    return (a.supplierName ?? "").localeCompare(b.supplierName ?? "");
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-28 w-full rounded-xl" />;
+  }
+  if (queue.length === 0) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 font-semibold">
+        <CheckCircle2 className="h-4 w-4" /> Everything's stocked — nothing needs reordering.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+        <TrendingDown className="h-4 w-4" /> Needs reorder
+        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
+      </h2>
+      {groups.map((g, idx) => (
+        <SupplierOrderCard key={g.supplierId ?? `__none__${idx}`} group={g} />
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminSuppliersPage() {
@@ -365,6 +706,9 @@ export default function AdminSuppliersPage() {
           <Plus className="h-4 w-4" /> {t("suppliersAdd")}
         </Button>
       </div>
+
+      {/* One-click ordering — what's low, grouped by supplier */}
+      <LowStockOrdering />
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 space-y-3">
