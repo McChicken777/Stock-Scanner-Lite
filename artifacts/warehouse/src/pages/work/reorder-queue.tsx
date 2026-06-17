@@ -91,6 +91,9 @@ function SupplierGroupCard({
   const [, setLocation] = useLocation();
   const [webStorePoId, setWebStorePoId] = useState<number | null>(null);
   const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
+  // Frozen snapshot of what was ordered — the post-order queue refetch re-tags these
+  // items with their new pending PO, so the live filtered list would otherwise empty out.
+  const [orderedLines, setOrderedLines] = useState<Array<{ id: number; name: string; qty: number; storeProductId: string | null; storeProductUrl: string | null }>>([]);
 
   const hasSupplier = group.supplierId != null;
   const allPending = group.items.every((i) => i.pendingPo != null);
@@ -113,22 +116,23 @@ function SupplierGroupCard({
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
+  const itemsToOrder = group.items.filter((i) => !i.pendingPo);
+
   const batchMutation = useMutation({
-    mutationFn: () => apiFetch("/api/purchase-orders/batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        supplierId: group.supplierId,
-        items: group.items
-          .filter((i) => !i.pendingPo)
-          .map((i) => ({
-            productId: i.id,
-            quantityOrdered: Math.max(1, quantities[i.id] ?? i.shortfall),
-            unitPrice: i.unitCost > 0 ? i.unitCost : null,
+    mutationFn: (lines: Array<{ id: number; name: string; qty: number; storeProductId: string | null; storeProductUrl: string | null; unitCost: number; supplierSku: string | null }>) =>
+      apiFetch("/api/purchase-orders/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId: group.supplierId,
+          items: lines.map((l) => ({
+            productId: l.id,
+            quantityOrdered: Math.max(1, l.qty),
+            unitPrice: l.unitCost > 0 ? l.unitCost : null,
           })),
+        }),
       }),
-    }),
-    onSuccess: (po) => {
+    onSuccess: (po, lines) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: `PO #${po.id} created` });
@@ -138,11 +142,8 @@ function SupplierGroupCard({
         setWebStorePoId(po.id);
       } else if (isWebStore && group.storeUrl) {
         // Open the pre-filled cart in a new tab
-        const cartItems = group.items
-          .filter((i) => !i.pendingPo)
-          .map((i) => ({ storeProductId: i.storeProductId, qty: Math.max(1, quantities[i.id] ?? i.shortfall) }));
-        const cartUrl = buildCartUrl(group.storeUrl, group.storePlatform, cartItems);
-        window.open(cartUrl, "_blank", "noopener,noreferrer");
+        const cartItems = lines.map((l) => ({ storeProductId: l.storeProductId, qty: Math.max(1, l.qty) }));
+        window.open(buildCartUrl(group.storeUrl, group.storePlatform, cartItems), "_blank", "noopener,noreferrer");
         setWebStorePoId(po.id);
       } else {
         onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
@@ -151,7 +152,20 @@ function SupplierGroupCard({
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
-  const itemsToOrder = group.items.filter((i) => !i.pendingPo);
+  function confirmOrder() {
+    // Snapshot the lines before the mutation triggers a queue refetch.
+    const snapshot = itemsToOrder.map((i) => ({
+      id: i.id,
+      name: i.name,
+      qty: Math.max(1, quantities[i.id] ?? i.shortfall),
+      storeProductId: i.storeProductId,
+      storeProductUrl: i.storeProductUrl,
+      unitCost: i.unitCost,
+      supplierSku: i.supplierSku,
+    }));
+    setOrderedLines(snapshot.map((l) => ({ id: l.id, name: l.name, qty: l.qty, storeProductId: l.storeProductId, storeProductUrl: l.storeProductUrl })));
+    batchMutation.mutate(snapshot);
+  }
 
   return (
     <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
@@ -250,14 +264,13 @@ function SupplierGroupCard({
                   <Globe className="h-3.5 w-3.5" /> Open each item, add to cart, then check out
                 </p>
                 <div className="space-y-1">
-                  {itemsToOrder.map((item) => {
-                    const opened = openedItems.has(item.id);
-                    const qty = quantities[item.id] ?? item.shortfall;
+                  {orderedLines.map((line) => {
+                    const opened = openedItems.has(line.id);
                     return (
-                      <div key={item.id} className="flex items-center gap-2">
-                        <span className="flex-1 min-w-0 text-xs font-medium text-purple-900 truncate">{item.name} <span className="opacity-60">×{qty}</span></span>
-                        {item.storeProductUrl ? (
-                          <a href={item.storeProductUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpenedItems((s) => new Set(s).add(item.id))}>
+                      <div key={line.id} className="flex items-center gap-2">
+                        <span className="flex-1 min-w-0 text-xs font-medium text-purple-900 truncate">{line.name} <span className="opacity-60">×{line.qty}</span></span>
+                        {line.storeProductUrl ? (
+                          <a href={line.storeProductUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpenedItems((s) => new Set(s).add(line.id))}>
                             <Button size="sm" variant={opened ? "outline" : "default"} className={`h-7 text-[11px] font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
                               {opened ? <><CheckCircle2 className="h-3 w-3" /> Opened</> : <><ExternalLink className="h-3 w-3" /> Open</>}
                             </Button>
@@ -299,7 +312,7 @@ function SupplierGroupCard({
                 </div>
                 <div className="flex gap-1.5 flex-shrink-0">
                   {group.storeUrl && (
-                    <a href={buildCartUrl(group.storeUrl, group.storePlatform, group.items.filter(i => !i.pendingPo).map(i => ({ storeProductId: i.storeProductId, qty: quantities[i.id] ?? i.shortfall })))} target="_blank" rel="noopener noreferrer">
+                    <a href={buildCartUrl(group.storeUrl, group.storePlatform, orderedLines.map((l) => ({ storeProductId: l.storeProductId, qty: l.qty })))} target="_blank" rel="noopener noreferrer">
                       <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
                         <ExternalLink className="h-3 w-3" /> Reopen
                       </Button>
@@ -327,7 +340,7 @@ function SupplierGroupCard({
                   size="sm"
                   className={`h-9 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
                   disabled={batchMutation.isPending || itemsToOrder.length === 0}
-                  onClick={() => batchMutation.mutate()}
+                  onClick={confirmOrder}
                 >
                   {batchMutation.isPending
                     ? (isWebStore && !isCustomStore ? "Opening cart…" : "Creating…")

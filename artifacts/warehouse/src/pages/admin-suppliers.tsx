@@ -303,6 +303,19 @@ interface OrderGroup {
   items: ReorderQueueItem[];
 }
 
+// A frozen snapshot of what was ordered, captured at confirm time. Rendering the
+// done phase from this (not the live queue) keeps the checklist intact after the
+// reorder-queue refetch re-tags those items with their new pending PO.
+interface OrderLine {
+  id: number;
+  name: string;
+  qty: number;
+  unitCost: number;
+  supplierSku: string | null;
+  storeProductId: string | null;
+  storeProductUrl: string | null;
+}
+
 function SupplierOrderCard({ group }: { group: OrderGroup }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -314,21 +327,36 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   const [resultPoId, setResultPoId] = useState<number | null>(null);
   const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
   const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
+  const [orderedLines, setOrderedLines] = useState<OrderLine[]>([]);
 
   const isWebStore = group.orderMethod === "web_store";
   const isCustomStore = isWebStore && group.storePlatform === "custom";
   const hasSupplier = group.supplierId != null;
   const itemsToOrder = group.items.filter((i) => !i.pendingPo);
   const allPending = itemsToOrder.length === 0;
-  const total = itemsToOrder.reduce(
+  // Live total for the card header (reflects the current queue).
+  const liveTotal = itemsToOrder.reduce(
     (s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0),
     0
   );
-  // Items missing the data needed to auto-fill: a direct URL for custom stores, a variant ID otherwise.
+
+  // Lines shown in the dialog: live (editable) while reviewing, frozen snapshot once ordered.
+  const reviewLines: OrderLine[] = itemsToOrder.map((i) => ({
+    id: i.id,
+    name: i.name,
+    qty: Math.max(1, quantities[i.id] ?? i.shortfall),
+    unitCost: i.unitCost,
+    supplierSku: i.supplierSku,
+    storeProductId: i.storeProductId,
+    storeProductUrl: i.storeProductUrl,
+  }));
+  const dialogLines = phase === "review" ? reviewLines : orderedLines;
+  const dialogTotal = dialogLines.reduce((s, l) => s + (l.unitCost > 0 ? l.qty * l.unitCost : 0), 0);
+  // Lines missing the data needed to auto-fill: a direct URL for custom stores, a variant ID otherwise.
   const missingStoreIds = isCustomStore
-    ? itemsToOrder.filter((i) => !i.storeProductUrl)
+    ? dialogLines.filter((l) => !l.storeProductUrl)
     : isWebStore
-      ? itemsToOrder.filter((i) => !i.storeProductId)
+      ? dialogLines.filter((l) => !l.storeProductId)
       : [];
 
   const markOrderedMutation = useMutation({
@@ -348,20 +376,20 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   });
 
   const batchMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (lines: OrderLine[]) =>
       apiFetch("/api/purchase-orders/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           supplierId: group.supplierId,
-          items: itemsToOrder.map((i) => ({
-            productId: i.id,
-            quantityOrdered: Math.max(1, quantities[i.id] ?? i.shortfall),
-            unitPrice: i.unitCost > 0 ? i.unitCost : null,
+          items: lines.map((l) => ({
+            productId: l.id,
+            quantityOrdered: Math.max(1, l.qty),
+            unitPrice: l.unitCost > 0 ? l.unitCost : null,
           })),
         }),
       }),
-    onSuccess: (po: { id: number }) => {
+    onSuccess: (po: { id: number }, lines) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       setResultPoId(po.id);
@@ -369,10 +397,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
         // No combined cart URL for custom stores — the done-phase checklist opens
         // each product link individually (one user click per item avoids popup blocking).
       } else if (isWebStore && group.storeUrl) {
-        const cartItems = itemsToOrder.map((i) => ({
-          storeProductId: i.storeProductId,
-          qty: Math.max(1, quantities[i.id] ?? i.shortfall),
-        }));
+        const cartItems = lines.map((l) => ({ storeProductId: l.storeProductId, qty: Math.max(1, l.qty) }));
         window.open(buildCartUrl(group.storeUrl, group.storePlatform, cartItems), "_blank", "noopener,noreferrer");
       } else if (group.supplierEmail && group.supplierName) {
         setMailtoUrl(
@@ -380,12 +405,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             group.supplierEmail,
             group.supplierName,
             po.id,
-            itemsToOrder.map((i) => ({
-              name: i.name,
-              supplierSku: i.supplierSku,
-              quantity: quantities[i.id] ?? i.shortfall,
-              unitCost: i.unitCost,
-            }))
+            lines.map((l) => ({ name: l.name, supplierSku: l.supplierSku, quantity: l.qty, unitCost: l.unitCost }))
           )
         );
       }
@@ -395,11 +415,19 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
+  function confirmOrder() {
+    // Freeze what we're ordering before the mutation triggers a queue refetch.
+    const snapshot = reviewLines;
+    setOrderedLines(snapshot);
+    batchMutation.mutate(snapshot);
+  }
+
   function openReview() {
     setPhase("review");
     setResultPoId(null);
     setMailtoUrl(null);
     setOpenedItems(new Set());
+    setOrderedLines([]);
     setOpen(true);
   }
 
@@ -408,7 +436,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
       ? buildCartUrl(
           group.storeUrl,
           group.storePlatform,
-          itemsToOrder.map((i) => ({ storeProductId: i.storeProductId, qty: quantities[i.id] ?? i.shortfall }))
+          dialogLines.map((l) => ({ storeProductId: l.storeProductId, qty: l.qty }))
         )
       : null;
 
@@ -427,7 +455,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
           <p className="font-bold text-sm truncate">{group.supplierName ?? "No supplier assigned"}</p>
           <p className="text-xs text-muted-foreground">
             {group.items.length} item{group.items.length !== 1 ? "s" : ""} low
-            {total > 0 && ` · est. $${total.toFixed(2)}`}
+            {liveTotal > 0 && ` · est. $${liveTotal.toFixed(2)}`}
           </p>
         </div>
         <span className={`flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0 ${isWebStore ? "text-purple-700 bg-purple-50 border border-purple-200" : "text-blue-600 bg-blue-50 border border-blue-200"}`}>
@@ -494,30 +522,29 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                 {missingStoreIds.length} item{missingStoreIds.length !== 1 ? "s have" : " has"} no {isCustomStore ? "product link" : "store product ID"} and {missingStoreIds.length !== 1 ? "won't" : "won't"} be auto-added. Add {isCustomStore ? "links" : "IDs"} in the supplier's product list.
               </div>
             )}
-            {itemsToOrder.map((item) => {
-              const qty = quantities[item.id] ?? item.shortfall;
-              const lineTotal = item.unitCost > 0 ? qty * item.unitCost : 0;
+            {dialogLines.map((line) => {
+              const lineTotal = line.unitCost > 0 ? line.qty * line.unitCost : 0;
               return (
-                <div key={item.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border">
+                <div key={line.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border">
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{item.name}</p>
+                    <p className="font-semibold text-sm truncate">{line.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.unitCost > 0 ? `$${Number(item.unitCost).toFixed(2)} ea` : "no price"}
+                      {line.unitCost > 0 ? `$${Number(line.unitCost).toFixed(2)} ea` : "no price"}
                       {lineTotal > 0 && ` · $${lineTotal.toFixed(2)}`}
-                      {isCustomStore && !item.storeProductUrl && <span className="text-amber-600"> · no link</span>}
-                      {isWebStore && !isCustomStore && !item.storeProductId && <span className="text-amber-600"> · no store ID</span>}
+                      {isCustomStore && !line.storeProductUrl && <span className="text-amber-600"> · no link</span>}
+                      {isWebStore && !isCustomStore && !line.storeProductId && <span className="text-amber-600"> · no store ID</span>}
                     </p>
                   </div>
                   {phase === "review" ? (
                     <input
                       type="number"
                       min={1}
-                      value={qty}
-                      onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: Math.max(1, Number(e.target.value)) }))}
+                      value={line.qty}
+                      onChange={(e) => setQuantities((q) => ({ ...q, [line.id]: Math.max(1, Number(e.target.value)) }))}
                       className="w-16 h-9 text-sm text-center border-2 border-border rounded-lg font-bold outline-none focus:border-primary"
                     />
                   ) : (
-                    <span className="text-sm font-bold w-16 text-center">×{qty}</span>
+                    <span className="text-sm font-bold w-16 text-center">×{line.qty}</span>
                   )}
                 </div>
               );
@@ -525,10 +552,10 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
           </div>
 
           <div className="p-4 border-t bg-background space-y-2">
-            {total > 0 && (
+            {dialogTotal > 0 && (
               <div className="flex items-center justify-between text-sm font-bold">
                 <span>Estimated total</span>
-                <span>${total.toFixed(2)}</span>
+                <span>${dialogTotal.toFixed(2)}</span>
               </div>
             )}
             {phase === "review" ? (
@@ -536,8 +563,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                 <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button
                   className={`flex-1 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
-                  disabled={batchMutation.isPending}
-                  onClick={() => batchMutation.mutate()}
+                  disabled={batchMutation.isPending || reviewLines.length === 0}
+                  onClick={confirmOrder}
                 >
                   {batchMutation.isPending
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> {isWebStore && !isCustomStore ? "Opening cart…" : "Creating…"}</>
@@ -551,20 +578,19 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             ) : isCustomStore ? (
               <div className="space-y-2">
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {itemsToOrder.map((item) => {
-                    const qty = quantities[item.id] ?? item.shortfall;
-                    const opened = openedItems.has(item.id);
+                  {dialogLines.map((line) => {
+                    const opened = openedItems.has(line.id);
                     return (
-                      <div key={item.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border">
+                      <div key={line.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{item.name} <span className="text-muted-foreground font-normal">×{qty}</span></p>
+                          <p className="text-sm font-semibold truncate">{line.name} <span className="text-muted-foreground font-normal">×{line.qty}</span></p>
                         </div>
-                        {item.storeProductUrl ? (
+                        {line.storeProductUrl ? (
                           <a
-                            href={item.storeProductUrl}
+                            href={line.storeProductUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={() => setOpenedItems((s) => new Set(s).add(item.id))}
+                            onClick={() => setOpenedItems((s) => new Set(s).add(line.id))}
                           >
                             <Button size="sm" variant={opened ? "outline" : "default"} className={`h-8 text-xs font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
                               {opened ? <><CheckCircle2 className="h-3.5 w-3.5" /> Opened</> : <><ExternalLink className="h-3.5 w-3.5" /> Open</>}
