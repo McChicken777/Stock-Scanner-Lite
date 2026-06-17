@@ -27,14 +27,14 @@ export default function ScanPage() {
     try {
       const r = await fetch(`/api/stock/resolve/${encodeURIComponent(code)}`, { credentials: "include" });
       const d = await r.json();
-      if (d?.type === "location") { setLocation(`/location/${encodeURIComponent(d.id)}`); return; }
+      if (d?.type === "location") { setLocation(`/location/${encodeURIComponent(d.id)}?scanned=1`); return; }
       if (d?.type === "product") { setLocation(`/item/${d.productId}`); return; }
       setError(`Code not recognised: ${code}`);
       setManualMode(true);
       handlingRef.current = false;
     } catch {
       // Network/parse failure — fall back to treating it as a location id
-      setLocation(`/location/${encodeURIComponent(code)}`);
+      setLocation(`/location/${encodeURIComponent(code)}?scanned=1`);
     }
   };
 

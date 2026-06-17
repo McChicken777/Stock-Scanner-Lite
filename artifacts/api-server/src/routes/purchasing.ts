@@ -99,7 +99,7 @@ router.post("/", requireAdmin, requireStandardPlan, async (req, res) => {
 // ─── BATCH CREATE PO WITH ITEMS ───────────────────────────────────────────────
 // Creates a PO and adds all line items in one request — used by the supplier order view.
 
-router.post("/batch", requireAdmin, requireStandardPlan, async (req, res) => {
+router.post("/batch", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
     const parsed = z.object({

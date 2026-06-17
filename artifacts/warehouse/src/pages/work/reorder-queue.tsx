@@ -12,6 +12,7 @@ import {
   Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
   Truck, Building2, HelpCircle, Lock, Globe, ExternalLink,
 } from "lucide-react";
+import { buildMailtoLink, buildCartUrl } from "@/lib/ordering";
 
 interface ReorderItem {
   id: number;
@@ -34,6 +35,7 @@ interface ReorderItem {
   supplierStoreUrl: string | null;
   supplierStorePlatform: string | null;
   storeProductId: string | null;
+  storeProductUrl: string | null;
   unitCost: number;
   estimatedReorderCost: number;
 }
@@ -64,42 +66,6 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return res.json();
 }
 
-function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: ReorderItem[]) {
-  const subject = `Purchase Order #${poId} — Order Request`;
-  const rows = items.map((item) => {
-    const sku = item.supplierSku ? ` (SKU: ${item.supplierSku})` : "";
-    const price = item.unitCost > 0 ? ` @ $${Number(item.unitCost).toFixed(2)} each` : "";
-    return `  • ${item.name}${sku} — Qty: ${item.shortfall}${price}`;
-  }).join("\n");
-  const total = items.reduce((s, i) => s + i.estimatedReorderCost, 0);
-  const totalLine = total > 0 ? `\n\nEstimated total: $${total.toFixed(2)}` : "";
-  const body = `Dear ${supplierName},\n\nPlease process the following purchase order:\n\nPO #${poId}\n\n${rows}${totalLine}\n\nPlease confirm receipt and expected delivery date.\n\nThank you`;
-  return `mailto:${supplierEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
-
-function buildCartUrl(storeUrl: string, platform: string | null, items: Array<{ storeProductId: string | null; qty: number }>) {
-  const base = storeUrl.replace(/\/$/, "");
-  const itemsWithId = items.filter((i) => i.storeProductId);
-  if (itemsWithId.length === 0) return base;
-
-  if (platform === "shopify") {
-    // Shopify native: /cart/variantId:qty,variantId2:qty2
-    const parts = itemsWithId.map((i) => `${i.storeProductId}:${i.qty}`).join(",");
-    return `${base}/cart/${parts}`;
-  }
-  if (platform === "woocommerce") {
-    // WooCommerce: /?add-to-cart=ID&quantity=Q (single), or multi via query string (needs plugin)
-    if (itemsWithId.length === 1) {
-      return `${base}/?add-to-cart=${itemsWithId[0].storeProductId}&quantity=${itemsWithId[0].qty}`;
-    }
-    // Multi-item: use WC cart page and add each item (best-effort, works with some plugins)
-    const params = itemsWithId.map((i) => `add-to-cart=${i.storeProductId}&quantity=${i.qty}`).join("&");
-    return `${base}/cart/?${params}`;
-  }
-  // Custom/other: just open the store URL
-  return base;
-}
-
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
   ordered: "bg-blue-100 text-blue-700",
@@ -124,11 +90,13 @@ function SupplierGroupCard({
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [webStorePoId, setWebStorePoId] = useState<number | null>(null);
+  const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
 
   const hasSupplier = group.supplierId != null;
   const allPending = group.items.every((i) => i.pendingPo != null);
   const totalCost = group.items.reduce((s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0), 0);
   const isWebStore = group.orderMethod === "web_store";
+  const isCustomStore = isWebStore && group.storePlatform === "custom";
 
   const markOrderedMutation = useMutation({
     mutationFn: (poId: number) => apiFetch(`/api/purchase-orders/${poId}`, {
@@ -164,7 +132,11 @@ function SupplierGroupCard({
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: `PO #${po.id} created` });
-      if (isWebStore && group.storeUrl) {
+      if (isCustomStore) {
+        // No combined cart URL — the confirmation banner lists each product link to open one-by-one.
+        setOpenedItems(new Set());
+        setWebStorePoId(po.id);
+      } else if (isWebStore && group.storeUrl) {
         // Open the pre-filled cart in a new tab
         const cartItems = group.items
           .filter((i) => !i.pendingPo)
@@ -271,8 +243,54 @@ function SupplierGroupCard({
 
           {/* Action bar */}
           <div className="border-t border-border bg-muted/20 px-4 py-3 flex flex-col gap-2">
-            {/* Web store "Order placed" confirmation banner */}
-            {webStorePoId && (
+            {/* Custom store: per-item link checklist + "Order placed" */}
+            {webStorePoId && isCustomStore && (
+              <div className="rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2 space-y-2">
+                <p className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" /> Open each item, add to cart, then check out
+                </p>
+                <div className="space-y-1">
+                  {itemsToOrder.map((item) => {
+                    const opened = openedItems.has(item.id);
+                    const qty = quantities[item.id] ?? item.shortfall;
+                    return (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <span className="flex-1 min-w-0 text-xs font-medium text-purple-900 truncate">{item.name} <span className="opacity-60">×{qty}</span></span>
+                        {item.storeProductUrl ? (
+                          <a href={item.storeProductUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpenedItems((s) => new Set(s).add(item.id))}>
+                            <Button size="sm" variant={opened ? "outline" : "default"} className={`h-7 text-[11px] font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
+                              {opened ? <><CheckCircle2 className="h-3 w-3" /> Opened</> : <><ExternalLink className="h-3 w-3" /> Open</>}
+                            </Button>
+                          </a>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" /> no link</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-1.5">
+                  {group.storeUrl && (
+                    <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                      <Button size="sm" variant="outline" className="w-full h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
+                        <ExternalLink className="h-3 w-3" /> Open store
+                      </Button>
+                    </a>
+                  )}
+                  <Button
+                    size="sm"
+                    className="flex-1 h-8 text-xs font-bold gap-1 bg-purple-600 hover:bg-purple-700"
+                    disabled={markOrderedMutation.isPending}
+                    onClick={() => markOrderedMutation.mutate(webStorePoId)}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Order placed
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Web store (Shopify/Woo) "Order placed" confirmation banner */}
+            {webStorePoId && !isCustomStore && (
               <div className="flex items-center gap-3 rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2">
                 <Globe className="h-4 w-4 text-purple-700 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -312,10 +330,12 @@ function SupplierGroupCard({
                   onClick={() => batchMutation.mutate()}
                 >
                   {batchMutation.isPending
-                    ? (isWebStore ? "Opening cart…" : "Creating…")
-                    : isWebStore
-                      ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
-                      : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
+                    ? (isWebStore && !isCustomStore ? "Opening cart…" : "Creating…")
+                    : isCustomStore
+                      ? <><Globe className="h-3.5 w-3.5" /> Order · list {itemsToOrder.length} items</>
+                      : isWebStore
+                        ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
+                        : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
                 </Button>
               )}
               <Link href="/work/purchase-orders">
@@ -383,7 +403,12 @@ export default function ReorderQueuePage() {
 
   function handleOrderCreated(poId: number, supplierEmail: string | null, supplierName: string | null, items: ReorderItem[]) {
     if (supplierEmail && supplierName) {
-      const mailtoUrl = buildMailtoLink(supplierEmail, supplierName, poId, items);
+      const mailtoUrl = buildMailtoLink(supplierEmail, supplierName, poId, items.map((i) => ({
+        name: i.name,
+        supplierSku: i.supplierSku,
+        quantity: i.shortfall,
+        unitCost: i.unitCost,
+      })));
       setEmailPrompt({ poId, mailtoUrl, supplierName });
     }
   }

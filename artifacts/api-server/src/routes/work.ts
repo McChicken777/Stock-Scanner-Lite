@@ -3810,13 +3810,14 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
       : [];
     const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
 
-    // Resolve storeProductId per (supplierId, productId) pair from supplier_products
+    // Resolve store link (id + direct url) per (supplierId, productId) pair from supplier_products
     const productIds2 = lowStockProducts.map((p) => p.id);
     const spRows = supplierIds.length > 0 && productIds2.length > 0
       ? await db.select({
           supplierId: supplierProductsTable.supplierId,
           productId: supplierProductsTable.productId,
           storeProductId: supplierProductsTable.storeProductId,
+          storeProductUrl: supplierProductsTable.storeProductUrl,
         })
           .from(supplierProductsTable)
           .where(and(
@@ -3826,6 +3827,7 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           ))
       : [];
     const storeProductIdMap = new Map(spRows.map((r) => [`${r.supplierId}:${r.productId}`, r.storeProductId]));
+    const storeProductUrlMap = new Map(spRows.map((r) => [`${r.supplierId}:${r.productId}`, r.storeProductUrl]));
 
     res.json(lowStockProducts.map((p) => {
       const supplier = p.supplierId ? supplierById.get(p.supplierId) : null;
@@ -3837,6 +3839,7 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
         supplierStoreUrl: supplier?.storeUrl ?? null,
         supplierStorePlatform: supplier?.storePlatform ?? null,
         storeProductId: p.supplierId ? (storeProductIdMap.get(`${p.supplierId}:${p.id}`) ?? null) : null,
+        storeProductUrl: p.supplierId ? (storeProductUrlMap.get(`${p.supplierId}:${p.id}`) ?? null) : null,
         pendingPo: pendingPoByProduct.get(p.id) ?? null,
       };
     }));
