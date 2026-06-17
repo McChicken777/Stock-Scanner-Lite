@@ -7,6 +7,9 @@ export const suppliersTable = pgTable("suppliers", {
   email: text("email"),
   phone: text("phone"),
   notes: text("notes"),
+  orderMethod: text("order_method").notNull().default("email"),
+  storeUrl: text("store_url"),
+  storePlatform: text("store_platform"),
   companyId: integer("company_id")
     .notNull()
     .references(() => companiesTable.id, { onDelete: "cascade" }),
