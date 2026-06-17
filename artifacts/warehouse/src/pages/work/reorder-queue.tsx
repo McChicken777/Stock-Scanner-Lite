@@ -35,6 +35,7 @@ interface ReorderItem {
   supplierStoreUrl: string | null;
   supplierStorePlatform: string | null;
   storeProductId: string | null;
+  storeProductUrl: string | null;
   unitCost: number;
   estimatedReorderCost: number;
 }
@@ -89,11 +90,13 @@ function SupplierGroupCard({
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [webStorePoId, setWebStorePoId] = useState<number | null>(null);
+  const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
 
   const hasSupplier = group.supplierId != null;
   const allPending = group.items.every((i) => i.pendingPo != null);
   const totalCost = group.items.reduce((s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0), 0);
   const isWebStore = group.orderMethod === "web_store";
+  const isCustomStore = isWebStore && group.storePlatform === "custom";
 
   const markOrderedMutation = useMutation({
     mutationFn: (poId: number) => apiFetch(`/api/purchase-orders/${poId}`, {
@@ -129,7 +132,11 @@ function SupplierGroupCard({
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: `PO #${po.id} created` });
-      if (isWebStore && group.storeUrl) {
+      if (isCustomStore) {
+        // No combined cart URL — the confirmation banner lists each product link to open one-by-one.
+        setOpenedItems(new Set());
+        setWebStorePoId(po.id);
+      } else if (isWebStore && group.storeUrl) {
         // Open the pre-filled cart in a new tab
         const cartItems = group.items
           .filter((i) => !i.pendingPo)
@@ -236,8 +243,54 @@ function SupplierGroupCard({
 
           {/* Action bar */}
           <div className="border-t border-border bg-muted/20 px-4 py-3 flex flex-col gap-2">
-            {/* Web store "Order placed" confirmation banner */}
-            {webStorePoId && (
+            {/* Custom store: per-item link checklist + "Order placed" */}
+            {webStorePoId && isCustomStore && (
+              <div className="rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2 space-y-2">
+                <p className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5" /> Open each item, add to cart, then check out
+                </p>
+                <div className="space-y-1">
+                  {itemsToOrder.map((item) => {
+                    const opened = openedItems.has(item.id);
+                    const qty = quantities[item.id] ?? item.shortfall;
+                    return (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <span className="flex-1 min-w-0 text-xs font-medium text-purple-900 truncate">{item.name} <span className="opacity-60">×{qty}</span></span>
+                        {item.storeProductUrl ? (
+                          <a href={item.storeProductUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpenedItems((s) => new Set(s).add(item.id))}>
+                            <Button size="sm" variant={opened ? "outline" : "default"} className={`h-7 text-[11px] font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
+                              {opened ? <><CheckCircle2 className="h-3 w-3" /> Opened</> : <><ExternalLink className="h-3 w-3" /> Open</>}
+                            </Button>
+                          </a>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" /> no link</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-1.5">
+                  {group.storeUrl && (
+                    <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+                      <Button size="sm" variant="outline" className="w-full h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
+                        <ExternalLink className="h-3 w-3" /> Open store
+                      </Button>
+                    </a>
+                  )}
+                  <Button
+                    size="sm"
+                    className="flex-1 h-8 text-xs font-bold gap-1 bg-purple-600 hover:bg-purple-700"
+                    disabled={markOrderedMutation.isPending}
+                    onClick={() => markOrderedMutation.mutate(webStorePoId)}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Order placed
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Web store (Shopify/Woo) "Order placed" confirmation banner */}
+            {webStorePoId && !isCustomStore && (
               <div className="flex items-center gap-3 rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2">
                 <Globe className="h-4 w-4 text-purple-700 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
@@ -277,10 +330,12 @@ function SupplierGroupCard({
                   onClick={() => batchMutation.mutate()}
                 >
                   {batchMutation.isPending
-                    ? (isWebStore ? "Opening cart…" : "Creating…")
-                    : isWebStore
-                      ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
-                      : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
+                    ? (isWebStore && !isCustomStore ? "Opening cart…" : "Creating…")
+                    : isCustomStore
+                      ? <><Globe className="h-3.5 w-3.5" /> Order · list {itemsToOrder.length} items</>
+                      : isWebStore
+                        ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
+                        : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
                 </Button>
               )}
               <Link href="/work/purchase-orders">

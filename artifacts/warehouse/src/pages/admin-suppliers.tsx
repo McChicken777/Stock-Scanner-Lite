@@ -28,6 +28,7 @@ interface SupplierProductLink {
   supplierSku: string | null;
   unitPrice: number | null;
   storeProductId: string | null;
+  storeProductUrl: string | null;
   productName: string;
   productCategory: string;
   productItemType: string;
@@ -55,7 +56,7 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 
 // ─── Supplier Products Panel ───────────────────────────────────────────────────
 
-function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId: number; supplierOrderMethod: string }) {
+function SupplierProductsPanel({ supplierId, supplierOrderMethod, supplierStorePlatform }: { supplierId: number; supplierOrderMethod: string; supplierStorePlatform: string | null }) {
   const { toast } = useToast();
   const { t } = useLang();
   const queryClient = useQueryClient();
@@ -64,6 +65,10 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
   const [addSku, setAddSku] = useState("");
   const [addPrice, setAddPrice] = useState("");
   const [addStoreProductId, setAddStoreProductId] = useState("");
+  const [addStoreProductUrl, setAddStoreProductUrl] = useState("");
+
+  const isWebStore = supplierOrderMethod === "web_store";
+  const isCustomStore = isWebStore && supplierStorePlatform === "custom";
 
   const { data: links = [], isLoading } = useQuery<SupplierProductLink[]>({
     queryKey: [`/api/suppliers/${supplierId}/products`],
@@ -91,7 +96,7 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
       queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
       toast({ title: "Product linked" });
       setShowAdd(false);
-      setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId("");
+      setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); setAddStoreProductUrl("");
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -158,7 +163,8 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
                         `${link.totalStock} in stock${link.bufferStock > 0 ? ` / min ${link.bufferStock}` : ""}`,
                         link.supplierSku ? `SKU: ${link.supplierSku}` : null,
                         link.unitPrice != null ? `$${Number(link.unitPrice).toFixed(2)}` : null,
-                        link.storeProductId && supplierOrderMethod === "web_store" ? `Store ID: ${link.storeProductId}` : null,
+                        link.storeProductId && isWebStore && !isCustomStore ? `Store ID: ${link.storeProductId}` : null,
+                        link.storeProductUrl && isCustomStore ? "link set ✓" : null,
                       ].filter(Boolean).join(" · ")}
                     </span>
                   </div>
@@ -208,13 +214,22 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
               className="w-24 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
             />
           </div>
-          {supplierOrderMethod === "web_store" && (
+          {isWebStore && !isCustomStore && (
             <input
               type="text"
               placeholder="Store product / variant ID (for cart fill)"
               value={addStoreProductId}
               onChange={(e) => setAddStoreProductId(e.target.value)}
               className="w-full h-8 px-2 rounded border border-input bg-background text-xs font-mono"
+            />
+          )}
+          {isCustomStore && (
+            <input
+              type="url"
+              placeholder="Product link — paste the item's page or add-to-cart URL"
+              value={addStoreProductUrl}
+              onChange={(e) => setAddStoreProductUrl(e.target.value)}
+              className="w-full h-8 px-2 rounded border border-input bg-background text-xs"
             />
           )}
           <div className="flex gap-1.5">
@@ -227,6 +242,7 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
                 supplierSku: addSku || undefined,
                 unitPrice: addPrice ? Number(addPrice) : null,
                 storeProductId: addStoreProductId || undefined,
+                storeProductUrl: addStoreProductUrl || undefined,
               })}
             >
               {t("suppliersLinkProduct")}
@@ -235,7 +251,7 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId
               size="sm"
               variant="outline"
               className="h-7 text-xs"
-              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); }}
+              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); setAddStoreProductUrl(""); }}
             >
               {t("cancel")}
             </Button>
@@ -273,6 +289,7 @@ interface ReorderQueueItem {
   supplierStoreUrl: string | null;
   supplierStorePlatform: string | null;
   storeProductId: string | null;
+  storeProductUrl: string | null;
   pendingPo: { poId: number; quantity: number; status: string } | null;
 }
 
@@ -296,8 +313,10 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   const [phase, setPhase] = useState<"review" | "done">("review");
   const [resultPoId, setResultPoId] = useState<number | null>(null);
   const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
+  const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
 
   const isWebStore = group.orderMethod === "web_store";
+  const isCustomStore = isWebStore && group.storePlatform === "custom";
   const hasSupplier = group.supplierId != null;
   const itemsToOrder = group.items.filter((i) => !i.pendingPo);
   const allPending = itemsToOrder.length === 0;
@@ -305,7 +324,12 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     (s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0),
     0
   );
-  const missingStoreIds = isWebStore ? itemsToOrder.filter((i) => !i.storeProductId) : [];
+  // Items missing the data needed to auto-fill: a direct URL for custom stores, a variant ID otherwise.
+  const missingStoreIds = isCustomStore
+    ? itemsToOrder.filter((i) => !i.storeProductUrl)
+    : isWebStore
+      ? itemsToOrder.filter((i) => !i.storeProductId)
+      : [];
 
   const markOrderedMutation = useMutation({
     mutationFn: (poId: number) =>
@@ -341,7 +365,10 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       setResultPoId(po.id);
-      if (isWebStore && group.storeUrl) {
+      if (isCustomStore) {
+        // No combined cart URL for custom stores — the done-phase checklist opens
+        // each product link individually (one user click per item avoids popup blocking).
+      } else if (isWebStore && group.storeUrl) {
         const cartItems = itemsToOrder.map((i) => ({
           storeProductId: i.storeProductId,
           qty: Math.max(1, quantities[i.id] ?? i.shortfall),
@@ -372,6 +399,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     setPhase("review");
     setResultPoId(null);
     setMailtoUrl(null);
+    setOpenedItems(new Set());
     setOpen(true);
   }
 
@@ -451,9 +479,11 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             <p className="text-sm text-muted-foreground pt-1">
               {phase === "review"
                 ? <>Ordering from <span className="font-semibold">{group.supplierName ?? "no supplier"}</span> {isWebStore ? "via web store" : "by email"}. Adjust quantities, then confirm.</>
-                : isWebStore
-                  ? "We opened the store cart in a new tab. Finish checkout there, then mark the order as placed."
-                  : "Open your email app to send the order, then it's tracked as a draft PO."}
+                : isCustomStore
+                  ? "Open each item below, add it to your cart on the store, then check out. Mark the order placed when done."
+                  : isWebStore
+                    ? "We opened the store cart in a new tab. Finish checkout there, then mark the order as placed."
+                    : "Open your email app to send the order, then it's tracked as a draft PO."}
             </p>
           </DialogHeader>
 
@@ -461,7 +491,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             {phase === "review" && missingStoreIds.length > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
-                {missingStoreIds.length} item{missingStoreIds.length !== 1 ? "s have" : " has"} no store product ID and won't be auto-added to the cart. Add IDs in the supplier's product list.
+                {missingStoreIds.length} item{missingStoreIds.length !== 1 ? "s have" : " has"} no {isCustomStore ? "product link" : "store product ID"} and {missingStoreIds.length !== 1 ? "won't" : "won't"} be auto-added. Add {isCustomStore ? "links" : "IDs"} in the supplier's product list.
               </div>
             )}
             {itemsToOrder.map((item) => {
@@ -474,7 +504,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                     <p className="text-xs text-muted-foreground">
                       {item.unitCost > 0 ? `$${Number(item.unitCost).toFixed(2)} ea` : "no price"}
                       {lineTotal > 0 && ` · $${lineTotal.toFixed(2)}`}
-                      {isWebStore && !item.storeProductId && <span className="text-amber-600"> · no store ID</span>}
+                      {isCustomStore && !item.storeProductUrl && <span className="text-amber-600"> · no link</span>}
+                      {isWebStore && !isCustomStore && !item.storeProductId && <span className="text-amber-600"> · no store ID</span>}
                     </p>
                   </div>
                   {phase === "review" ? (
@@ -509,10 +540,57 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                   onClick={() => batchMutation.mutate()}
                 >
                   {batchMutation.isPending
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> {isWebStore ? "Opening cart…" : "Creating…"}</>
-                    : isWebStore
-                      ? <><Globe className="h-4 w-4" /> Confirm & open cart</>
-                      : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> {isWebStore && !isCustomStore ? "Opening cart…" : "Creating…"}</>
+                    : isCustomStore
+                      ? <><Globe className="h-4 w-4" /> Confirm & list items</>
+                      : isWebStore
+                        ? <><Globe className="h-4 w-4" /> Confirm & open cart</>
+                        : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
+                </Button>
+              </div>
+            ) : isCustomStore ? (
+              <div className="space-y-2">
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {itemsToOrder.map((item) => {
+                    const qty = quantities[item.id] ?? item.shortfall;
+                    const opened = openedItems.has(item.id);
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{item.name} <span className="text-muted-foreground font-normal">×{qty}</span></p>
+                        </div>
+                        {item.storeProductUrl ? (
+                          <a
+                            href={item.storeProductUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setOpenedItems((s) => new Set(s).add(item.id))}
+                          >
+                            <Button size="sm" variant={opened ? "outline" : "default"} className={`h-8 text-xs font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
+                              {opened ? <><CheckCircle2 className="h-3.5 w-3.5" /> Opened</> : <><ExternalLink className="h-3.5 w-3.5" /> Open</>}
+                            </Button>
+                          </a>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> no link</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {group.storeUrl && missingStoreIds.length > 0 && (
+                  <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="block">
+                    <Button variant="outline" className="w-full font-semibold gap-1.5 text-xs">
+                      <ExternalLink className="h-3.5 w-3.5" /> Open store (find items without a link)
+                    </Button>
+                  </a>
+                )}
+                <Button
+                  className="w-full font-bold gap-1.5 bg-purple-600 hover:bg-purple-700"
+                  disabled={markOrderedMutation.isPending || resultPoId == null}
+                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
+                >
+                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Order placed
                 </Button>
               </div>
             ) : isWebStore ? (
@@ -872,7 +950,7 @@ export default function AdminSuppliersPage() {
                   </div>
                 </div>
 
-                {expanded && <SupplierProductsPanel supplierId={supplier.id} supplierOrderMethod={supplier.orderMethod || "email"} />}
+                {expanded && <SupplierProductsPanel supplierId={supplier.id} supplierOrderMethod={supplier.orderMethod || "email"} supplierStorePlatform={supplier.storePlatform} />}
               </div>
             );
           })}

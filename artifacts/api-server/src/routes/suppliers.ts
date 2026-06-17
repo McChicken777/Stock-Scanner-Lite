@@ -148,6 +148,7 @@ router.get("/:id/products", requireAuth, async (req, res) => {
       supplierSku: supplierProductsTable.supplierSku,
       unitPrice: supplierProductsTable.unitPrice,
       storeProductId: supplierProductsTable.storeProductId,
+      storeProductUrl: supplierProductsTable.storeProductUrl,
       productName: productsTable.name,
       productCategory: productsTable.category,
       productItemType: productsTable.itemType,
@@ -183,6 +184,7 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
       supplierSku: z.string().optional().or(z.literal("")),
       unitPrice: z.number().min(0).nullable().optional(),
       storeProductId: z.string().optional().or(z.literal("")),
+      storeProductUrl: z.string().url().optional().or(z.literal("")),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -197,6 +199,7 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
       supplierSku: parsed.data.supplierSku || null,
       unitPrice: parsed.data.unitPrice ?? null,
       storeProductId: parsed.data.storeProductId || null,
+      storeProductUrl: parsed.data.storeProductUrl || null,
       companyId,
     }).onConflictDoUpdate({
       target: [supplierProductsTable.supplierId, supplierProductsTable.productId],
@@ -204,6 +207,7 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
         supplierSku: parsed.data.supplierSku || null,
         unitPrice: parsed.data.unitPrice ?? null,
         storeProductId: parsed.data.storeProductId || null,
+        storeProductUrl: parsed.data.storeProductUrl || null,
       },
     }).returning();
 
