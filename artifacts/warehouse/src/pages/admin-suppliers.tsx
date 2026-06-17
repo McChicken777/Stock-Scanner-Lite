@@ -4,7 +4,7 @@ import { useLang } from "@/contexts/lang";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Lock } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Lock, Globe } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
@@ -14,6 +14,9 @@ interface Supplier {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  orderMethod: string;
+  storeUrl: string | null;
+  storePlatform: string | null;
   companyId: number;
 }
 
@@ -22,6 +25,7 @@ interface SupplierProductLink {
   productId: number;
   supplierSku: string | null;
   unitPrice: number | null;
+  storeProductId: string | null;
   productName: string;
   productCategory: string;
   productItemType: string;
@@ -49,7 +53,7 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 
 // ─── Supplier Products Panel ───────────────────────────────────────────────────
 
-function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
+function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId: number; supplierOrderMethod: string }) {
   const { toast } = useToast();
   const { t } = useLang();
   const { atLeast } = usePlan();
@@ -58,6 +62,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
   const [addProductId, setAddProductId] = useState("");
   const [addSku, setAddSku] = useState("");
   const [addPrice, setAddPrice] = useState("");
+  const [addStoreProductId, setAddStoreProductId] = useState("");
 
   const { data: links = [], isLoading } = useQuery<SupplierProductLink[]>({
     queryKey: [`/api/suppliers/${supplierId}/products`],
@@ -85,7 +90,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
       queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
       toast({ title: "Product linked" });
       setShowAdd(false);
-      setAddProductId(""); setAddSku(""); setAddPrice("");
+      setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId("");
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -166,6 +171,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
                         `${link.totalStock} in stock${link.bufferStock > 0 ? ` / min ${link.bufferStock}` : ""}`,
                         link.supplierSku ? `SKU: ${link.supplierSku}` : null,
                         link.unitPrice != null ? `$${Number(link.unitPrice).toFixed(2)}` : null,
+                        link.storeProductId && supplierOrderMethod === "web_store" ? `Store ID: ${link.storeProductId}` : null,
                       ].filter(Boolean).join(" · ")}
                     </span>
                   </div>
@@ -215,6 +221,15 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
               className="w-24 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
             />
           </div>
+          {supplierOrderMethod === "web_store" && (
+            <input
+              type="text"
+              placeholder="Store product / variant ID (for cart fill)"
+              value={addStoreProductId}
+              onChange={(e) => setAddStoreProductId(e.target.value)}
+              className="w-full h-8 px-2 rounded border border-input bg-background text-xs font-mono"
+            />
+          )}
           <div className="flex gap-1.5">
             <Button
               size="sm"
@@ -224,6 +239,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
                 productId: Number(addProductId),
                 supplierSku: addSku || undefined,
                 unitPrice: addPrice ? Number(addPrice) : null,
+                storeProductId: addStoreProductId || undefined,
               })}
             >
               {t("suppliersLinkProduct")}
@@ -232,7 +248,7 @@ function SupplierProductsPanel({ supplierId }: { supplierId: number }) {
               size="sm"
               variant="outline"
               className="h-7 text-xs"
-              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); }}
+              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); }}
             >
               {t("cancel")}
             </Button>
@@ -260,7 +276,7 @@ export default function AdminSuppliersPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
   const [expandedSupplierId, setExpandedSupplierId] = useState<number | null>(null);
 
   const suppliersQuery = useQuery<Supplier[]>({
@@ -276,7 +292,7 @@ export default function AdminSuppliersPage() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
-      setFormData({ name: "", email: "", phone: "", notes: "" });
+      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
       setShowForm(false);
       toast({ description: "Supplier created" });
     },
@@ -292,7 +308,7 @@ export default function AdminSuppliersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setEditing(null);
-      setFormData({ name: "", email: "", phone: "", notes: "" });
+      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
       toast({ description: "Supplier updated" });
     },
     onError: () => toast({ description: "Failed to update supplier", variant: "destructive" }),
@@ -322,7 +338,15 @@ export default function AdminSuppliersPage() {
 
   const startEdit = (supplier: Supplier) => {
     setEditing(supplier.id);
-    setFormData({ name: supplier.name, email: supplier.email || "", phone: supplier.phone || "", notes: supplier.notes || "" });
+    setFormData({
+      name: supplier.name,
+      email: supplier.email || "",
+      phone: supplier.phone || "",
+      notes: supplier.notes || "",
+      orderMethod: supplier.orderMethod || "email",
+      storeUrl: supplier.storeUrl || "",
+      storePlatform: supplier.storePlatform || "",
+    });
     setShowForm(true);
   };
 
@@ -333,7 +357,7 @@ export default function AdminSuppliersPage() {
         <Button
           onClick={() => {
             setEditing(null);
-            setFormData({ name: "", email: "", phone: "", notes: "" });
+            setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
             setShowForm(!showForm);
           }}
           className="gap-2"
@@ -376,6 +400,56 @@ export default function AdminSuppliersPage() {
             rows={2}
             disabled={createMutation.isPending || updateMutation.isPending}
           />
+
+          {/* Order method */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ordering method</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, orderMethod: "email" })}
+                className={`flex-1 flex items-center justify-center gap-2 h-9 rounded-lg border-2 text-sm font-semibold transition-colors ${formData.orderMethod === "email" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground hover:border-blue-300"}`}
+              >
+                <Mail className="h-3.5 w-3.5" /> Email order
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, orderMethod: "web_store" })}
+                className={`flex-1 flex items-center justify-center gap-2 h-9 rounded-lg border-2 text-sm font-semibold transition-colors ${formData.orderMethod === "web_store" ? "border-purple-500 bg-purple-50 text-purple-700" : "border-border text-muted-foreground hover:border-purple-300"}`}
+              >
+                <Globe className="h-3.5 w-3.5" /> Web store
+              </button>
+            </div>
+          </div>
+
+          {/* Web store fields */}
+          {formData.orderMethod === "web_store" && (
+            <div className="space-y-2 border-2 border-purple-200 bg-purple-50 rounded-lg p-3">
+              <input
+                type="url"
+                placeholder="Store URL (e.g. https://mystore.myshopify.com)"
+                value={formData.storeUrl}
+                onChange={(e) => setFormData({ ...formData, storeUrl: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                disabled={createMutation.isPending || updateMutation.isPending}
+              />
+              <select
+                value={formData.storePlatform}
+                onChange={(e) => setFormData({ ...formData, storePlatform: e.target.value })}
+                className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
+                disabled={createMutation.isPending || updateMutation.isPending}
+              >
+                <option value="">Select platform…</option>
+                <option value="shopify">Shopify</option>
+                <option value="woocommerce">WooCommerce</option>
+                <option value="custom">Custom / Other</option>
+              </select>
+              <p className="text-[11px] text-purple-700">
+                After selecting a platform, add the store product/variant ID for each linked product below.
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
               {editing ? t("suppliersUpdate") : t("create")}
@@ -399,10 +473,29 @@ export default function AdminSuppliersPage() {
               <div key={supplier.id} className="bg-white border-2 border-border rounded-lg p-3 space-y-2">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{supplier.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-bold text-sm">{supplier.name}</p>
+                      {supplier.orderMethod === "web_store" ? (
+                        <span className="flex items-center gap-1 text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 rounded-full px-2 py-0.5">
+                          <Globe className="h-2.5 w-2.5" /> Web store
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2 py-0.5">
+                          <Mail className="h-2.5 w-2.5" /> Email
+                        </span>
+                      )}
+                    </div>
                     {supplier.email && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                         <Mail className="h-3 w-3" /> {supplier.email}
+                      </div>
+                    )}
+                    {supplier.storeUrl && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        <Globe className="h-3 w-3" />
+                        <a href={supplier.storeUrl} target="_blank" rel="noopener noreferrer" className="underline truncate max-w-[200px]">
+                          {supplier.storeUrl}
+                        </a>
                       </div>
                     )}
                     {supplier.phone && (
@@ -435,7 +528,7 @@ export default function AdminSuppliersPage() {
                   </div>
                 </div>
 
-                {expanded && <SupplierProductsPanel supplierId={supplier.id} />}
+                {expanded && <SupplierProductsPanel supplierId={supplier.id} supplierOrderMethod={supplier.orderMethod || "email"} />}
               </div>
             );
           })}

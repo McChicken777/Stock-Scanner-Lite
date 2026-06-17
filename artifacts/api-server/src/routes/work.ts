@@ -6,7 +6,7 @@ import {
   rolesTable, userRolesTable, stepPresetsTable, stepPresetEntriesTable, aiSnapshotsTable,
   productionZonesTable, wipLocationsTable, partLocationsTable, stockTable, locationsTable, usersTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
-  suppliersTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
+  suppliersTable, supplierProductsTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
   stationTypesTable, rawMaterialsTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
@@ -3794,21 +3794,52 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
       }
     }
 
-    // Resolve supplier names for display and linking
+    // Resolve supplier info (including web store fields) for display and linking
     const supplierIds = [...new Set(lowStockProducts.map((p) => p.supplierId).filter((id): id is number => id != null))];
     const supplierRows = supplierIds.length > 0
-      ? await db.select({ id: suppliersTable.id, name: suppliersTable.name, email: suppliersTable.email })
+      ? await db.select({
+          id: suppliersTable.id,
+          name: suppliersTable.name,
+          email: suppliersTable.email,
+          orderMethod: suppliersTable.orderMethod,
+          storeUrl: suppliersTable.storeUrl,
+          storePlatform: suppliersTable.storePlatform,
+        })
           .from(suppliersTable)
           .where(inArray(suppliersTable.id, supplierIds))
       : [];
     const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
 
-    res.json(lowStockProducts.map((p) => ({
-      ...p,
-      supplierName: p.supplierId ? (supplierById.get(p.supplierId)?.name ?? null) : null,
-      supplierEmail: p.supplierId ? (supplierById.get(p.supplierId)?.email ?? null) : null,
-      pendingPo: pendingPoByProduct.get(p.id) ?? null,
-    })));
+    // Resolve storeProductId per (supplierId, productId) pair from supplier_products
+    const productIds2 = lowStockProducts.map((p) => p.id);
+    const spRows = supplierIds.length > 0 && productIds2.length > 0
+      ? await db.select({
+          supplierId: supplierProductsTable.supplierId,
+          productId: supplierProductsTable.productId,
+          storeProductId: supplierProductsTable.storeProductId,
+        })
+          .from(supplierProductsTable)
+          .where(and(
+            inArray(supplierProductsTable.supplierId, supplierIds),
+            inArray(supplierProductsTable.productId, productIds2),
+            eq(supplierProductsTable.companyId, companyId),
+          ))
+      : [];
+    const storeProductIdMap = new Map(spRows.map((r) => [`${r.supplierId}:${r.productId}`, r.storeProductId]));
+
+    res.json(lowStockProducts.map((p) => {
+      const supplier = p.supplierId ? supplierById.get(p.supplierId) : null;
+      return {
+        ...p,
+        supplierName: supplier?.name ?? null,
+        supplierEmail: supplier?.email ?? null,
+        supplierOrderMethod: supplier?.orderMethod ?? "email",
+        supplierStoreUrl: supplier?.storeUrl ?? null,
+        supplierStorePlatform: supplier?.storePlatform ?? null,
+        storeProductId: p.supplierId ? (storeProductIdMap.get(`${p.supplierId}:${p.id}`) ?? null) : null,
+        pendingPo: pendingPoByProduct.get(p.id) ?? null,
+      };
+    }));
   } catch (err) {
     req.log.error({ err }, "Failed to get reorder queue");
     res.status(500).json({ error: "Failed to get reorder queue" });

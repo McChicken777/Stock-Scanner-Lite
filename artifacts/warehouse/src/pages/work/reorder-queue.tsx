@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, AlertTriangle, ShoppingCart, CheckCircle2,
   Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
-  Truck, Building2, HelpCircle, Lock,
+  Truck, Building2, HelpCircle, Lock, Globe, ExternalLink,
 } from "lucide-react";
 
 interface ReorderItem {
@@ -30,6 +30,10 @@ interface ReorderItem {
   supplierSku: string | null;
   supplierName: string | null;
   supplierEmail: string | null;
+  supplierOrderMethod: string;
+  supplierStoreUrl: string | null;
+  supplierStorePlatform: string | null;
+  storeProductId: string | null;
   unitCost: number;
   estimatedReorderCost: number;
 }
@@ -48,6 +52,9 @@ interface SupplierGroup {
   supplierId: number | null;
   supplierName: string | null;
   supplierEmail: string | null;
+  orderMethod: string;
+  storeUrl: string | null;
+  storePlatform: string | null;
   items: ReorderItem[];
 }
 
@@ -68,6 +75,29 @@ function buildMailtoLink(supplierEmail: string, supplierName: string, poId: numb
   const totalLine = total > 0 ? `\n\nEstimated total: $${total.toFixed(2)}` : "";
   const body = `Dear ${supplierName},\n\nPlease process the following purchase order:\n\nPO #${poId}\n\n${rows}${totalLine}\n\nPlease confirm receipt and expected delivery date.\n\nThank you`;
   return `mailto:${supplierEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+function buildCartUrl(storeUrl: string, platform: string | null, items: Array<{ storeProductId: string | null; qty: number }>) {
+  const base = storeUrl.replace(/\/$/, "");
+  const itemsWithId = items.filter((i) => i.storeProductId);
+  if (itemsWithId.length === 0) return base;
+
+  if (platform === "shopify") {
+    // Shopify native: /cart/variantId:qty,variantId2:qty2
+    const parts = itemsWithId.map((i) => `${i.storeProductId}:${i.qty}`).join(",");
+    return `${base}/cart/${parts}`;
+  }
+  if (platform === "woocommerce") {
+    // WooCommerce: /?add-to-cart=ID&quantity=Q (single), or multi via query string (needs plugin)
+    if (itemsWithId.length === 1) {
+      return `${base}/?add-to-cart=${itemsWithId[0].storeProductId}&quantity=${itemsWithId[0].qty}`;
+    }
+    // Multi-item: use WC cart page and add each item (best-effort, works with some plugins)
+    const params = itemsWithId.map((i) => `add-to-cart=${i.storeProductId}&quantity=${i.qty}`).join("&");
+    return `${base}/cart/?${params}`;
+  }
+  // Custom/other: just open the store URL
+  return base;
 }
 
 const statusColors: Record<string, string> = {
@@ -93,10 +123,27 @@ function SupplierGroupCard({
   const { t } = useLang();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [webStorePoId, setWebStorePoId] = useState<number | null>(null);
 
   const hasSupplier = group.supplierId != null;
   const allPending = group.items.every((i) => i.pendingPo != null);
   const totalCost = group.items.reduce((s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0), 0);
+  const isWebStore = group.orderMethod === "web_store";
+
+  const markOrderedMutation = useMutation({
+    mutationFn: (poId: number) => apiFetch(`/api/purchase-orders/${poId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "ordered" }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
+      setWebStorePoId(null);
+      toast({ title: "Order marked as placed" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
 
   const batchMutation = useMutation({
     mutationFn: () => apiFetch("/api/purchase-orders/batch", {
@@ -117,7 +164,17 @@ function SupplierGroupCard({
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: `PO #${po.id} created` });
-      onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
+      if (isWebStore && group.storeUrl) {
+        // Open the pre-filled cart in a new tab
+        const cartItems = group.items
+          .filter((i) => !i.pendingPo)
+          .map((i) => ({ storeProductId: i.storeProductId, qty: Math.max(1, quantities[i.id] ?? i.shortfall) }));
+        const cartUrl = buildCartUrl(group.storeUrl, group.storePlatform, cartItems);
+        window.open(cartUrl, "_blank", "noopener,noreferrer");
+        setWebStorePoId(po.id);
+      } else {
+        onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
+      }
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -131,8 +188,12 @@ function SupplierGroupCard({
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? "bg-blue-100" : "bg-muted"}`}>
-          {hasSupplier ? <Building2 className="h-4 w-4 text-blue-700" /> : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
+        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? (isWebStore ? "bg-purple-100" : "bg-blue-100") : "bg-muted"}`}>
+          {hasSupplier
+            ? isWebStore
+              ? <Globe className="h-4 w-4 text-purple-700" />
+              : <Building2 className="h-4 w-4 text-blue-700" />
+            : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm">{group.supplierName ?? t("reorderNoSupplier")}</p>
@@ -141,11 +202,15 @@ function SupplierGroupCard({
             {totalCost > 0 && ` · est. $${totalCost.toFixed(2)}`}
           </p>
         </div>
-        {group.supplierEmail && (
+        {isWebStore ? (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 flex-shrink-0">
+            <Globe className="h-3 w-3" /> web store
+          </span>
+        ) : group.supplierEmail ? (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
             <Mail className="h-3 w-3" /> {group.supplierEmail}
           </span>
-        )}
+        ) : null}
         {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
       </button>
 
@@ -205,28 +270,60 @@ function SupplierGroupCard({
           </div>
 
           {/* Action bar */}
-          <div className="border-t border-border bg-muted/20 px-4 py-3 flex items-center gap-2 flex-wrap">
-            {allPending ? (
-              <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
-                <CheckCircle2 className="h-4 w-4" /> {t("reorderAllPending")}
+          <div className="border-t border-border bg-muted/20 px-4 py-3 flex flex-col gap-2">
+            {/* Web store "Order placed" confirmation banner */}
+            {webStorePoId && (
+              <div className="flex items-center gap-3 rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2">
+                <Globe className="h-4 w-4 text-purple-700 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-purple-900">Cart opened — finish checkout in the store</p>
+                  <p className="text-[11px] text-purple-700">Once you've paid, confirm below so stock is tracked as ordered.</p>
+                </div>
+                <div className="flex gap-1.5 flex-shrink-0">
+                  {group.storeUrl && (
+                    <a href={buildCartUrl(group.storeUrl, group.storePlatform, group.items.filter(i => !i.pendingPo).map(i => ({ storeProductId: i.storeProductId, qty: quantities[i.id] ?? i.shortfall })))} target="_blank" rel="noopener noreferrer">
+                      <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
+                        <ExternalLink className="h-3 w-3" /> Reopen
+                      </Button>
+                    </a>
+                  )}
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-bold gap-1 bg-purple-600 hover:bg-purple-700"
+                    disabled={markOrderedMutation.isPending}
+                    onClick={() => markOrderedMutation.mutate(webStorePoId)}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Order placed
+                  </Button>
+                </div>
               </div>
-            ) : (
-              <Button
-                size="sm"
-                className="h-9 font-bold gap-1.5"
-                disabled={batchMutation.isPending || itemsToOrder.length === 0}
-                onClick={() => batchMutation.mutate()}
-              >
-                {batchMutation.isPending
-                  ? "Creating…"
-                  : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
-              </Button>
             )}
-            <Link href="/work/purchase-orders">
-              <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
-                <Truck className="h-3.5 w-3.5" /> {t("reorderViewPO")}
-              </Button>
-            </Link>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {allPending ? (
+                <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
+                  <CheckCircle2 className="h-4 w-4" /> {t("reorderAllPending")}
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  className={`h-9 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                  disabled={batchMutation.isPending || itemsToOrder.length === 0}
+                  onClick={() => batchMutation.mutate()}
+                >
+                  {batchMutation.isPending
+                    ? (isWebStore ? "Opening cart…" : "Creating…")
+                    : isWebStore
+                      ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
+                      : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
+                </Button>
+              )}
+              <Link href="/work/purchase-orders">
+                <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
+                  <Truck className="h-3.5 w-3.5" /> {t("reorderViewPO")}
+                </Button>
+              </Link>
+            </div>
           </div>
         </>
       )}
@@ -301,6 +398,9 @@ export default function ReorderQueuePage() {
         supplierId: item.supplierId,
         supplierName: item.supplierName,
         supplierEmail: item.supplierEmail,
+        orderMethod: item.supplierOrderMethod ?? "email",
+        storeUrl: item.supplierStoreUrl ?? null,
+        storePlatform: item.supplierStorePlatform ?? null,
         items: [],
       };
       supplierMap.set(key, group);

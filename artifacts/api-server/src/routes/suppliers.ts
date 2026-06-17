@@ -11,6 +11,9 @@ const createSupplierSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
+  orderMethod: z.enum(["email", "web_store"]).optional().default("email"),
+  storeUrl: z.string().url().optional().or(z.literal("")),
+  storePlatform: z.enum(["shopify", "woocommerce", "custom"]).optional().or(z.literal("")).nullable(),
 });
 
 // GET /api/suppliers - List suppliers
@@ -40,6 +43,9 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
       email: data.email || null,
       phone: data.phone || null,
       notes: data.notes || null,
+      orderMethod: data.orderMethod ?? "email",
+      storeUrl: data.storeUrl || null,
+      storePlatform: (data.storePlatform || null) as string | null,
       companyId,
     }).returning();
 
@@ -79,6 +85,9 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
         email: data.email || null,
         phone: data.phone || null,
         notes: data.notes || null,
+        orderMethod: data.orderMethod ?? "email",
+        storeUrl: data.storeUrl || null,
+        storePlatform: (data.storePlatform || null) as string | null,
       })
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.companyId, companyId)))
       .returning();
@@ -138,6 +147,7 @@ router.get("/:id/products", requireAuth, async (req, res) => {
       productId: supplierProductsTable.productId,
       supplierSku: supplierProductsTable.supplierSku,
       unitPrice: supplierProductsTable.unitPrice,
+      storeProductId: supplierProductsTable.storeProductId,
       productName: productsTable.name,
       productCategory: productsTable.category,
       productItemType: productsTable.itemType,
@@ -172,6 +182,7 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
       productId: z.number().int(),
       supplierSku: z.string().optional().or(z.literal("")),
       unitPrice: z.number().min(0).nullable().optional(),
+      storeProductId: z.string().optional().or(z.literal("")),
     }).safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -185,12 +196,14 @@ router.post("/:id/products", requireAdmin, async (req, res) => {
       productId: parsed.data.productId,
       supplierSku: parsed.data.supplierSku || null,
       unitPrice: parsed.data.unitPrice ?? null,
+      storeProductId: parsed.data.storeProductId || null,
       companyId,
     }).onConflictDoUpdate({
       target: [supplierProductsTable.supplierId, supplierProductsTable.productId],
       set: {
         supplierSku: parsed.data.supplierSku || null,
         unitPrice: parsed.data.unitPrice ?? null,
+        storeProductId: parsed.data.storeProductId || null,
       },
     }).returning();
 
