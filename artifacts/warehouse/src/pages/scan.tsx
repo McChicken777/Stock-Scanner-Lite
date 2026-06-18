@@ -110,7 +110,8 @@ export default function ScanPage() {
     e.preventDefault();
     if (manualId.trim()) {
       handlingRef.current = false; // allow a fresh manual attempt
-      resolveAndGo(manualId.trim());
+      // Location IDs are stored uppercase; normalize typed input so entry is case-insensitive.
+      resolveAndGo(manualId.trim().toUpperCase());
     }
   };
 

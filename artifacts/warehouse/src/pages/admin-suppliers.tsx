@@ -196,14 +196,23 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
       : [];
 
   const markOrderedMutation = useMutation({
-    mutationFn: (poId: number) =>
-      apiFetch(`/api/purchase-orders/${poId}`, {
+    mutationFn: async (poId: number) => {
+      await apiFetch(`/api/purchase-orders/${poId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "ordered" }),
-      }),
+      });
+      // Now that the order is actually placed, resolve the flags so the items
+      // leave the reorder list. (Done here, not at PO creation, so the checklist
+      // stays on screen while the boss opens each product link.)
+      const flagIds = orderedLines.flatMap((l) => l.flagIds);
+      await Promise.allSettled(
+        flagIds.map((fid) => apiFetch(`/api/work/shortage-flags/${fid}/resolve`, { method: "PUT" }))
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: "Order marked as placed" });
       setOpen(false);
@@ -225,14 +234,10 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
           })),
         }),
       }),
-    onSuccess: async (po: { id: number }, lines) => {
-      // Resolve the shortage flags behind the ordered items so they leave the list.
-      const flagIds = lines.flatMap((l) => l.flagIds);
-      await Promise.allSettled(
-        flagIds.map((fid) => apiFetch(`/api/work/shortage-flags/${fid}/resolve`, { method: "PUT" }))
-      );
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
+    onSuccess: (po: { id: number }, lines) => {
+      // Do NOT resolve flags or refetch the reorder list yet — that would drop this
+      // supplier's items and unmount the card (closing the checklist). Flags are
+      // resolved later, when the boss confirms "Order placed".
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       setResultPoId(po.id);
       if (isCustomStore) {
@@ -480,15 +485,23 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                 </Button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Done</Button>
+              <div className="flex flex-col gap-2">
                 {mailtoUrl && (
-                  <a href={mailtoUrl} className="flex-1" onClick={() => setOpen(false)}>
+                  <a href={mailtoUrl} className="block">
                     <Button className="w-full font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
-                      <Mail className="h-4 w-4" /> Open email
+                      <Mail className="h-4 w-4" /> Open email to {group.supplierName ?? "supplier"}
                     </Button>
                   </a>
                 )}
+                <Button
+                  variant="outline"
+                  className="w-full font-semibold gap-1.5"
+                  disabled={markOrderedMutation.isPending || resultPoId == null}
+                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
+                >
+                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  Email sent — mark ordered
+                </Button>
               </div>
             )}
           </div>
