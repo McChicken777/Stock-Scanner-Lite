@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable, stockTable, locationsTable, historyTable } from "@workspace/db";
-import { eq, sql, desc, and } from "drizzle-orm";
+import { db, productsTable, stockTable, locationsTable, historyTable, shortageFlagsTable } from "@workspace/db";
+import { eq, sql, desc, and, isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -31,10 +31,31 @@ router.get("/summary", async (req, res) => {
 
     const productsWithStock = products.map((p) => {
       const totalStock = totalsMap.get(p.id) ?? 0;
-      return { ...p, totalStock, isLowStock: totalStock < p.bufferStock };
+      return { ...p, totalStock };
     });
 
-    const lowStockProducts = productsWithStock.filter((p) => p.isLowStock);
+    // Low stock is now flag-driven: open shortage flags (resolvedAt IS NULL).
+    const openFlags = await db
+      .select({
+        id: shortageFlagsTable.id,
+        productId: shortageFlagsTable.productId,
+        productName: shortageFlagsTable.productName,
+        quantityNeeded: shortageFlagsTable.quantityNeeded,
+        flaggedBy: shortageFlagsTable.flaggedByUsername,
+        createdAt: shortageFlagsTable.createdAt,
+      })
+      .from(shortageFlagsTable)
+      .where(and(eq(shortageFlagsTable.companyId, companyId), isNull(shortageFlagsTable.resolvedAt)))
+      .orderBy(desc(shortageFlagsTable.createdAt));
+
+    const categoryByProduct = new Map(products.map((p) => [p.id, p.category]));
+    const lowStockProducts = openFlags.map((f) => ({
+      id: f.id,
+      name: f.productName,
+      category: f.productId != null ? (categoryByProduct.get(f.productId) ?? "") : "",
+      quantityNeeded: f.quantityNeeded,
+      flaggedBy: f.flaggedBy,
+    }));
 
     const recentActivity = await db
       .select({

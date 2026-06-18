@@ -426,21 +426,21 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {summary.lowStockProducts.slice(0, 3).map((product) => (
-                <div key={product.id} className="flex justify-between items-center bg-background rounded-lg p-3 shadow-sm border border-border">
+              {(summary.lowStockProducts as unknown as Array<{ id: number; name: string; category: string; quantityNeeded: number | null; flaggedBy: string | null }>).slice(0, 3).map((flag) => (
+                <div key={flag.id} className="flex justify-between items-center bg-background rounded-lg p-3 shadow-sm border border-border">
                   <div>
-                    <p className="font-semibold text-sm">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">{product.category}</p>
+                    <p className="font-semibold text-sm">{flag.name}</p>
+                    {flag.category && <p className="text-xs text-muted-foreground">{flag.category}</p>}
                   </div>
                   <div className="text-right">
-                    <p className="font-bold text-destructive">{product.totalStock}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase">of {product.bufferStock} min</p>
+                    {flag.quantityNeeded ? <p className="font-bold text-amber-600">×{flag.quantityNeeded}</p> : null}
+                    {flag.flaggedBy && <p className="text-[10px] text-muted-foreground">by {flag.flaggedBy}</p>}
                   </div>
                 </div>
               ))}
               {summary.lowStockProducts.length > 3 && (
-                <Link href="/products" className="text-xs font-semibold text-primary block text-center mt-2">
-                  View all {summary.lowStockProducts.length} alerts
+                <Link href="/admin/suppliers" className="text-xs font-semibold text-primary block text-center mt-2">
+                  View all {summary.lowStockProducts.length} flagged
                 </Link>
               )}
             </div>

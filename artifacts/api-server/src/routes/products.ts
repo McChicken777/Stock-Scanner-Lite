@@ -191,6 +191,7 @@ const updateProductSchema = z.object({
   supplierId: z.number().int().nullable().optional(),
   supplierProductName: z.string().nullable().optional(),
   supplierSku: z.string().nullable().optional(),
+  storeProductUrl: z.string().url().nullable().optional().or(z.literal("")),
   unitCost: z.number().min(0).optional(),
   salePrice: z.number().min(0).optional(),
 });
@@ -204,9 +205,11 @@ router.put("/:productId", requireAdmin, async (req, res) => {
       res.status(400).json({ error: parsed.error.message });
       return;
     }
+    const updateValues = { ...parsed.data };
+    if (updateValues.storeProductUrl === "") updateValues.storeProductUrl = null;
     const [product] = await db
       .update(productsTable)
-      .set(parsed.data)
+      .set(updateValues)
       .where(and(eq(productsTable.id, productId), eq(productsTable.companyId, companyId)))
       .returning();
     if (!product) {

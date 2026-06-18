@@ -4,7 +4,7 @@ import { useLang } from "@/contexts/lang";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, X, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, ExternalLink, Loader2, TrendingDown, Truck } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, ExternalLink, Loader2, TrendingDown, Truck } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
@@ -26,21 +26,12 @@ interface SupplierProductLink {
   id: number;
   productId: number;
   supplierSku: string | null;
-  unitPrice: number | null;
-  storeProductId: string | null;
   storeProductUrl: string | null;
   productName: string;
   productCategory: string;
   productItemType: string;
   bufferStock: number;
   totalStock: number;
-}
-
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  itemType: string;
 }
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -56,58 +47,13 @@ async function apiFetchVoid(url: string, opts?: RequestInit) {
 
 // ─── Supplier Products Panel ───────────────────────────────────────────────────
 
-function SupplierProductsPanel({ supplierId, supplierOrderMethod, supplierStorePlatform }: { supplierId: number; supplierOrderMethod: string; supplierStorePlatform: string | null }) {
-  const { toast } = useToast();
+function SupplierProductsPanel({ supplierId, supplierOrderMethod }: { supplierId: number; supplierOrderMethod: string; supplierStorePlatform: string | null }) {
   const { t } = useLang();
-  const queryClient = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
-  const [addProductId, setAddProductId] = useState("");
-  const [addSku, setAddSku] = useState("");
-  const [addPrice, setAddPrice] = useState("");
-  const [addStoreProductId, setAddStoreProductId] = useState("");
-  const [addStoreProductUrl, setAddStoreProductUrl] = useState("");
-
   const isWebStore = supplierOrderMethod === "web_store";
-  const isCustomStore = isWebStore && supplierStorePlatform === "custom";
 
   const { data: links = [], isLoading } = useQuery<SupplierProductLink[]>({
     queryKey: [`/api/suppliers/${supplierId}/products`],
     queryFn: () => apiFetch(`/api/suppliers/${supplierId}/products`),
-  });
-
-  const { data: allProducts = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: () => apiFetch("/api/products"),
-    enabled: showAdd,
-  });
-
-  const linkedProductIds = new Set(links.map((l) => l.productId));
-  const purchasedProducts = allProducts.filter(
-    (p) => (p.itemType === "purchased_part" || p.itemType === "purchase") && !linkedProductIds.has(p.id)
-  );
-
-  const linkMutation = useMutation({
-    mutationFn: (data: object) => apiFetch(`/api/suppliers/${supplierId}/products`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
-      toast({ title: "Product linked" });
-      setShowAdd(false);
-      setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); setAddStoreProductUrl("");
-    },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
-  });
-
-  const unlinkMutation = useMutation({
-    mutationFn: (productId: number) => apiFetchVoid(`/api/suppliers/${supplierId}/products/${productId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/products`] });
-      toast({ title: "Product removed from supplier" });
-    },
-    onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
   // Group by category
@@ -118,23 +64,12 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod, supplierStoreP
     return acc;
   }, {});
 
-  const lowItems = links.filter((l) => l.bufferStock > 0 && l.totalStock < l.bufferStock);
-
   return (
     <div className="border-t pt-2 mt-1 space-y-2">
       <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
         <Package2 className="h-3 w-3" /> {t("suppliersProductsSupplied")} ({links.length})
       </p>
-
-      {/* Low-stock summary — ordering happens in the "Needs reorder" section at the top of the page */}
-      {lowItems.length > 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
-          <span className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {lowItems.length} low — see "Needs reorder" above to order
-          </span>
-        </div>
-      )}
+      <p className="text-[10px] text-muted-foreground">Edit these on each product's page.</p>
 
       {isLoading ? (
         <p className="text-xs text-muted-foreground">{t("loading")}</p>
@@ -145,127 +80,24 @@ function SupplierProductsPanel({ supplierId, supplierOrderMethod, supplierStoreP
           {Object.entries(byCategory).map(([cat, items]) => (
             <div key={cat} className="space-y-0.5">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{cat}</p>
-              {items.map((link) => {
-                const isLow = link.bufferStock > 0 && link.totalStock < link.bufferStock;
-                return (
-                <div key={link.id} className="flex items-center justify-between pl-2 py-0.5 rounded hover:bg-muted/40">
+              {items.map((link) => (
+                <div key={link.id} className="flex items-center justify-between pl-2 py-0.5">
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-medium truncate flex items-center gap-1.5">
-                      {link.productName}
-                      {isLow && (
-                        <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide bg-red-100 text-red-700 border border-red-200 rounded-full px-1.5 py-0.5">
-                          Low
-                        </span>
-                      )}
-                    </span>
+                    <span className="text-xs font-medium truncate block">{link.productName}</span>
                     <span className="text-[10px] text-muted-foreground">
                       {[
-                        `${link.totalStock} in stock${link.bufferStock > 0 ? ` / min ${link.bufferStock}` : ""}`,
-                        link.supplierSku ? `SKU: ${link.supplierSku}` : null,
-                        link.unitPrice != null ? `$${Number(link.unitPrice).toFixed(2)}` : null,
-                        link.storeProductId && isWebStore && !isCustomStore ? `Store ID: ${link.storeProductId}` : null,
-                        link.storeProductUrl && isCustomStore ? "link set ✓" : null,
+                        `${link.totalStock} in stock`,
+                        !isWebStore && link.supplierSku ? `SKU: ${link.supplierSku}` : null,
+                        isWebStore && link.storeProductUrl ? "link set ✓" : null,
+                        isWebStore && !link.storeProductUrl ? "no link" : null,
                       ].filter(Boolean).join(" · ")}
                     </span>
                   </div>
-                  <button
-                    onClick={() => unlinkMutation.mutate(link.productId)}
-                    disabled={unlinkMutation.isPending}
-                    className="p-1 hover:bg-red-100 rounded text-red-500 flex-shrink-0"
-                    title="Remove"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
                 </div>
-                );
-              })}
+              ))}
             </div>
           ))}
         </div>
-      )}
-
-      {showAdd ? (
-        <div className="space-y-1.5 border border-dashed border-primary/40 rounded-lg p-2">
-          <select
-            value={addProductId}
-            onChange={(e) => setAddProductId(e.target.value)}
-            className="w-full h-8 px-2 rounded border border-input bg-background text-xs"
-          >
-            <option value="">{t("suppliersSelectProduct")}</option>
-            {purchasedProducts.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}{p.category ? ` (${p.category})` : ""}</option>
-            ))}
-          </select>
-          <div className="flex gap-1.5">
-            <input
-              type="text"
-              placeholder={t("suppliersSkuPlaceholder")}
-              value={addSku}
-              onChange={(e) => setAddSku(e.target.value)}
-              className="flex-1 h-8 px-2 rounded border border-input bg-background text-xs"
-            />
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder={t("suppliersUnitPrice")}
-              value={addPrice}
-              onChange={(e) => setAddPrice(e.target.value)}
-              className="w-24 h-8 px-2 rounded border border-input bg-background text-xs font-mono"
-            />
-          </div>
-          {isWebStore && !isCustomStore && (
-            <input
-              type="text"
-              placeholder="Store product / variant ID (for cart fill)"
-              value={addStoreProductId}
-              onChange={(e) => setAddStoreProductId(e.target.value)}
-              className="w-full h-8 px-2 rounded border border-input bg-background text-xs font-mono"
-            />
-          )}
-          {isCustomStore && (
-            <input
-              type="url"
-              placeholder="Product link — paste the item's page or add-to-cart URL"
-              value={addStoreProductUrl}
-              onChange={(e) => setAddStoreProductUrl(e.target.value)}
-              className="w-full h-8 px-2 rounded border border-input bg-background text-xs"
-            />
-          )}
-          <div className="flex gap-1.5">
-            <Button
-              size="sm"
-              className="h-7 text-xs font-bold flex-1"
-              disabled={!addProductId || linkMutation.isPending}
-              onClick={() => linkMutation.mutate({
-                productId: Number(addProductId),
-                supplierSku: addSku || undefined,
-                unitPrice: addPrice ? Number(addPrice) : null,
-                storeProductId: addStoreProductId || undefined,
-                storeProductUrl: addStoreProductUrl || undefined,
-              })}
-            >
-              {t("suppliersLinkProduct")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => { setShowAdd(false); setAddProductId(""); setAddSku(""); setAddPrice(""); setAddStoreProductId(""); setAddStoreProductUrl(""); }}
-            >
-              {t("cancel")}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs font-bold w-full"
-          onClick={() => setShowAdd(true)}
-        >
-          <Plus className="h-3 w-3 mr-1" /> {t("suppliersAddProduct")}
-        </Button>
       )}
     </div>
   );
@@ -280,6 +112,8 @@ interface ReorderQueueItem {
   shortfall: number;
   available: number;
   minStock: number;
+  quantityNeeded: number;
+  flagIds: number[];
   unitCost: number;
   supplierId: number | null;
   supplierSku: string | null;
@@ -314,6 +148,7 @@ interface OrderLine {
   supplierSku: string | null;
   storeProductId: string | null;
   storeProductUrl: string | null;
+  flagIds: number[];
 }
 
 function SupplierOrderCard({ group }: { group: OrderGroup }) {
@@ -349,6 +184,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     supplierSku: i.supplierSku,
     storeProductId: i.storeProductId,
     storeProductUrl: i.storeProductUrl,
+    flagIds: i.flagIds ?? [],
   }));
   const dialogLines = phase === "review" ? reviewLines : orderedLines;
   const dialogTotal = dialogLines.reduce((s, l) => s + (l.unitCost > 0 ? l.qty * l.unitCost : 0), 0);
@@ -367,7 +203,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
         body: JSON.stringify({ status: "ordered" }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: "Order marked as placed" });
       setOpen(false);
@@ -389,8 +225,14 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
           })),
         }),
       }),
-    onSuccess: (po: { id: number }, lines) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
+    onSuccess: async (po: { id: number }, lines) => {
+      // Resolve the shortage flags behind the ordered items so they leave the list.
+      const flagIds = lines.flatMap((l) => l.flagIds);
+      await Promise.allSettled(
+        flagIds.map((fid) => apiFetch(`/api/work/shortage-flags/${fid}/resolve`, { method: "PUT" }))
+      );
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       setResultPoId(po.id);
       if (isCustomStore) {
@@ -469,8 +311,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
           <div key={item.id} className="px-4 py-2 flex items-center gap-3 text-sm">
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate">{item.name}</p>
-              <p className="text-xs text-red-600 font-semibold">
-                {item.available} / {item.minStock} min — short {item.shortfall}
+              <p className="text-xs text-amber-600 font-semibold">
+                flagged low{item.quantityNeeded > 1 ? ` · qty ${item.quantityNeeded}` : ""}
                 {item.pendingPo && <span className="text-blue-600 ml-1">· PO #{item.pendingPo.poId} pending</span>}
               </p>
             </div>
@@ -658,8 +500,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
 
 function LowStockOrdering() {
   const { data: queue = [], isLoading } = useQuery<ReorderQueueItem[]>({
-    queryKey: ["/api/work/reorder-queue"],
-    queryFn: () => apiFetch("/api/work/reorder-queue"),
+    queryKey: ["/api/work/reorder-from-flags"],
+    queryFn: () => apiFetch("/api/work/reorder-from-flags"),
     refetchInterval: 60000,
   });
 

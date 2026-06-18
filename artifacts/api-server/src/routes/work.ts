@@ -3849,6 +3849,87 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── REORDER FROM FLAGS ───────────────────────────────────────────────────────
+// Flag-driven reorder list for the Suppliers "Needs reorder" section: open shortage
+// flags (with a productId) aggregated per product and resolved to their supplier.
+
+router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+
+    const flags = await db.select().from(shortageFlagsTable)
+      .where(and(
+        eq(shortageFlagsTable.companyId, companyId),
+        isNull(shortageFlagsTable.resolvedAt),
+      ));
+    // Only product-linked flags are orderable here (need a real productId for the PO).
+    const linked = flags.filter((f) => f.productId != null);
+    if (linked.length === 0) { res.json([]); return; }
+
+    // Aggregate by product: sum requested qty, collect flag ids.
+    const agg = new Map<number, { productId: number; qty: number; flagIds: number[] }>();
+    for (const f of linked) {
+      const pid = f.productId as number;
+      const cur = agg.get(pid) ?? { productId: pid, qty: 0, flagIds: [] };
+      cur.qty += f.quantityNeeded ?? 1;
+      cur.flagIds.push(f.id);
+      agg.set(pid, cur);
+    }
+
+    const productIds = [...agg.keys()];
+    const products = await db.select().from(productsTable)
+      .where(and(inArray(productsTable.id, productIds), eq(productsTable.companyId, companyId)));
+    const productById = new Map(products.map((p) => [p.id, p]));
+
+    const supplierIds = [...new Set(products.map((p) => p.supplierId).filter((id): id is number => id != null))];
+    const supplierRows = supplierIds.length > 0
+      ? await db.select({
+          id: suppliersTable.id,
+          name: suppliersTable.name,
+          email: suppliersTable.email,
+          orderMethod: suppliersTable.orderMethod,
+          storeUrl: suppliersTable.storeUrl,
+          storePlatform: suppliersTable.storePlatform,
+        }).from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
+      : [];
+    const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
+
+    const items = [...agg.values()]
+      .map((a) => {
+        const p = productById.get(a.productId);
+        if (!p) return null; // product deleted since flagging
+        const supplier = p.supplierId != null ? supplierById.get(p.supplierId) : null;
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          quantityNeeded: a.qty,
+          shortfall: a.qty, // default order quantity in the UI
+          available: 0,
+          minStock: 0,
+          unitCost: Number(p.unitCost ?? 0),
+          supplierId: p.supplierId ?? null,
+          supplierSku: p.supplierSku ?? null,
+          supplierName: supplier?.name ?? null,
+          supplierEmail: supplier?.email ?? null,
+          supplierOrderMethod: supplier?.orderMethod ?? "email",
+          supplierStoreUrl: supplier?.storeUrl ?? null,
+          supplierStorePlatform: supplier?.storePlatform ?? null,
+          storeProductId: null,
+          storeProductUrl: p.storeProductUrl ?? null,
+          flagIds: a.flagIds,
+          pendingPo: null,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    res.json(items);
+  } catch (err) {
+    req.log.error({ err }, "Failed to build reorder-from-flags list");
+    res.status(500).json({ error: "Failed to build reorder list" });
+  }
+});
+
 // ─── BOM STOCK CHECK ──────────────────────────────────────────────────────────
 
 router.get("/bom-check", requireAdmin, async (req, res) => {

@@ -24,6 +24,7 @@ export const productsTable = pgTable("products", {
   supplierId: integer("supplier_id"),
   supplierProductName: text("supplier_product_name"),
   supplierSku: text("supplier_sku"),
+  storeProductUrl: text("store_product_url"),
   alertEmail: text("alert_email"),
   // Scannable code (barcode/QR payload) so this item can be scanned directly.
   barcode: text("barcode"),
