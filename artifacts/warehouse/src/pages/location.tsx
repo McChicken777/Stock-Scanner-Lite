@@ -35,7 +35,8 @@ function StockItem({
   const [optimisticQty, setOptimisticQty] = useState(quantity);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
-  const [flagState, setFlagState] = useState<"idle" | "loading" | "done">("idle");
+  const [flagState, setFlagState] = useState<"idle" | "prompt" | "loading" | "done">("idle");
+  const [flagQty, setFlagQty] = useState("1");
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -48,8 +49,8 @@ function StockItem({
   const reasonRef = useRef<string>("adjusted");
   const flagResetRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  async function handleFlag() {
-    if (flagState !== "idle") return;
+  async function submitFlag() {
+    const qty = Math.max(1, Math.round(Number(flagQty || "1")) || 1);
     setFlagState("loading");
     try {
       const res = await fetch("/api/work/shortage-flags", {
@@ -59,7 +60,8 @@ function StockItem({
         body: JSON.stringify({
           productId,
           productName,
-          note: `Flagged from location ${locationId} — qty: ${optimisticQty}`,
+          quantityNeeded: qty,
+          note: `Flagged from location ${locationId} — need ${qty}`,
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -136,30 +138,61 @@ function StockItem({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {isLow && (
+            {isLow && flagState !== "prompt" && (
               <span className="text-xs font-bold text-destructive uppercase tracking-wider">
                 Low Stock
               </span>
             )}
-            <button
-              onClick={handleFlag}
-              title="Flag as running low"
-              className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors ${
-                flagState === "done"
-                  ? "text-green-500"
-                  : isLow
-                  ? "text-orange-500 hover:bg-orange-100 active:bg-orange-200"
-                  : "text-muted-foreground/50 hover:text-orange-400 hover:bg-muted active:bg-muted"
-              }`}
-            >
-              {flagState === "loading" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : flagState === "done" ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <AlertTriangle className="h-4 w-4" />
-              )}
-            </button>
+            {flagState === "prompt" ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Need</span>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  autoFocus
+                  value={flagQty}
+                  onChange={(e) => setFlagQty(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  className="w-14 h-8 text-sm text-center border-2 border-orange-300 rounded-lg font-bold outline-none focus:border-orange-500"
+                />
+                <button
+                  onClick={submitFlag}
+                  title="Add to order list"
+                  className="h-8 px-2 flex items-center justify-center rounded-lg bg-orange-500 text-white font-bold text-xs hover:bg-orange-600"
+                >
+                  Flag
+                </button>
+                <button
+                  onClick={() => setFlagState("idle")}
+                  title="Cancel"
+                  className="h-8 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setFlagQty("1"); setFlagState("prompt"); }}
+                disabled={flagState === "loading" || flagState === "done"}
+                title="Flag as running low"
+                className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors ${
+                  flagState === "done"
+                    ? "text-green-500"
+                    : isLow
+                    ? "text-orange-500 hover:bg-orange-100 active:bg-orange-200"
+                    : "text-muted-foreground/50 hover:text-orange-400 hover:bg-muted active:bg-muted"
+                }`}
+              >
+                {flagState === "loading" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : flagState === "done" ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
         </div>
         
@@ -455,10 +488,13 @@ function ScanLowStockPrompt({
 }) {
   // Per-product flag state: idle → loading → done
   const [flagged, setFlagged] = useState<Record<number, "idle" | "loading" | "done">>({});
+  // How many of each item the employee says they need.
+  const [qtys, setQtys] = useState<Record<number, string>>({});
   const { toast } = useToast();
 
   async function flag(item: PromptStockItem) {
     if (flagged[item.productId] === "loading" || flagged[item.productId] === "done") return;
+    const qty = Math.max(1, Math.round(Number(qtys[item.productId] || "1")) || 1);
     setFlagged((s) => ({ ...s, [item.productId]: "loading" }));
     try {
       const res = await fetch("/api/work/shortage-flags", {
@@ -468,7 +504,8 @@ function ScanLowStockPrompt({
         body: JSON.stringify({
           productId: item.productId,
           productName: item.productName,
-          note: `Flagged from location ${locationId} — qty: ${item.quantity}`,
+          quantityNeeded: qty,
+          note: `Flagged from location ${locationId} — need ${qty}`,
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -495,7 +532,7 @@ function ScanLowStockPrompt({
             Running low on anything here?
           </DialogTitle>
           <p className="text-sm text-muted-foreground pt-1">
-            Tap any item that needs reordering — it'll be added to the order list.
+            Set how many you need, then flag it — it'll be added to the order list.
           </p>
         </DialogHeader>
         <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
@@ -516,6 +553,21 @@ function ScanLowStockPrompt({
                     {isLow && <span className="text-orange-600 font-semibold"> · low</span>}
                   </p>
                 </div>
+                {state !== "done" && (
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Need</span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={qtys[item.productId] ?? "1"}
+                      disabled={state === "loading"}
+                      onChange={(e) => setQtys((s) => ({ ...s, [item.productId]: e.target.value }))}
+                      onFocus={(e) => e.target.select()}
+                      className="w-14 h-9 text-sm text-center border-2 border-border rounded-lg font-bold outline-none focus:border-orange-400"
+                    />
+                  </div>
+                )}
                 <Button
                   size="sm"
                   variant={state === "done" ? "outline" : isLow ? "default" : "outline"}
@@ -526,7 +578,7 @@ function ScanLowStockPrompt({
                   {state === "loading" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : state === "done" ? (
-                    <><Check className="h-4 w-4" /> Flagged</>
+                    <><Check className="h-4 w-4" /> Flagged ×{Math.max(1, Math.round(Number(qtys[item.productId] || "1")) || 1)}</>
                   ) : (
                     <><AlertTriangle className="h-4 w-4" /> Flag low</>
                   )}

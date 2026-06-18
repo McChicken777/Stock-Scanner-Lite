@@ -4,7 +4,7 @@ import { useLang } from "@/contexts/lang";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, ExternalLink, Loader2, TrendingDown, Truck } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronDown, ChevronUp, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, ExternalLink, Loader2, TrendingDown, Truck, Check } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useState } from "react";
@@ -188,6 +188,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   }));
   const dialogLines = phase === "review" ? reviewLines : orderedLines;
   const dialogTotal = dialogLines.reduce((s, l) => s + (l.unitCost > 0 ? l.qty * l.unitCost : 0), 0);
+  const checkedCount = dialogLines.filter((l) => openedItems.has(l.id)).length;
   // Lines missing the data needed to auto-fill: a direct URL for custom stores, a variant ID otherwise.
   const missingStoreIds = isCustomStore
     ? dialogLines.filter((l) => !l.storeProductUrl)
@@ -424,23 +425,42 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
               </div>
             ) : isCustomStore ? (
               <div className="space-y-2">
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-muted-foreground">
+                    {checkedCount} of {dialogLines.length} added to cart
+                  </span>
+                  {group.storeUrl && (
+                    <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-purple-700">
+                      <ExternalLink className="h-3 w-3" /> Open store
+                    </a>
+                  )}
+                </div>
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {dialogLines.map((line) => {
-                    const opened = openedItems.has(line.id);
+                    const checked = openedItems.has(line.id);
                     return (
-                      <div key={line.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border">
+                      <div key={line.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${checked ? "border-green-300 bg-green-50" : "border-border"}`}>
+                        <button
+                          type="button"
+                          title={checked ? "Added — tap to undo" : "Mark as added to cart"}
+                          onClick={() => setOpenedItems((s) => {
+                            const n = new Set(s);
+                            if (n.has(line.id)) n.delete(line.id); else n.add(line.id);
+                            return n;
+                          })}
+                          className={`h-6 w-6 flex-shrink-0 rounded-md border-2 flex items-center justify-center transition-colors ${checked ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/40 text-transparent hover:border-green-400"}`}
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold truncate">{line.name} <span className="text-muted-foreground font-normal">×{line.qty}</span></p>
+                          <p className={`text-sm font-semibold truncate ${checked ? "line-through text-muted-foreground" : ""}`}>
+                            {line.name} <span className="font-normal opacity-70">×{line.qty}</span>
+                          </p>
                         </div>
                         {line.storeProductUrl ? (
-                          <a
-                            href={line.storeProductUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => setOpenedItems((s) => new Set(s).add(line.id))}
-                          >
-                            <Button size="sm" variant={opened ? "outline" : "default"} className={`h-8 text-xs font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
-                              {opened ? <><CheckCircle2 className="h-3.5 w-3.5" /> Opened</> : <><ExternalLink className="h-3.5 w-3.5" /> Open</>}
+                          <a href={line.storeProductUrl} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
+                              <ExternalLink className="h-3.5 w-3.5" /> Open
                             </Button>
                           </a>
                         ) : (
@@ -450,20 +470,16 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                     );
                   })}
                 </div>
-                {group.storeUrl && missingStoreIds.length > 0 && (
-                  <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="block">
-                    <Button variant="outline" className="w-full font-semibold gap-1.5 text-xs">
-                      <ExternalLink className="h-3.5 w-3.5" /> Open store (find items without a link)
-                    </Button>
-                  </a>
-                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Open each item, add it to your cart on the store, then tick it. Confirm below once your whole cart is correct.
+                </p>
                 <Button
                   className="w-full font-bold gap-1.5 bg-purple-600 hover:bg-purple-700"
                   disabled={markOrderedMutation.isPending || resultPoId == null}
                   onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
                 >
                   {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Order placed
+                  {checkedCount < dialogLines.length ? `Confirm whole order placed (${checkedCount}/${dialogLines.length})` : "Confirm — whole order placed"}
                 </Button>
               </div>
             ) : isWebStore ? (
