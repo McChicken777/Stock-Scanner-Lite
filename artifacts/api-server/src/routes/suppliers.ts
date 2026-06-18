@@ -142,13 +142,13 @@ router.get("/:id/products", requireAuth, async (req, res) => {
     });
     if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
 
+    // Products are linked to a supplier directly (products.supplierId), set on the
+    // product page. This endpoint is a read-only list for the supplier tab.
     const links = await db.select({
-      id: supplierProductsTable.id,
-      productId: supplierProductsTable.productId,
-      supplierSku: supplierProductsTable.supplierSku,
-      unitPrice: supplierProductsTable.unitPrice,
-      storeProductId: supplierProductsTable.storeProductId,
-      storeProductUrl: supplierProductsTable.storeProductUrl,
+      id: productsTable.id,
+      productId: productsTable.id,
+      supplierSku: productsTable.supplierSku,
+      storeProductUrl: productsTable.storeProductUrl,
       productName: productsTable.name,
       productCategory: productsTable.category,
       productItemType: productsTable.itemType,
@@ -158,11 +158,10 @@ router.get("/:id/products", requireAuth, async (req, res) => {
         WHERE ${stockTable.productId} = ${productsTable.id}
       ), 0)`.as("total_stock"),
     })
-      .from(supplierProductsTable)
-      .innerJoin(productsTable, eq(supplierProductsTable.productId, productsTable.id))
+      .from(productsTable)
       .where(and(
-        eq(supplierProductsTable.supplierId, supplierId),
-        eq(supplierProductsTable.companyId, companyId),
+        eq(productsTable.supplierId, supplierId),
+        eq(productsTable.companyId, companyId),
       ));
 
     res.json(links.map((l) => ({ ...l, totalStock: Number(l.totalStock ?? 0) })));

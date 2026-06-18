@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ArrowLeft, Save, ShoppingCart, Factory, Package } from "lucide-react";
-import { useCreateProduct, useUpdateProduct, useGetProduct } from "@workspace/api-client-react";
+import { useGetProduct } from "@workspace/api-client-react";
 import type { Product } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -46,15 +46,10 @@ const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   itemType: z.enum(["purchased_part", "manufactured_part", "final_product"]).default("purchased_part"),
   category: z.string().default(""),
-  minStock: z.coerce.number().min(0, "Must be positive"),
-  bufferStock: z.coerce.number().min(0, "Must be positive"),
-  targetStock: z.coerce.number().min(0, "Must be positive"),
-  unitCost: z.coerce.number().min(0, "Must be positive").default(0),
-  salePrice: z.coerce.number().min(0, "Must be positive").default(0),
   supplierId: z.coerce.number().optional().or(z.literal("")),
   supplierProductName: z.string().optional().or(z.literal("")),
   supplierSku: z.string().optional().or(z.literal("")),
-  alertEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+  storeProductUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -62,6 +57,8 @@ type FormValues = z.infer<typeof formSchema>;
 interface Supplier {
   id: number;
   name: string;
+  orderMethod?: string;
+  storePlatform?: string | null;
 }
 
 async function fetchSuppliers(): Promise<Supplier[]> {
@@ -110,8 +107,7 @@ export default function ProductFormPage() {
     queryFn: fetchCategories,
   });
 
-  const createProduct = useCreateProduct();
-  const updateProduct = useUpdateProduct();
+  const [isSaving, setIsSaving] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -119,20 +115,18 @@ export default function ProductFormPage() {
       name: "",
       itemType: "purchased_part",
       category: "",
-      minStock: 0,
-      bufferStock: 0,
-      targetStock: 0,
-      unitCost: 0,
-      salePrice: 0,
       supplierId: "",
       supplierProductName: "",
       supplierSku: "",
-      alertEmail: "",
+      storeProductUrl: "",
     },
   });
 
   const watchedItemType = form.watch("itemType");
   const isPurchased = watchedItemType === "purchased_part";
+  const watchedSupplierId = form.watch("supplierId");
+  const selectedSupplier = suppliers.find((s) => s.id === Number(watchedSupplierId));
+  const isWebStoreSupplier = selectedSupplier?.orderMethod === "web_store";
 
   useEffect(() => {
     if (product && isEdit) {
@@ -141,62 +135,52 @@ export default function ProductFormPage() {
         name: p.name,
         itemType: normalizeItemType(p.itemType),
         category: p.category || "",
-        minStock: (p as Product & { minStock?: number }).minStock ?? 0,
-        bufferStock: p.bufferStock,
-        targetStock: p.targetStock || 0,
-        unitCost: (p as Product & { unitCost?: number }).unitCost ?? 0,
-        salePrice: (p as Product & { salePrice?: number }).salePrice ?? 0,
         supplierId: p.supplierId ?? "",
         supplierProductName: p.supplierProductName || "",
         supplierSku: p.supplierSku || "",
-        alertEmail: p.alertEmail || "",
+        storeProductUrl: (p as Product & { storeProductUrl?: string | null }).storeProductUrl || "",
       });
     }
   }, [product, isEdit, form]);
 
-  const onSubmit = (data: FormValues) => {
+  const onSubmit = async (data: FormValues) => {
+    const linkedSupplier = isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null;
     const payload = {
-      ...data,
+      name: data.name,
       category: data.category || "",
-      minStock: data.minStock,
-      supplierId: isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null,
-      supplierProductName: isPurchased ? (data.supplierProductName || null) : null,
-      supplierSku: isPurchased ? (data.supplierSku || null) : null,
-      alertEmail: data.alertEmail || null,
-      unitCost: data.unitCost ?? 0,
-      salePrice: data.salePrice ?? 0,
+      itemType: data.itemType,
+      supplierId: linkedSupplier,
+      // For email suppliers we keep the SKU + supplier product name; for web-store
+      // suppliers we keep the per-product link instead.
+      supplierProductName: linkedSupplier && !isWebStoreSupplier ? (data.supplierProductName || null) : null,
+      supplierSku: linkedSupplier && !isWebStoreSupplier ? (data.supplierSku || null) : null,
+      storeProductUrl: linkedSupplier && isWebStoreSupplier ? (data.storeProductUrl || null) : null,
     };
 
-    if (isEdit) {
-      updateProduct.mutate(
-        { productId, data: payload },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-            queryClient.invalidateQueries({ queryKey: ["product-categories"] });
-            toast({ title: "Product updated successfully" });
-            setLocation("/products");
-          },
-          onError: () => toast({ title: "Failed to update product", variant: "destructive" })
-        }
-      );
-    } else {
-      createProduct.mutate(
-        { data: payload },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-            queryClient.invalidateQueries({ queryKey: ["product-categories"] });
-            toast({ title: "Product created successfully" });
-            setLocation("/products");
-          },
-          onError: () => toast({ title: "Failed to create product", variant: "destructive" })
-        }
-      );
+    setIsSaving(true);
+    try {
+      const res = await fetch(isEdit ? `/api/products/${productId}` : "/api/products", {
+        method: isEdit ? "PUT" : "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed");
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["product-categories"] });
+      toast({ title: isEdit ? "Product updated successfully" : "Product created successfully" });
+      setLocation("/products");
+    } catch {
+      toast({ title: isEdit ? "Failed to update product" : "Failed to create product", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const isPending = createProduct.isPending || updateProduct.isPending;
+  const isPending = isSaving;
 
   if (!isAdmin) {
     return (
@@ -305,51 +289,6 @@ export default function ProductFormPage() {
               )}
             />
 
-            <div className="grid grid-cols-3 gap-3">
-              <FormField
-                control={form.control}
-                name="minStock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsReorderAt")}</FormLabel>
-                    <FormControl>
-                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
-                    </FormControl>
-                    <p className="text-[10px] text-muted-foreground mt-1">Trigger reorder</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="bufferStock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsAlertAt")}</FormLabel>
-                    <FormControl>
-                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
-                    </FormControl>
-                    <p className="text-[10px] text-muted-foreground mt-1">Email alert below</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="targetStock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("productsTarget")}</FormLabel>
-                    <FormControl>
-                      <Input type="number" min="0" className="h-12 text-base border-2 shadow-sm font-mono" {...field} />
-                    </FormControl>
-                    <p className="text-[10px] text-muted-foreground mt-1">Restock to this</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             {isPurchased && (
               <div className="space-y-4 p-4 bg-blue-50/50 border-2 border-blue-100 rounded-xl">
                 <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Supplier Information</p>
@@ -375,111 +314,64 @@ export default function ProductFormPage() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="supplierProductName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {isWebStoreSupplier ? (
+                  <FormField
+                    control={form.control}
+                    name="storeProductUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-bold text-muted-foreground">Product Link</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="url"
+                            placeholder="Paste the item's product or add-to-cart URL"
+                            className="h-12 border-2"
+                            {...field}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          This supplier takes orders via their web store — reordering opens this link.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="supplierProductName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                <FormField
-                  control={form.control}
-                  name="supplierSku"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                    <FormField
+                      control={form.control}
+                      name="supplierSku"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Included when emailing this supplier an order.
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
               </div>
             )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <FormField
-                control={form.control}
-                name="unitCost"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsUnitCost")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="h-12 text-base border-2 shadow-sm font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Inventory valuation</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="salePrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsSalePrice")}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        className="h-12 text-base border-2 shadow-sm font-mono"
-                        {...field}
-                      />
-                    </FormControl>
-                    <p className="text-xs text-muted-foreground mt-1">Customer price — for margin</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {(() => {
-              const cost = Number(form.watch("unitCost") || 0);
-              const price = Number(form.watch("salePrice") || 0);
-              if (price <= 0) return null;
-              const margin = price - cost;
-              const pct = price > 0 ? (margin / price) * 100 : 0;
-              return (
-                <div className="flex items-center justify-between p-3 bg-emerald-50 border-2 border-emerald-100 rounded-xl">
-                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Gross margin / unit</span>
-                  <span className="font-mono font-bold text-emerald-700">${margin.toFixed(2)} ({pct.toFixed(1)}%)</span>
-                </div>
-              );
-            })()}
-
-            <FormField
-              control={form.control}
-              name="alertEmail"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Low Stock Alert Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="manager@warehouse.com" className="h-14 text-lg border-2 shadow-sm" {...field} />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Receive an email when stock drops below the minimum level
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <div className="pt-6 pb-8">
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={isPending}>
