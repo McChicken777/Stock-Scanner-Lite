@@ -233,6 +233,8 @@ export default function ProductsPage() {
 
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  // Lite filters by supplier instead of item type ("all" | "none" | "<supplierId>").
+  const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
   const [showLocationsDialog, setShowLocationsDialog] = useState(false);
@@ -311,10 +313,30 @@ export default function ProductsPage() {
     return allFiltered.filter((p) => p.itemType === "final_product");
   };
 
-  const visibleProducts = byType(activeFilter);
+  const supplierIdOf = (p: ProductWithStock) => (p as ProductWithStock & { supplierId?: number | null }).supplierId ?? null;
+  const bySupplier = (sup: string) => {
+    if (sup === "all") return allFiltered;
+    if (sup === "none") return allFiltered.filter((p) => supplierIdOf(p) == null);
+    return allFiltered.filter((p) => String(supplierIdOf(p)) === sup);
+  };
+
+  // Supplier filter chips (Lite): "All", each supplier that supplies a product, and "No supplier".
+  const supplierNameById = new Map(suppliers.map((s) => [s.id, s.name]));
+  const supplierChips: { key: string; label: string }[] = [{ key: "all", label: t("productsAll") }];
+  if (lite && products) {
+    const idsInUse = [...new Set(products.map((p) => supplierIdOf(p)).filter((id): id is number => id != null))];
+    idsInUse
+      .map((id) => ({ key: String(id), label: supplierNameById.get(id) ?? `Supplier ${id}` }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .forEach((c) => supplierChips.push(c));
+    if (products.some((p) => supplierIdOf(p) == null)) supplierChips.push({ key: "none", label: "No supplier" });
+  }
+
+  const visibleProducts = lite ? bySupplier(supplierFilter) : byType(activeFilter);
 
   const groupedProducts = () => {
-    if (activeFilter === "all" || activeFilter === "final") {
+    const flat = lite ? supplierFilter === "all" : (activeFilter === "all" || activeFilter === "final");
+    if (flat) {
       return [{ key: "__flat__", label: null, items: visibleProducts }];
     }
     const groups = new Map<string, typeof visibleProducts>();
@@ -474,24 +496,41 @@ export default function ProductsPage() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {(Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setActiveFilter(f)}
-            className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
-              activeFilter === f
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border text-muted-foreground hover:border-primary/40"
-            }`}
-          >
-            {FILTER_LABELS_T[f]}
-            {f !== "all" && products && (
-              <span className="ml-1.5 opacity-70 text-xs">
-                ({byType(f).length})
-              </span>
-            )}
-          </button>
-        ))}
+        {lite
+          ? supplierChips.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setSupplierFilter(c.key)}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+                  supplierFilter === c.key
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {c.label}
+                {c.key !== "all" && products && (
+                  <span className="ml-1.5 opacity-70 text-xs">({bySupplier(c.key).length})</span>
+                )}
+              </button>
+            ))
+          : (Object.keys(FILTER_LABELS) as FilterType[]).map((f) => (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold border-2 transition-all ${
+                  activeFilter === f
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {FILTER_LABELS_T[f]}
+                {f !== "all" && products && (
+                  <span className="ml-1.5 opacity-70 text-xs">
+                    ({byType(f).length})
+                  </span>
+                )}
+              </button>
+            ))}
       </div>
 
       {isLoading ? (
