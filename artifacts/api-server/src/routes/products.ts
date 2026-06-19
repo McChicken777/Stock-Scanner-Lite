@@ -75,12 +75,13 @@ type ImportItemType = (typeof VALID_ITEM_TYPES)[number];
 
 const importRowSchema = z.object({
   name: z.string().trim().min(1),
-  type: z.enum(VALID_ITEM_TYPES),
+  type: z.enum(VALID_ITEM_TYPES).default("purchased_part"),
   category: z.string().default(""),
   min_stock: z.coerce.number().int().min(0).default(0),
   target_stock: z.coerce.number().int().min(0).default(0),
   supplier_name: z.string().default(""),
   supplier_sku: z.string().default(""),
+  product_link: z.string().url().or(z.literal("")).default(""),
   alert_email: z.string().email().or(z.literal("")).default(""),
 });
 
@@ -93,10 +94,10 @@ router.post("/import", requireAdmin, async (req, res) => {
       return;
     }
 
-    const suppliers = await db.select({ id: suppliersTable.id, name: suppliersTable.name })
+    const suppliers = await db.select({ id: suppliersTable.id, name: suppliersTable.name, orderMethod: suppliersTable.orderMethod })
       .from(suppliersTable)
       .where(eq(suppliersTable.companyId, companyId));
-    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.id]));
+    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), { id: s.id, orderMethod: s.orderMethod }]));
 
     const skipped: { row: number; reason: string }[] = [];
     const toInsert: { rowIndex: number; values: typeof productsTable.$inferInsert }[] = [];
@@ -109,9 +110,10 @@ router.post("/import", requireAdmin, async (req, res) => {
       }
 
       const d = parsed.data;
-      const supplierId = d.supplier_name
+      const supplier = d.supplier_name
         ? (supplierMap.get(d.supplier_name.toLowerCase().trim()) ?? null)
         : null;
+      const isWebStore = supplier?.orderMethod === "web_store";
 
       toInsert.push({
         rowIndex: i + 1,
@@ -122,8 +124,11 @@ router.post("/import", requireAdmin, async (req, res) => {
           minStock: d.min_stock,
           bufferStock: 0,
           targetStock: d.target_stock,
-          supplierId,
-          supplierSku: d.supplier_sku || null,
+          supplierId: supplier?.id ?? null,
+          // Use the column that matches how this supplier takes orders: a web-store
+          // supplier gets the product link; an email supplier gets the SKU.
+          supplierSku: supplier && !isWebStore ? (d.supplier_sku || null) : null,
+          storeProductUrl: isWebStore ? (d.product_link || null) : null,
           alertEmail: d.alert_email || null,
           companyId,
         },

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ProductLocationsDialog } from "@/components/product-locations-dialog";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -44,6 +44,7 @@ interface CsvRow {
   target_stock: string;
   supplier_name: string;
   supplier_sku: string;
+  product_link: string;
   alert_email: string;
   _valid: boolean;
   _error: string;
@@ -86,30 +87,45 @@ function parseCsvLine(line: string): string[] {
   return result;
 }
 
-function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): CsvRow[] {
+function validateRows(
+  raw: Record<string, string>[],
+  knownSuppliers: string[],
+  lite: boolean,
+  methodByName: Map<string, string>,
+): CsvRow[] {
   const supplierSet = new Set(knownSuppliers.map((s) => s.toLowerCase().trim()));
   return raw.map((r) => {
     const name = (r["name"] ?? "").trim();
-    const type = (r["type"] ?? "").trim();
+    // Lite only handles purchased products, so the type column is optional/forced.
+    const type = lite ? "purchased_part" : (r["type"] ?? "").trim();
     const minStockRaw = (r["min_stock"] ?? "0").trim();
     const targetStockRaw = (r["target_stock"] ?? "0").trim();
     const alertEmailRaw = (r["alert_email"] ?? "").trim();
+    const productLink = (r["product_link"] ?? "").trim();
     const errors: string[] = [];
     let supplierWarning: string | undefined;
 
     if (!name) errors.push("Name is required");
-    if (!VALID_CSV_TYPES.includes(type as CsvItemType))
+    if (!lite && !VALID_CSV_TYPES.includes(type as CsvItemType))
       errors.push(`Type must be one of: ${VALID_CSV_TYPES.join(", ")}`);
-    if (minStockRaw && (isNaN(Number(minStockRaw)) || Number(minStockRaw) < 0 || !Number.isInteger(Number(minStockRaw))))
+    if (!lite && minStockRaw && (isNaN(Number(minStockRaw)) || Number(minStockRaw) < 0 || !Number.isInteger(Number(minStockRaw))))
       errors.push("min_stock must be a non-negative integer");
-    if (targetStockRaw && (isNaN(Number(targetStockRaw)) || Number(targetStockRaw) < 0 || !Number.isInteger(Number(targetStockRaw))))
+    if (!lite && targetStockRaw && (isNaN(Number(targetStockRaw)) || Number(targetStockRaw) < 0 || !Number.isInteger(Number(targetStockRaw))))
       errors.push("target_stock must be a non-negative integer");
-    if (alertEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertEmailRaw))
+    if (!lite && alertEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertEmailRaw))
       errors.push("alert_email must be a valid email or blank");
+    if (productLink && !/^https?:\/\/.+/i.test(productLink))
+      errors.push("product_link must be a valid URL (http/https) or blank");
 
     const supplierName = (r["supplier_name"] ?? "").trim();
-    if (supplierName && !supplierSet.has(supplierName.toLowerCase()))
+    if (supplierName && !supplierSet.has(supplierName.toLowerCase())) {
       supplierWarning = `Supplier "${supplierName}" not found — will import without supplier link`;
+    } else if (supplierName) {
+      // Gentle hint: web-store supplier wants a product link; email supplier wants a SKU.
+      const method = methodByName.get(supplierName.toLowerCase());
+      if (method === "web_store" && !productLink)
+        supplierWarning = `"${supplierName}" orders via web store — add a product_link`;
+    }
 
     const error = errors.join("; ");
     return {
@@ -120,6 +136,7 @@ function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): 
       target_stock: targetStockRaw || "0",
       supplier_name: supplierName,
       supplier_sku: (r["supplier_sku"] ?? "").trim(),
+      product_link: productLink,
       alert_email: alertEmailRaw,
       _valid: errors.length === 0,
       _error: error,
@@ -128,16 +145,30 @@ function validateRows(raw: Record<string, string>[], knownSuppliers: string[]): 
   });
 }
 
-function downloadTemplate() {
-  const headers = "name,type,category,min_stock,target_stock,supplier_name,supplier_sku,alert_email";
-  const ex1 = "M10 Hex Bolts,purchased_part,Fasteners,50,200,Acme Hardware,ACM-M10-HB,";
-  const ex2 = "Side Panel Bracket,manufactured_part,Frames,5,20,,,";
-  const content = [headers, ex1, ex2].join("\n");
+function downloadTemplate(lite: boolean) {
+  let headers: string;
+  let examples: string[];
+  if (lite) {
+    // Lite products are always purchased. Fill supplier_sku for email suppliers,
+    // or product_link for web-store suppliers — the importer uses whichever fits.
+    headers = "name,category,supplier_name,supplier_sku,product_link";
+    examples = [
+      "M10x25mm Screws,Fasteners,Acme Hardware,ACM-M10-25,",
+      "Blue Paint 5L,Paint,PaintWorld Online,,https://paintworld.example/products/blue-5l",
+    ];
+  } else {
+    headers = "name,type,category,min_stock,target_stock,supplier_name,supplier_sku,product_link,alert_email";
+    examples = [
+      "M10 Hex Bolts,purchased_part,Fasteners,50,200,Acme Hardware,ACM-M10-HB,,",
+      "Side Panel Bracket,manufactured_part,Frames,5,20,,,,",
+    ];
+  }
+  const content = [headers, ...examples].join("\n");
   const blob = new Blob([content], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "inventory_template.csv";
+  a.download = lite ? "products_template.csv" : "inventory_template.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -154,7 +185,7 @@ function typeBadgeClass(raw: string | undefined | null): string {
   return "bg-blue-100 text-blue-700 hover:bg-blue-100";
 }
 
-async function fetchSuppliers(): Promise<{ id: number; name: string }[]> {
+async function fetchSuppliers(): Promise<{ id: number; name: string; orderMethod?: string }[]> {
   const res = await fetch("/api/suppliers", { credentials: "include" });
   if (!res.ok) return [];
   return res.json();
@@ -169,6 +200,7 @@ async function importProducts(rows: CsvRow[]): Promise<{ created: number; skippe
     target_stock: r.target_stock,
     supplier_name: r.supplier_name,
     supplier_sku: r.supplier_sku,
+    product_link: r.product_link,
     alert_email: r.alert_email,
   }));
   const res = await fetch("/api/products/import", {
@@ -186,9 +218,11 @@ export default function ProductsPage() {
   const deleteProduct = useDeleteProduct();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
+  const lite = !atLeast("standard");
 
   const FILTER_LABELS_T: Record<FilterType, string> = {
     all: t("productsAll"),
@@ -249,7 +283,8 @@ export default function ProductsPage() {
         toast({ title: "No rows found in file", variant: "destructive" });
         return;
       }
-      setCsvRows(validateRows(raw, suppliers.map((s) => s.name)));
+      const methodByName = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.orderMethod ?? "email"]));
+      setCsvRows(validateRows(raw, suppliers.map((s) => s.name), lite, methodByName));
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -412,7 +447,7 @@ export default function ProductsPage() {
         <div className="flex items-center gap-2">
           {isAdmin && (
             <>
-              <Button size="sm" variant="outline" className="font-bold" onClick={downloadTemplate}>
+              <Button size="sm" variant="outline" className="font-bold" onClick={() => downloadTemplate(lite)}>
                 <Download className="h-4 w-4 mr-1" /> {t("productsTemplate")}
               </Button>
               <Button size="sm" variant="outline" className="font-bold" onClick={() => { setShowImport(true); setCsvRows(null); }}>
@@ -586,7 +621,7 @@ export default function ProductsPage() {
                   onChange={handleFileChange}
                 />
                 <div className="flex gap-2 justify-center">
-                  <Button variant="outline" onClick={downloadTemplate}>
+                  <Button variant="outline" onClick={() => downloadTemplate(lite)}>
                     <Download className="h-4 w-4 mr-1" /> {t("productsTemplate")}
                   </Button>
                   <Button onClick={() => fileInputRef.current?.click()}>
@@ -598,10 +633,12 @@ export default function ProductsPage() {
               <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
                 <p className="font-semibold text-foreground">CSV columns</p>
                 <p><span className="font-mono bg-muted px-1 rounded">name</span> — required. Product name.</p>
-                <p><span className="font-mono bg-muted px-1 rounded">type</span> — required. One of: <span className="font-mono">purchased_part</span>, <span className="font-mono">manufactured_part</span>, <span className="font-mono">final_product</span></p>
+                {!lite && <p><span className="font-mono bg-muted px-1 rounded">type</span> — required. One of: <span className="font-mono">purchased_part</span>, <span className="font-mono">manufactured_part</span>, <span className="font-mono">final_product</span></p>}
                 <p><span className="font-mono bg-muted px-1 rounded">category</span> — optional. Groups items (e.g. Fasteners, Hydraulics).</p>
-                <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional whole numbers (integers).</p>
-                <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly.</p>
+                {!lite && <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional whole numbers (integers).</p>}
+                <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly (create suppliers first, with their order method).</p>
+                <p><span className="font-mono bg-muted px-1 rounded">supplier_sku</span> — for suppliers that take orders by <span className="font-semibold">email</span>.</p>
+                <p><span className="font-mono bg-muted px-1 rounded">product_link</span> — for suppliers that order via their <span className="font-semibold">web store</span> (paste the item's page/cart URL). The importer uses whichever matches the supplier.</p>
               </div>
             </div>
           ) : (
@@ -631,11 +668,12 @@ export default function ProductsPage() {
                     <tr>
                       <th className="text-left px-2 py-2 font-semibold">#</th>
                       <th className="text-left px-2 py-2 font-semibold">Name</th>
-                      <th className="text-left px-2 py-2 font-semibold">Type</th>
+                      {!lite && <th className="text-left px-2 py-2 font-semibold">Type</th>}
                       <th className="text-left px-2 py-2 font-semibold">Category</th>
-                      <th className="text-left px-2 py-2 font-semibold">Min</th>
-                      <th className="text-left px-2 py-2 font-semibold">Target</th>
+                      {!lite && <th className="text-left px-2 py-2 font-semibold">Min</th>}
+                      {!lite && <th className="text-left px-2 py-2 font-semibold">Target</th>}
                       <th className="text-left px-2 py-2 font-semibold">Supplier</th>
+                      {lite && <th className="text-left px-2 py-2 font-semibold">SKU / Link</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -648,14 +686,16 @@ export default function ProductsPage() {
                           <td className="px-2 py-1.5 font-medium">
                             {row.name || <span className="text-destructive italic">missing</span>}
                           </td>
-                          <td className="px-2 py-1.5">
-                            <span className={!VALID_CSV_TYPES.includes(row.type as CsvItemType) ? "text-destructive" : ""}>
-                              {row.type || "—"}
-                            </span>
-                          </td>
+                          {!lite && (
+                            <td className="px-2 py-1.5">
+                              <span className={!VALID_CSV_TYPES.includes(row.type as CsvItemType) ? "text-destructive" : ""}>
+                                {row.type || "—"}
+                              </span>
+                            </td>
+                          )}
                           <td className="px-2 py-1.5 text-muted-foreground">{row.category || "—"}</td>
-                          <td className="px-2 py-1.5 font-mono">{row.min_stock || "0"}</td>
-                          <td className="px-2 py-1.5 font-mono">{row.target_stock || "0"}</td>
+                          {!lite && <td className="px-2 py-1.5 font-mono">{row.min_stock || "0"}</td>}
+                          {!lite && <td className="px-2 py-1.5 font-mono">{row.target_stock || "0"}</td>}
                           <td className="px-2 py-1.5">
                             {row.supplier_name ? (
                               <span className={row._supplierWarning ? "text-amber-700" : ""}>
@@ -664,11 +704,16 @@ export default function ProductsPage() {
                               </span>
                             ) : "—"}
                           </td>
+                          {lite && (
+                            <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[160px]">
+                              {row.product_link ? <span className="text-purple-700">link</span> : row.supplier_sku || "—"}
+                            </td>
+                          )}
                         </tr>
                         {!row._valid && (
                           <tr className="bg-red-50">
                             <td />
-                            <td colSpan={6} className="px-2 pb-1.5 text-destructive text-[11px]">
+                            <td colSpan={lite ? 4 : 6} className="px-2 pb-1.5 text-destructive text-[11px]">
                               {row._error}
                             </td>
                           </tr>
