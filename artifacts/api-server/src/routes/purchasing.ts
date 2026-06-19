@@ -8,6 +8,7 @@ import {
 import { eq, and, sum, sql, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
+import { sendSupplierOrderEmail, isEmailConfigured } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -243,6 +244,62 @@ router.put("/:id", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to update purchase order");
     res.status(500).json({ error: "Failed to update purchase order" });
+  }
+});
+
+// ─── SEND ORDER EMAIL ──────────────────────────────────────────────────────────
+// Emails the supplier the purchase order. Builds the order from the PO + its items,
+// so the client doesn't have to be trusted with the contents.
+
+router.post("/:id/send-email", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const id = Number(req.params.id);
+
+    const [po] = await db.select({
+      id: purchaseOrdersTable.id,
+      supplierId: purchaseOrdersTable.supplierId,
+    })
+      .from(purchaseOrdersTable)
+      .where(and(eq(purchaseOrdersTable.id, id), eq(purchaseOrdersTable.companyId, companyId)));
+    if (!po) { res.status(404).json({ error: "Purchase order not found" }); return; }
+
+    if (!po.supplierId) { res.status(400).json({ error: "This order has no supplier" }); return; }
+    const [supplier] = await db.select({ name: suppliersTable.name, email: suppliersTable.email })
+      .from(suppliersTable)
+      .where(and(eq(suppliersTable.id, po.supplierId), eq(suppliersTable.companyId, companyId)));
+    if (!supplier?.email) { res.status(400).json({ error: "Supplier has no email address" }); return; }
+
+    if (!isEmailConfigured()) {
+      res.status(200).json({ sent: false, reason: "not_configured" });
+      return;
+    }
+
+    const items = await db.select({
+      name: productsTable.name,
+      sku: productsTable.supplierSku,
+      quantity: purchaseOrderItemsTable.quantityOrdered,
+      unitCost: purchaseOrderItemsTable.unitPrice,
+    })
+      .from(purchaseOrderItemsTable)
+      .innerJoin(productsTable, eq(purchaseOrderItemsTable.productId, productsTable.id))
+      .where(eq(purchaseOrderItemsTable.poId, id));
+
+    const [company] = await db.select({ name: companiesTable.name })
+      .from(companiesTable).where(eq(companiesTable.id, companyId));
+
+    const sent = await sendSupplierOrderEmail({
+      supplierName: supplier.name,
+      supplierEmail: supplier.email,
+      poId: id,
+      companyName: company?.name ?? null,
+      items: items.map((i) => ({ name: i.name, sku: i.sku, quantity: i.quantity, unitCost: i.unitCost })),
+    });
+
+    res.status(200).json({ sent, to: supplier.email });
+  } catch (err) {
+    req.log.error({ err }, "Failed to send order email");
+    res.status(500).json({ error: "Failed to send order email" });
   }
 });
 

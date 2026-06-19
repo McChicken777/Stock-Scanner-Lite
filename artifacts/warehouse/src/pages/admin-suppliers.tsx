@@ -163,6 +163,17 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
   const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
   const [orderedLines, setOrderedLines] = useState<OrderLine[]>([]);
+  const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+
+  async function sendOrderEmail(poId: number) {
+    setEmailStatus("sending");
+    try {
+      const r = await apiFetch(`/api/purchase-orders/${poId}/send-email`, { method: "POST" });
+      setEmailStatus(r?.sent ? "sent" : "failed");
+    } catch {
+      setEmailStatus("failed");
+    }
+  }
 
   const isWebStore = group.orderMethod === "web_store";
   const isCustomStore = isWebStore && group.storePlatform === "custom";
@@ -256,6 +267,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             lines.map((l) => ({ name: l.name, supplierSku: l.supplierSku, quantity: l.qty, unitCost: l.unitCost }))
           )
         );
+        // Try to send it server-side; UI falls back to the mailto link if this fails.
+        sendOrderEmail(po.id);
       }
       setPhase("done");
       toast({ title: `PO #${po.id} created` });
@@ -276,6 +289,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     setMailtoUrl(null);
     setOpenedItems(new Set());
     setOrderedLines([]);
+    setEmailStatus("idle");
     setOpen(true);
   }
 
@@ -502,21 +516,39 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {mailtoUrl && (
-                  <a href={mailtoUrl} className="block">
-                    <Button className="w-full font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
-                      <Mail className="h-4 w-4" /> Open email to {group.supplierName ?? "supplier"}
-                    </Button>
-                  </a>
+                {emailStatus === "sending" && (
+                  <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Sending order to {group.supplierEmail}…
+                  </div>
+                )}
+                {emailStatus === "sent" && (
+                  <div className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
+                    <CheckCircle2 className="h-4 w-4" /> Order emailed to {group.supplierEmail}
+                  </div>
+                )}
+                {(emailStatus === "failed" || emailStatus === "idle") && (
+                  <>
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
+                      Couldn't send automatically (email isn't set up on the server). Open it in your own mail app instead:
+                    </div>
+                    {mailtoUrl && (
+                      <a href={mailtoUrl} className="block">
+                        <Button className="w-full font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
+                          <Mail className="h-4 w-4" /> Open email to {group.supplierName ?? "supplier"}
+                        </Button>
+                      </a>
+                    )}
+                  </>
                 )}
                 <Button
-                  variant="outline"
+                  variant={emailStatus === "sent" ? "default" : "outline"}
                   className="w-full font-semibold gap-1.5"
                   disabled={markOrderedMutation.isPending || resultPoId == null}
                   onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
                 >
                   {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Email sent — mark ordered
+                  {emailStatus === "sent" ? "Mark as ordered" : "Mark as ordered anyway"}
                 </Button>
               </div>
             )}
