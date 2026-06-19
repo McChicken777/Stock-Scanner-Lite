@@ -6,7 +6,7 @@ import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock, Users, Edit2 } from "lucide-react";
+import { ArrowLeft, Building2, Loader2, Check, Calendar, Globe, Plus, Trash2, Download, Crown, Clock, Users, Edit2, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Company {
@@ -20,6 +20,11 @@ interface Company {
   logo: string | null;
   quoteSignerName: string | null;
   currency: string;
+  emailFromName: string | null;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpUser: string | null;
+  smtpConfigured: boolean;
   features: {
     inventory: boolean;
     alerts: boolean;
@@ -179,6 +184,148 @@ function fmtDate(dateStr: string): string {
 
 function crossesMidnight(start: string, end: string): boolean {
   return end < start;
+}
+
+const SMTP_PROVIDERS: Record<string, { host: string; port: number }> = {
+  Gmail: { host: "smtp.gmail.com", port: 587 },
+  "Outlook / Office365": { host: "smtp.office365.com", port: 587 },
+  Yahoo: { host: "smtp.mail.yahoo.com", port: 465 },
+};
+
+function EmailSettingsCard({ company }: { company: Company }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [fromName, setFromName] = useState(company.emailFromName ?? company.name ?? "");
+  const [host, setHost] = useState(company.smtpHost ?? "");
+  const [port, setPort] = useState(String(company.smtpPort ?? 587));
+  const [smtpUser, setSmtpUser] = useState(company.smtpUser ?? "");
+  const [pass, setPass] = useState("");
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = {
+        emailFromName: fromName.trim() || null,
+        smtpHost: host.trim() || null,
+        smtpPort: Number(port) || null,
+        smtpUser: smtpUser.trim() || null,
+      };
+      if (pass) body.smtpPass = pass;
+      const res = await fetch("/api/company", {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/company"] });
+      setPass("");
+      toast({ title: "Email settings saved" });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/company/email-test", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: (d: { to: string }) => toast({ title: `Test email sent to ${d.to}` }),
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  function applyProvider(name: string) {
+    const p = SMTP_PROVIDERS[name];
+    if (p) { setHost(p.host); setPort(String(p.port)); }
+  }
+
+  return (
+    <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Mail className="h-4 w-4 text-muted-foreground" />
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Order email (send from your address)</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Used to email suppliers your orders. {company.smtpConfigured
+              ? <span className="text-green-600 font-semibold">Configured ✓</span>
+              : <span className="text-amber-600 font-semibold">Not set up</span>}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground">Email provider</label>
+        <select
+          onChange={(e) => applyProvider(e.target.value)}
+          defaultValue=""
+          className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          <option value="">Pick to auto-fill server / port…</option>
+          {Object.keys(SMTP_PROVIDERS).map((name) => <option key={name} value={name}>{name}</option>)}
+        </select>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground">From name (shown to suppliers)</label>
+        <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder={company.name} className="h-10 border-2" />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground">Your email address (username)</label>
+        <Input value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} type="email" placeholder="orders@yourbusiness.com" className="h-10 border-2" />
+      </div>
+
+      <div className="flex gap-2">
+        <div className="flex-[2] space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground">SMTP server</label>
+          <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.gmail.com" className="h-10 border-2" />
+        </div>
+        <div className="flex-1 space-y-1.5">
+          <label className="text-xs font-semibold text-muted-foreground">Port</label>
+          <Input value={port} onChange={(e) => setPort(e.target.value)} type="number" placeholder="587" className="h-10 border-2" />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-muted-foreground">
+          {company.smtpConfigured ? "App password (leave blank to keep current)" : "App password"}
+        </label>
+        <Input value={pass} onChange={(e) => setPass(e.target.value)} type="password" placeholder={company.smtpConfigured ? "•••••••• (saved)" : "App password"} className="h-10 border-2 font-mono" autoComplete="new-password" />
+        <p className="text-[11px] text-muted-foreground">
+          For Gmail/Outlook, this is an <span className="font-semibold">app password</span>, not your normal login — create one in your email account's security settings (requires 2-step verification).
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          className="flex-1 gap-1.5"
+          disabled={saveMutation.isPending || !host.trim() || !smtpUser.trim() || (!company.smtpConfigured && !pass)}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          Save
+        </Button>
+        <Button
+          variant="outline"
+          className="flex-1 gap-1.5"
+          disabled={testMutation.isPending || !company.smtpConfigured}
+          onClick={() => testMutation.mutate()}
+        >
+          {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+          Send test
+        </Button>
+      </div>
+      {!company.smtpConfigured && (
+        <p className="text-[11px] text-muted-foreground">Save your settings, then use “Send test” to check it works.</p>
+      )}
+    </div>
+  );
 }
 
 export default function AdminCompanyPage() {
@@ -643,6 +790,9 @@ export default function AdminCompanyPage() {
             </Button>
           </div>
         </div>
+
+        {/* Order email (SMTP) — all plans */}
+        <EmailSettingsCard company={company} />
 
         {/* Work hours + Shifts (combined) — Standard/Pro only */}
         {atLeast("standard") && <div className="bg-card border-2 border-border rounded-xl p-4 space-y-5">

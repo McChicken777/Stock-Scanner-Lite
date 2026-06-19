@@ -68,6 +68,13 @@ export const companiesTable = pgTable("companies", {
   logo: text("logo"),
   quoteSignerName: text("quote_signer_name"),
   currency: text("currency").notNull().default("USD"),
+  // Per-company SMTP for sending supplier order emails from the company's own address.
+  // smtpPassEnc is the app-password encrypted at rest (never returned to the client).
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port"),
+  smtpUser: text("smtp_user"),
+  smtpPassEnc: text("smtp_pass_enc"),
+  emailFromName: text("email_from_name"),
   outlineSettings: jsonb("outline_settings").notNull().$type<OutlineSettings>().$defaultFn(() => ({
     opCodes: {}, defaultOpCodes: [], conditionalExclusions: [], profiles: {},
   })),

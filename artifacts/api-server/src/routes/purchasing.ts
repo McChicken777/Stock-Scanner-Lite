@@ -8,7 +8,8 @@ import {
 import { eq, and, sum, sql, inArray, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
-import { sendSupplierOrderEmail, isEmailConfigured } from "../lib/email";
+import { sendSupplierOrderEmail } from "../lib/email";
+import { decryptSecret } from "../lib/crypto";
 
 const router: IRouter = Router();
 
@@ -270,7 +271,13 @@ router.post("/:id/send-email", requireAdmin, async (req, res) => {
       .where(and(eq(suppliersTable.id, po.supplierId), eq(suppliersTable.companyId, companyId)));
     if (!supplier?.email) { res.status(400).json({ error: "Supplier has no email address" }); return; }
 
-    if (!isEmailConfigured()) {
+    // Use the company's own SMTP settings.
+    const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, companyId));
+    const smtpPass = decryptSecret(company?.smtpPassEnc);
+    const smtpHost = company?.smtpHost;
+    const smtpPort = company?.smtpPort;
+    const smtpUser = company?.smtpUser;
+    if (!company || !smtpHost || !smtpPort || !smtpUser || !smtpPass) {
       res.status(200).json({ sent: false, reason: "not_configured" });
       return;
     }
@@ -285,14 +292,12 @@ router.post("/:id/send-email", requireAdmin, async (req, res) => {
       .innerJoin(productsTable, eq(purchaseOrderItemsTable.productId, productsTable.id))
       .where(eq(purchaseOrderItemsTable.poId, id));
 
-    const [company] = await db.select({ name: companiesTable.name })
-      .from(companiesTable).where(eq(companiesTable.id, companyId));
-
     const sent = await sendSupplierOrderEmail({
+      smtp: { host: smtpHost, port: smtpPort, user: smtpUser, pass: smtpPass, fromName: company.emailFromName },
       supplierName: supplier.name,
       supplierEmail: supplier.email,
       poId: id,
-      companyName: company?.name ?? null,
+      companyName: company.name ?? null,
       items: items.map((i) => ({ name: i.name, sku: i.sku, quantity: i.quantity, unitCost: i.unitCost })),
     });
 

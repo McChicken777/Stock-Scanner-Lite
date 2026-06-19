@@ -15,18 +15,53 @@ export function isEmailConfigured(): boolean {
   return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  fromName?: string | null;
+}
+
+function buildTransport(smtp: SmtpConfig) {
+  return nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.port === 465,
+    auth: { user: smtp.user, pass: smtp.pass },
+  });
+}
+
+function fromHeader(smtp: SmtpConfig): string {
+  const name = smtp.fromName?.trim();
+  return name ? `"${name.replace(/"/g, "")}" <${smtp.user}>` : smtp.user;
+}
+
+/** Send a quick test email using a company's SMTP config, to verify their setup. */
+export async function sendTestEmail(smtp: SmtpConfig, to: string): Promise<boolean> {
+  try {
+    await buildTransport(smtp).sendMail({
+      from: fromHeader(smtp),
+      to,
+      subject: "Fabriflow email test ✓",
+      text: "This is a test from Fabriflow. Your email settings are working — order emails will send from this address.",
+    });
+    logger.info({ to }, "Test email sent");
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Test email failed");
+    return false;
+  }
+}
+
 export async function sendSupplierOrderEmail(params: {
+  smtp: SmtpConfig;
   supplierName: string;
   supplierEmail: string;
   poId: number;
   companyName?: string | null;
   items: { name: string; sku?: string | null; quantity: number; unitCost?: number | null }[];
 }): Promise<boolean> {
-  if (!isEmailConfigured()) {
-    logger.warn({ poId: params.poId }, "Email not configured — skipping supplier order email");
-    return false;
-  }
-
   try {
     const from = params.companyName?.trim() || "our team";
     const subject = `Purchase Order #${params.poId} — Order Request`;
@@ -45,8 +80,8 @@ export async function sendSupplierOrderEmail(params: {
       return `<li><strong>${i.name}</strong>${sku} — Qty: <strong>${i.quantity}</strong>${price}</li>`;
     }).join("");
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    await buildTransport(params.smtp).sendMail({
+      from: fromHeader(params.smtp),
       to: params.supplierEmail,
       subject,
       text,
