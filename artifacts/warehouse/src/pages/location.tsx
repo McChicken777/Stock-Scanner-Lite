@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useSearch } from "wouter";
 import { useLang } from "@/contexts/lang";
-import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check } from "lucide-react";
-import { useGetLocation, useUpdateStock, useListProducts, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
+import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check, ArrowLeftRight } from "lucide-react";
+import { useGetLocation, useUpdateStock, useListProducts, useListLocations, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,79 @@ import { useAuth, usePlan } from "@/contexts/auth";
 import { naturalCompare } from "@/lib/utils";
 import { Link } from "wouter";
 
+function LiteMoveDialog({ open, onOpenChange, productId, productName, fromLocation, quantity }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  productId: number;
+  productName: string;
+  fromLocation: string;
+  quantity: number;
+}) {
+  const { data: locations } = useListLocations();
+  const [toLocation, setToLocation] = useState("");
+  const [moving, setMoving] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const { t } = useLang();
+
+  const options = (locations ?? []).filter((l) => l.id !== fromLocation).sort((a, b) => naturalCompare(a.id, b.id));
+
+  async function move() {
+    if (!toLocation) return;
+    setMoving(true);
+    try {
+      const res = await fetch("/api/stock/transfer", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromLocationId: fromLocation, toLocationId: toLocation, productId, quantity: Math.max(1, quantity), changedBy: user?.username ?? null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(fromLocation) });
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      toast({ title: `${productName} → ${toLocation}` });
+      onOpenChange(false);
+      setToLocation("");
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{t("locationMoveTo")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm"><span className="font-bold">{productName}</span></p>
+          <select
+            value={toLocation}
+            onChange={(e) => setToLocation(e.target.value)}
+            className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm"
+          >
+            <option value="">{t("locationMovePick")}</option>
+            {options.map((l) => (
+              <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
+            <Button className="flex-1 font-bold gap-1.5" onClick={move} disabled={moving || !toLocation}>
+              {moving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+              {t("locationMove")}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StockItem({
   locationId,
   productId,
@@ -24,6 +97,7 @@ function StockItem({
   reserved = 0,
   available,
   lite = false,
+  isAdmin = false,
 }: {
   locationId: string,
   productId: number,
@@ -34,12 +108,14 @@ function StockItem({
   reserved?: number,
   available?: number,
   lite?: boolean,
+  isAdmin?: boolean,
 }) {
   const [optimisticQty, setOptimisticQty] = useState(quantity);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [flagState, setFlagState] = useState<"idle" | "prompt" | "loading" | "done">("idle");
   const [flagQty, setFlagQty] = useState("1");
+  const [moveOpen, setMoveOpen] = useState(false);
   const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -148,6 +224,15 @@ function StockItem({
                 Low Stock
               </span>
             )}
+            {lite && isAdmin && flagState !== "prompt" && (
+              <button
+                onClick={() => setMoveOpen(true)}
+                title={t("locationMoveTo")}
+                className="h-8 w-8 flex items-center justify-center rounded-full text-muted-foreground/60 hover:text-primary hover:bg-muted active:bg-muted transition-colors"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+              </button>
+            )}
             {flagState === "prompt" ? (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Need</span>
@@ -253,6 +338,16 @@ function StockItem({
         </div>
         )}
       </CardContent>
+      {lite && isAdmin && (
+        <LiteMoveDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          productId={productId}
+          productName={productName}
+          fromLocation={locationId}
+          quantity={optimisticQty}
+        />
+      )}
     </Card>
   );
 }
@@ -395,7 +490,7 @@ function FillStockDialog({ locationId, currentStock }: {
   );
 }
 
-function AddProductDialog({ locationId, existingProductIds = [] }: { locationId: string; existingProductIds?: number[] }) {
+function AddProductDialog({ locationId, existingProductIds = [], lite = false }: { locationId: string; existingProductIds?: number[]; lite?: boolean }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -408,7 +503,9 @@ function AddProductDialog({ locationId, existingProductIds = [] }: { locationId:
 
   const existing = new Set(existingProductIds);
   const filteredProducts = (products ?? [])
-    .filter(p => !existing.has(p.id))
+    // Lite: one bin per product — only show items not placed in any bin yet.
+    // Other plans: just exclude what's already in this bin.
+    .filter(p => lite ? ((p.totalStock ?? 0) === 0) : !existing.has(p.id))
     .filter(p =>
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.category.toLowerCase().includes(search.toLowerCase())
@@ -442,6 +539,7 @@ function AddProductDialog({ locationId, existingProductIds = [] }: { locationId:
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed");
       queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
       toast({ title: t("locationProductAdded"), description: t("locationProductAddedDesc") });
       onOpenChange(false);
     } catch (err) {
@@ -462,7 +560,10 @@ function AddProductDialog({ locationId, existingProductIds = [] }: { locationId:
         <DialogHeader className="p-4 border-b">
           <DialogTitle>{t("locationAddProduct")}</DialogTitle>
         </DialogHeader>
-        <div className="p-4 border-b bg-muted/30">
+        <div className="p-4 border-b bg-muted/30 space-y-2">
+          {lite && (
+            <p className="text-[11px] text-muted-foreground">{t("locationAddOnlyUnplaced")}</p>
+          )}
           <div className="relative">
             <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             <Input
@@ -744,7 +845,7 @@ export default function LocationPage() {
             <p className="text-muted-foreground font-medium mb-4">{t("locationNoProducts")}</p>
             {isAdmin && (
               <div className="space-y-2">
-                <AddProductDialog locationId={location.id} />
+                <AddProductDialog locationId={location.id} lite={lite} />
                 {!lite && <FillStockDialog locationId={location.id} currentStock={[]} />}
               </div>
             )}
@@ -764,13 +865,14 @@ export default function LocationPage() {
                   reserved={item.reserved}
                   available={item.available}
                   lite={lite}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
 
             {isAdmin && (
               <div className="pt-4 space-y-2">
-                <AddProductDialog locationId={location.id} existingProductIds={location.stock.map((s) => s.productId)} />
+                <AddProductDialog locationId={location.id} existingProductIds={location.stock.map((s) => s.productId)} lite={lite} />
                 {!lite && (
                   <FillStockDialog
                     locationId={location.id}

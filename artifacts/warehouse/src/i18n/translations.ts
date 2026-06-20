@@ -396,6 +396,7 @@ const KEYS = [
   "companyEmailPasswordHint", "companyEmailSendTest", "companyEmailTestHint",
   "companyEmailSaved", "companyEmailTestSentTo",
   "helpGuideTitle", "helpGuideSubtitle",
+  "locationMove", "locationMoveTo", "locationMovePick", "locationAddOnlyUnplaced",
 
   // ── Misc ──────────────────────────────────────────────────────────────────
   "langLabel",
@@ -1306,6 +1307,10 @@ const en: Dict = {
   companyEmailTestSentTo: "Test email sent to",
   helpGuideTitle: "Inventory guide",
   helpGuideSubtitle: "How the app works, end to end",
+  locationMove: "Move",
+  locationMoveTo: "Move to another bin",
+  locationMovePick: "Choose destination bin…",
+  locationAddOnlyUnplaced: "Only items not in a bin yet are shown. To relocate an item, use Move on the bin.",
 
   // ── Template outline import ───────────────────────────────────────────────
   outlineTitle: "Outline Import",
@@ -2252,6 +2257,10 @@ const sl: Dict = {
   companyEmailTestSentTo: "Testno sporočilo poslano na",
   helpGuideTitle: "Vodnik za zalogo",
   helpGuideSubtitle: "Kako aplikacija deluje, od začetka do konca",
+  locationMove: "Premakni",
+  locationMoveTo: "Premakni v drug predal",
+  locationMovePick: "Izberi ciljni predal…",
+  locationAddOnlyUnplaced: "Prikazani so le izdelki, ki še niso v predalu. Za premik izdelka uporabi Premakni na predalu.",
 
   // ── Template outline import ───────────────────────────────────────────────
   outlineTitle: "Uvoz strukture",
