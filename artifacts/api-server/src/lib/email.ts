@@ -97,7 +97,9 @@ export async function sendSupplierOrderEmail(params: {
 }): Promise<boolean> {
   try {
     const L = ORDER_STRINGS[params.lang === "sl" ? "sl" : "en"];
-    const from = params.companyName?.trim() || L.ourTeam;
+    // Sign with the configured "From name" (the name the email is sent from),
+    // falling back to the company name.
+    const from = params.smtp.fromName?.trim() || params.companyName?.trim() || L.ourTeam;
     const subject = L.subject(params.poId);
     const rows = params.items.map((i) => {
       const sku = i.sku ? ` (${L.sku}: ${i.sku})` : "";
