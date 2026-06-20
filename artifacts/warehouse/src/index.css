@@ -221,6 +221,11 @@
   }
 }
 
+@keyframes scan-line {
+  0%   { transform: translateY(8px); }
+  100% { transform: translateY(272px); }
+}
+
 @layer utilities {
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;

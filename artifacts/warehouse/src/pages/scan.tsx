@@ -19,7 +19,6 @@ export default function ScanPage() {
   const requestRef = useRef<number | undefined>(undefined);
   const handlingRef = useRef(false);
 
-  // Resolve a scanned/typed code to a bin location or a product, then route there.
   const resolveAndGo = async (raw: string) => {
     const code = raw.trim();
     if (!code || handlingRef.current) return;
@@ -33,7 +32,6 @@ export default function ScanPage() {
       setManualMode(true);
       handlingRef.current = false;
     } catch {
-      // Network/parse failure — fall back to treating it as a location id
       setLocation(`/location/${encodeURIComponent(code)}?scanned=1`);
     }
   };
@@ -48,15 +46,13 @@ export default function ScanPage() {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" }
         });
-        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute("playsinline", "true"); // required for iOS Safari
+          videoRef.current.setAttribute("playsinline", "true");
           videoRef.current.play();
           requestRef.current = requestAnimationFrame(tick);
         }
-      } catch (err) {
-        console.error("Error accessing camera:", err);
+      } catch {
         setHasCamera(false);
         setManualMode(true);
         setError(t("scanCameraError"));
@@ -66,12 +62,8 @@ export default function ScanPage() {
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current);
-      }
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   }, [manualMode]);
 
@@ -81,25 +73,22 @@ export default function ScanPage() {
     if (videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
-      
+
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
+
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Scan for QR code
+
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert",
         });
 
         if (code && code.data) {
-          // Resolve the code (bin location or item) then route. resolveAndGo guards
-          // against rapid duplicate scans.
           resolveAndGo(code.data);
-          return; // Stop scanning
+          return;
         }
       }
     }
@@ -109,105 +98,119 @@ export default function ScanPage() {
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (manualId.trim()) {
-      handlingRef.current = false; // allow a fresh manual attempt
-      // Location IDs are stored uppercase; normalize typed input so entry is case-insensitive.
+      handlingRef.current = false;
       resolveAndGo(manualId.trim().toUpperCase());
     }
   };
 
-  return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-black relative">
-      {!manualMode ? (
-        <>
-          <div className="absolute top-0 left-0 w-full p-4 z-10 bg-gradient-to-b from-black/80 to-transparent">
-            <h1 className="text-white font-bold text-xl flex items-center gap-2">
-              <Scan className="h-5 w-5" />
-              {t("scanTitle")}
-            </h1>
-            <p className="text-white/70 text-sm mt-1">{t("scanDesc")}</p>
-          </div>
-
-          <div className="flex-1 relative flex items-center justify-center overflow-hidden">
-            <video 
-              ref={videoRef} 
-              className="absolute min-w-full min-h-full object-cover" 
-            />
-            <canvas ref={canvasRef} className="hidden" />
-            
-            {/* Viewfinder overlay */}
-            <div className="relative z-10 w-64 h-64 border-2 border-primary/80 rounded-2xl flex items-center justify-center">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-primary rounded-tl-lg -translate-x-1 -translate-y-1"></div>
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-primary rounded-tr-lg translate-x-1 -translate-y-1"></div>
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-primary rounded-bl-lg -translate-x-1 translate-y-1"></div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-primary rounded-br-lg translate-x-1 translate-y-1"></div>
-              <div className="w-full h-[2px] bg-primary/50 animate-[scan_2s_ease-in-out_infinite]"></div>
-            </div>
-            
-            <div className="absolute inset-0 bg-black/40 z-0 [mask-image:radial-gradient(ellipse_at_center,transparent_30%,black_60%)]"></div>
-          </div>
-
-          <div className="absolute bottom-0 left-0 w-full p-6 z-10 bg-gradient-to-t from-black/90 to-transparent flex justify-center">
-            <Button 
-              size="lg" 
-              variant="secondary" 
-              onClick={() => setManualMode(true)}
-              className="w-full max-w-xs h-14 font-bold uppercase tracking-wider"
-            >
-              <Keyboard className="mr-2 h-5 w-5" />
-              {t("scanManualEntry")}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 bg-background p-4 flex flex-col pt-12">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold tracking-tight">{t("scanManualEntry")}</h1>
-            <p className="text-muted-foreground mt-1">{t("scanManualDesc")}</p>
-          </div>
-
-          {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          <form onSubmit={handleManualSubmit} className="space-y-6 flex-1">
-            <div className="space-y-2">
-              <label htmlFor="locationId" className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                {t("scanLocationId")}
-              </label>
-              <Input
-                id="locationId"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-                placeholder="e.g. A1-01-02"
-                className="h-16 text-2xl font-mono uppercase text-center border-2 border-border focus-visible:border-primary focus-visible:ring-primary shadow-sm"
-                autoFocus
-                autoComplete="off"
-                autoCapitalize="off"
-              />
-            </div>
-            <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={!manualId.trim()}>
-              {t("scanOpenLocation")}
-            </Button>
-          </form>
-
-          {hasCamera && (
-            <div className="mt-auto pt-6">
-              <Button 
-                variant="outline" 
-                size="lg" 
-                className="w-full h-14 font-bold"
-                onClick={() => setManualMode(false)}
-              >
-                <Scan className="mr-2 h-5 w-5" />
-                {t("scanBackToCamera")}
-              </Button>
-            </div>
-          )}
+  // ── Manual mode — normal page flow within AppLayout ───────────────────────
+  if (manualMode) {
+    return (
+      <div className="flex-1 bg-background p-4 flex flex-col pt-12">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold tracking-tight">{t("scanManualEntry")}</h1>
+          <p className="text-muted-foreground mt-1">{t("scanManualDesc")}</p>
         </div>
-      )}
-    </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <form onSubmit={handleManualSubmit} className="space-y-6 flex-1">
+          <div className="space-y-2">
+            <label htmlFor="locationId" className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              {t("scanLocationId")}
+            </label>
+            <Input
+              id="locationId"
+              value={manualId}
+              onChange={(e) => setManualId(e.target.value)}
+              placeholder="e.g. A1-01-02"
+              className="h-16 text-2xl font-mono uppercase text-center border-2 border-border focus-visible:border-primary focus-visible:ring-primary shadow-sm"
+              autoFocus
+              autoComplete="off"
+              autoCapitalize="off"
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={!manualId.trim()}>
+            {t("scanOpenLocation")}
+          </Button>
+        </form>
+
+        {hasCamera && (
+          <div className="mt-auto pt-6">
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full h-14 font-bold"
+              onClick={() => setManualMode(false)}
+            >
+              <Scan className="mr-2 h-5 w-5" />
+              {t("scanBackToCamera")}
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Camera mode — fixed full-screen overlay above AppLayout chrome ─────────
+  return (
+    <>
+      <canvas ref={canvasRef} className="hidden" />
+
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        {/* Live camera feed */}
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+
+        {/* Header */}
+        <div className="relative z-20 px-5 pt-12 pb-4">
+          <h1 className="text-white font-bold text-xl flex items-center gap-2 drop-shadow">
+            <Scan className="h-5 w-5" />
+            {t("scanTitle")}
+          </h1>
+          <p className="text-white/60 text-sm mt-0.5">{t("scanDesc")}</p>
+        </div>
+
+        {/* Viewfinder — box-shadow punches a clean hole through the dark overlay */}
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <div
+            className="relative w-72 h-72"
+            style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.72)" }}
+          >
+            {/* Corner brackets */}
+            <div className="absolute top-0 left-0 w-9 h-9 border-t-[3px] border-l-[3px] border-primary rounded-tl-xl" />
+            <div className="absolute top-0 right-0 w-9 h-9 border-t-[3px] border-r-[3px] border-primary rounded-tr-xl" />
+            <div className="absolute bottom-0 left-0 w-9 h-9 border-b-[3px] border-l-[3px] border-primary rounded-bl-xl" />
+            <div className="absolute bottom-0 right-0 w-9 h-9 border-b-[3px] border-r-[3px] border-primary rounded-br-xl" />
+
+            {/* Animated scan line */}
+            <div
+              className="absolute left-4 right-4 h-[2px] rounded-full bg-gradient-to-r from-transparent via-primary to-transparent"
+              style={{ animation: "scan-line 1.8s ease-in-out infinite alternate" }}
+            />
+          </div>
+        </div>
+
+        {/* Bottom controls */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-3 p-6 pb-10">
+          <button
+            onClick={() => setManualMode(true)}
+            className="flex items-center justify-center gap-2 w-full max-w-xs h-14 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 text-white font-bold text-sm uppercase tracking-wider active:scale-95 transition-transform"
+          >
+            <Keyboard className="h-5 w-5" />
+            {t("scanManualEntry")}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }

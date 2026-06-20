@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -248,36 +248,101 @@ function ProtectedRoutes() {
   );
 }
 
-// ── Splash screen ────────────────────────────────────────────────────────────
+// ── Splash sparks (canvas, true 60 fps) ──────────────────────────────────────
+
+function SplashParticles() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    type P = { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string };
+    const particles: P[] = [];
+    const COLORS = ["#f97316", "#fb923c", "#fbbf24", "#fdba74", "#fff7ed"];
+
+    function burst(count: number) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.8 + Math.random() * 5;
+        particles.push({
+          x: cx, y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1.2,
+          life: 1,
+          size: 1.5 + Math.random() * 2.5,
+          color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        });
+      }
+    }
+
+    burst(35);
+    const t1 = setTimeout(() => burst(28), 520);
+
+    let raf: number;
+    let last = performance.now();
+
+    function frame(now: number) {
+      const dt = Math.min((now - last) / 16.67, 3);
+      last = now;
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 0.13 * dt;
+        p.life -= 0.024 * dt;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+        ctx!.save();
+        ctx!.globalAlpha = Math.max(0, p.life);
+        ctx!.fillStyle = p.color;
+        ctx!.beginPath();
+        ctx!.arc(p.x, p.y, p.size * Math.max(0.1, p.life), 0, Math.PI * 2);
+        ctx!.fill();
+        ctx!.restore();
+      }
+
+      if (particles.length > 0) raf = requestAnimationFrame(frame);
+    }
+
+    raf = requestAnimationFrame(frame);
+    return () => { cancelAnimationFrame(raf); clearTimeout(t1); };
+  }, []);
+
+  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />;
+}
+
+// ── Splash screen ─────────────────────────────────────────────────────────────
 
 function SplashScreen({ onDone }: { onDone: () => void }) {
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFading(true), 1100);
-    const t2 = setTimeout(onDone, 1500);
+    const t1 = setTimeout(() => setFading(true), 1900);
+    const t2 = setTimeout(onDone, 2400);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onDone]);
 
   return (
     <div
-      className="fixed inset-0 z-[9999] bg-primary flex flex-col items-center justify-center gap-4"
-      style={{ transition: "opacity 0.4s ease", opacity: fading ? 0 : 1, pointerEvents: "none" }}
+      className="fixed inset-0 z-[9999] bg-secondary flex flex-col items-center justify-center"
+      style={{ transition: "opacity 0.5s ease", opacity: fading ? 0 : 1, pointerEvents: "none" }}
     >
-      <div className="flex items-center gap-3 animate-in fade-in zoom-in-95 duration-300">
-        <div className="h-14 w-14 rounded-2xl bg-white/15 flex items-center justify-center">
-          <FabriflowMark className="h-8 w-8 text-white" />
+      <SplashParticles />
+      <div className="relative z-10 flex flex-col items-center gap-5 animate-in zoom-in-90 fade-in duration-500">
+        <div className="h-24 w-24 rounded-3xl bg-primary flex items-center justify-center shadow-2xl">
+          <FabriflowMark className="h-14 w-14 text-white" />
         </div>
-        <span className="text-white font-black text-3xl tracking-tight">Fabriflow</span>
-      </div>
-      <div className="flex gap-1.5 mt-2 animate-in fade-in duration-500 delay-200">
-        {[0, 1, 2].map((i) => (
-          <div
-            key={i}
-            className="h-1.5 w-1.5 rounded-full bg-white/60"
-            style={{ animation: `pulse 1s ease-in-out ${i * 0.2}s infinite` }}
-          />
-        ))}
+        <span className="text-white font-black text-4xl tracking-tight">Fabriflow</span>
       </div>
     </div>
   );
