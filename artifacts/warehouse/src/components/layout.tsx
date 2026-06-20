@@ -347,9 +347,7 @@ interface WorkerNotifications { total: number; autoClosed: number; leaveDecision
 function WorkerDesktopSidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
-  const { atLeast } = usePlan();
   const { t } = useLang();
-  const lite = !atLeast("standard");
 
   const { data: painterData } = useQuery<{ isPainter: boolean }>({
     queryKey: ["/api/work/painter-access"],
@@ -378,21 +376,12 @@ function WorkerDesktopSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         <SidebarSection label={t("navNavigation")} />
-        {lite ? (
-          <>
-            <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/")} />
-            <SideNavItem href="/work/reorder-queue" icon={Flag} label={t("reorderReportShortage")} active={location.startsWith("/work/reorder-queue")} />
-          </>
-        ) : (
-          <>
-            <SideNavItem href="/tasks" icon={CheckSquare} label={t("navMyTasks")} active={location.startsWith("/tasks")} />
-            <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
-            <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
-            <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
-            {painterData?.isPainter && (
-              <SideNavItem href="/work/paint-queue" icon={Palette} label={t("navPaintShop")} active={location.startsWith("/work/paint-queue")} />
-            )}
-          </>
+        <SideNavItem href="/tasks" icon={CheckSquare} label={t("navMyTasks")} active={location.startsWith("/tasks")} />
+        <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
+        <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
+        <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
+        {painterData?.isPainter && (
+          <SideNavItem href="/work/paint-queue" icon={Palette} label={t("navPaintShop")} active={location.startsWith("/work/paint-queue")} />
         )}
       </nav>
       <div className="flex-shrink-0 border-t border-border p-2">
@@ -865,15 +854,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: health } = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), refetchInterval: 60000 } });
   const [location] = useLocation();
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
   const isHealthy = health?.status === "ok";
   const isOwner = user?.role === "owner";
   const isAdmin = user?.role === "admin";
   const isSupervisor = user?.role === "worker" && !!user?.isSupervisor;
   const isWorker = user?.role === "worker" && !user?.isSupervisor;
+  // Lite workers only flag — give them a chrome-free view (no sidebar).
+  const liteWorker = isWorker && !atLeast("standard");
 
   const isWorkSection = location.startsWith("/work") || location.startsWith("/tasks") || location.startsWith("/attendance") || location.startsWith("/orders") || location.startsWith("/supervisor");
-  const hasSidebar = !isOwner && (isAdmin || isSupervisor || isWorker);
+  const hasSidebar = !isOwner && (isAdmin || isSupervisor || (isWorker && !liteWorker));
 
   function BottomNav() {
     if (isOwner) return null;
@@ -929,7 +921,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebars — hidden on mobile via lg:flex inside each component */}
       {isAdmin && <AdminDesktopSidebar />}
       {isSupervisor && <SupervisorDesktopSidebar />}
-      {isWorker && <WorkerDesktopSidebar />}
+      {isWorker && !liteWorker && <WorkerDesktopSidebar />}
 
       {/* Main content area */}
       <div className={cn(
