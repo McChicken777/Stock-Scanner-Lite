@@ -196,9 +196,9 @@ function StockItem({
   return (
     <Card className={`border-2 ${isLow ? 'border-destructive/30 bg-destructive/5' : 'border-border'} overflow-hidden`}>
       <CardContent className="p-0">
-        <div className="p-4 border-b border-border/50 bg-background/50 flex justify-between items-start">
-          <div>
-            <h3 className="font-bold text-lg leading-tight">{productName}</h3>
+        <div className="p-4 border-b border-border/50 bg-background/50 flex justify-between items-start gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold text-lg leading-tight break-words">{productName}</h3>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-xs font-medium px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">
                 {category}
@@ -700,7 +700,7 @@ function ScanLowStockPrompt({
                 }`}
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm truncate">{item.productName}</p>
+                  <p className="font-semibold text-sm break-words">{item.productName}</p>
                   <p className="text-xs text-muted-foreground">
                     {lite
                       ? item.productCategory || "Item"
