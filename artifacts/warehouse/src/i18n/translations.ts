@@ -1460,7 +1460,7 @@ const sl: Dict = {
   dashRecentActivity: "Nedavna aktivnost",
   dashNoRecentActivity: "Ni nedavne aktivnosti",
   dashViewFullHistory: "Ogled celotne zgodovine",
-  dashQuotesPipeline: "Cevovod ponudb",
+  dashQuotesPipeline: "Ponudbe",
   dashOpenProjects: "Odprti nalogi",
   dashProductionTasks: "Produkcijske naloge",
   dashReady: "Pripravljeno",
