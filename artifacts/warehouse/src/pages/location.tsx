@@ -221,7 +221,7 @@ function StockItem({
           <div className="flex items-center gap-2 flex-shrink-0">
             {isLow && flagState !== "prompt" && (
               <span className="text-xs font-bold text-destructive uppercase tracking-wider">
-                Low Stock
+                {t("locationLowStock")}
               </span>
             )}
             {lite && isAdmin && flagState !== "prompt" && (
@@ -235,7 +235,7 @@ function StockItem({
             )}
             {flagState === "prompt" ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Need</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{t("locationNeed")}</span>
                 <input
                   type="number"
                   min={1}
@@ -248,10 +248,10 @@ function StockItem({
                 />
                 <button
                   onClick={submitFlag}
-                  title="Add to order list"
+                  title={t("locationFlagLow")}
                   className="h-8 px-2 flex items-center justify-center rounded-lg bg-orange-500 text-white font-bold text-xs hover:bg-orange-600"
                 >
-                  Flag
+                  {t("locationFlagLow")}
                 </button>
                 <button
                   onClick={() => setFlagState("idle")}
@@ -364,6 +364,7 @@ function FillStockDialog({ locationId, currentStock }: {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { t } = useLang();
 
   function onOpenChange(v: boolean) {
     setOpen(v);
@@ -429,18 +430,18 @@ function FillStockDialog({ locationId, currentStock }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="lg" variant="outline" className="w-full h-12 text-sm font-bold border-2 gap-2">
-          <Layers className="h-5 w-5" /> Set quantities
+          <Layers className="h-5 w-5" /> {t("locationSetQtys")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="p-4 border-b">
-          <DialogTitle>Set stock quantities</DialogTitle>
+          <DialogTitle>{t("locationSetQtysTitle")}</DialogTitle>
         </DialogHeader>
         <div className="p-4 border-b bg-muted/30">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="Search products..."
+              placeholder={`${t("search")}…`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-11"
@@ -453,7 +454,7 @@ function FillStockDialog({ locationId, currentStock }: {
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : sorted.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8 text-sm">No products found</p>
+            <p className="text-center text-muted-foreground py-8 text-sm">{t("locationNoProductsFound")}</p>
           ) : sorted.map((p) => {
             const current = currentMap.get(p.id);
             const val = qtys[p.id] ?? "";
@@ -462,7 +463,7 @@ function FillStockDialog({ locationId, currentStock }: {
               <div key={p.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border ${changed ? "border-primary bg-primary/5" : "border-border"}`}>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{p.name}</p>
-                  <p className="text-xs text-muted-foreground">{p.category}{current !== undefined ? ` · currently ${current}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">{p.category}{current !== undefined ? ` · ${t("locationCurrently")} ${current}` : ""}</p>
                 </div>
                 <Input
                   type="number"
@@ -479,10 +480,10 @@ function FillStockDialog({ locationId, currentStock }: {
           })}
         </div>
         <div className="p-4 border-t bg-background flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>{t("cancel")}</Button>
           <Button className="flex-1 font-bold gap-1.5" onClick={handleSave} disabled={saving || changedCount === 0}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {changedCount > 0 ? `Save ${changedCount} change${changedCount !== 1 ? "s" : ""}` : "No changes"}
+            {changedCount > 0 ? `${t("save")} (${changedCount})` : t("locationNoChanges")}
           </Button>
         </div>
       </DialogContent>
@@ -642,6 +643,7 @@ function ScanLowStockPrompt({
   // How many of each item the employee says they need.
   const [qtys, setQtys] = useState<Record<number, string>>({});
   const { toast } = useToast();
+  const { t } = useLang();
 
   async function flag(item: PromptStockItem) {
     if (flagged[item.productId] === "loading" || flagged[item.productId] === "done") return;
@@ -680,10 +682,10 @@ function ScanLowStockPrompt({
         <DialogHeader className="p-4 border-b">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-orange-500" />
-            Running low on anything here?
+            {t("locationScanPromptTitle")}
           </DialogTitle>
           <p className="text-sm text-muted-foreground pt-1">
-            Set how many you need, then flag it — it'll be added to the order list.
+            {t("locationScanPromptDesc")}
           </p>
         </DialogHeader>
         <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
@@ -707,7 +709,7 @@ function ScanLowStockPrompt({
                 </div>
                 {state !== "done" && (
                   <div className="flex flex-col items-center flex-shrink-0">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Need</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{t("locationNeed")}</span>
                     <input
                       type="number"
                       min={1}
@@ -730,9 +732,9 @@ function ScanLowStockPrompt({
                   {state === "loading" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : state === "done" ? (
-                    <><Check className="h-4 w-4" /> Flagged ×{Math.max(1, Math.round(Number(qtys[item.productId] || "1")) || 1)}</>
+                    <><Check className="h-4 w-4" /> {t("locationFlagged")} ×{Math.max(1, Math.round(Number(qtys[item.productId] || "1")) || 1)}</>
                   ) : (
-                    <><AlertTriangle className="h-4 w-4" /> Flag low</>
+                    <><AlertTriangle className="h-4 w-4" /> {t("locationFlagLow")}</>
                   )}
                 </Button>
               </div>
@@ -740,7 +742,7 @@ function ScanLowStockPrompt({
           })}
         </div>
         <div className="p-4 border-t bg-background">
-          <Button className="w-full font-bold" onClick={() => onOpenChange(false)}>Done</Button>
+          <Button className="w-full font-bold" onClick={() => onOpenChange(false)}>{t("done")}</Button>
         </div>
       </DialogContent>
     </Dialog>

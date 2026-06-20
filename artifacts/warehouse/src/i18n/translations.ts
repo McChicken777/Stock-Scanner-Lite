@@ -397,6 +397,10 @@ const KEYS = [
   "companyEmailSaved", "companyEmailTestSentTo",
   "helpGuideTitle", "helpGuideSubtitle",
   "locationMove", "locationMoveTo", "locationMovePick", "locationAddOnlyUnplaced",
+  "locationLowStock", "locationScanPromptTitle", "locationScanPromptDesc",
+  "locationNeed", "locationFlagLow", "locationFlagged",
+  "locationSetQtys", "locationSetQtysTitle", "locationNoProductsFound",
+  "locationCurrently", "locationNoChanges",
 
   // ── Misc ──────────────────────────────────────────────────────────────────
   "langLabel",
@@ -1311,6 +1315,17 @@ const en: Dict = {
   locationMoveTo: "Move to another bin",
   locationMovePick: "Choose destination bin…",
   locationAddOnlyUnplaced: "Only items not in a bin yet are shown. To relocate an item, use Move on the bin.",
+  locationLowStock: "Low Stock",
+  locationScanPromptTitle: "Running low on anything here?",
+  locationScanPromptDesc: "Set how many you need, then flag it — it'll be added to the order list.",
+  locationNeed: "Need",
+  locationFlagLow: "Flag low",
+  locationFlagged: "Flagged",
+  locationSetQtys: "Set quantities",
+  locationSetQtysTitle: "Set stock quantities",
+  locationNoProductsFound: "No products found",
+  locationCurrently: "currently",
+  locationNoChanges: "No changes",
 
   // ── Template outline import ───────────────────────────────────────────────
   outlineTitle: "Outline Import",
@@ -2261,6 +2276,17 @@ const sl: Dict = {
   locationMoveTo: "Premakni v drug predal",
   locationMovePick: "Izberi ciljni predal…",
   locationAddOnlyUnplaced: "Prikazani so le izdelki, ki še niso v predalu. Za premik izdelka uporabi Premakni na predalu.",
+  locationLowStock: "Nizka zaloga",
+  locationScanPromptTitle: "Kaj manjka tukaj?",
+  locationScanPromptDesc: "Vnesite koliko potrebujete in označite — dodano bo v seznam naročil.",
+  locationNeed: "Potrebno",
+  locationFlagLow: "Označi",
+  locationFlagged: "Označeno",
+  locationSetQtys: "Nastavi količine",
+  locationSetQtysTitle: "Nastavi zalogo",
+  locationNoProductsFound: "Ni najdenih izdelkov",
+  locationCurrently: "trenutno",
+  locationNoChanges: "Ni sprememb",
 
   // ── Template outline import ───────────────────────────────────────────────
   outlineTitle: "Uvoz strukture",

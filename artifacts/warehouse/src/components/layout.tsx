@@ -9,7 +9,6 @@ import {
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import { LANGUAGES } from "@/i18n/translations";
@@ -845,12 +844,10 @@ function TutorialHelpButton() {
 // ─── App Layout ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { data: health } = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey(), refetchInterval: 60000 } });
   const [location] = useLocation();
   const { user } = useAuth();
   const { atLeast } = usePlan();
   const { t } = useLang();
-  const isHealthy = health?.status === "ok";
   const isOwner = user?.role === "owner";
   const isAdmin = user?.role === "admin";
   const isSupervisor = user?.role === "worker" && !!user?.isSupervisor;
@@ -943,13 +940,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <LangToggle />
                 <TutorialHelpButton />
                 <UserMenu />
-                <div className={cn(
-                  "flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider",
-                  isHealthy ? "border-green-500/20 text-green-600" : "border-red-500/20 text-red-600"
-                )}>
-                  <div className={cn("h-1.5 w-1.5 rounded-full", isHealthy ? "bg-green-500 animate-pulse" : "bg-red-500")} />
-                  {isHealthy ? "On" : "Off"}
-                </div>
               </div>
             </div>
           </div>
