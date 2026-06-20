@@ -651,6 +651,8 @@ export default function LocationPage() {
   const id = params?.id ? decodeURIComponent(params.id) : "";
   const { t } = useLang();
   const { atLeast } = usePlan();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "owner";
   const lite = !atLeast("standard");
   const search = useSearch();
   const cameFromScan = new URLSearchParams(search).get("scanned") === "1";
@@ -740,10 +742,12 @@ export default function LocationPage() {
         {location.stock.length === 0 ? (
           <div className="bg-muted/30 border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 text-center">
             <p className="text-muted-foreground font-medium mb-4">{t("locationNoProducts")}</p>
-            <div className="space-y-2">
-              <AddProductDialog locationId={location.id} />
-              {!lite && <FillStockDialog locationId={location.id} currentStock={[]} />}
-            </div>
+            {isAdmin && (
+              <div className="space-y-2">
+                <AddProductDialog locationId={location.id} />
+                {!lite && <FillStockDialog locationId={location.id} currentStock={[]} />}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -764,15 +768,17 @@ export default function LocationPage() {
               ))}
             </div>
 
-            <div className="pt-4 space-y-2">
-              <AddProductDialog locationId={location.id} existingProductIds={location.stock.map((s) => s.productId)} />
-              {!lite && (
-                <FillStockDialog
-                  locationId={location.id}
-                  currentStock={location.stock.map((s) => ({ productId: s.productId, quantity: s.quantity }))}
-                />
-              )}
-            </div>
+            {isAdmin && (
+              <div className="pt-4 space-y-2">
+                <AddProductDialog locationId={location.id} existingProductIds={location.stock.map((s) => s.productId)} />
+                {!lite && (
+                  <FillStockDialog
+                    locationId={location.id}
+                    currentStock={location.stock.map((s) => ({ productId: s.productId, quantity: s.quantity }))}
+                  />
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

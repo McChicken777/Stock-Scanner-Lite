@@ -97,6 +97,20 @@ function WorkerRoutes() {
   );
 }
 
+// Lite has no work orders/attendance — a Lite worker can only scan a bin and flag
+// what's running low (plus the manual shortage report).
+function LiteWorkerRoutes() {
+  return (
+    <Switch>
+      <Route path="/scan" component={ScanPage} />
+      <Route path="/location/:id" component={LocationPage} />
+      <Route path="/work/reorder-queue" component={ReorderQueuePage} />
+      <Route path="/"><Redirect to="/scan" /></Route>
+      <Route component={() => <Redirect to="/scan" />} />
+    </Switch>
+  );
+}
+
 function ProtectedRoutes() {
   const { user, isLoading } = useAuth();
   const { atLeast } = usePlan();
@@ -145,11 +159,12 @@ function ProtectedRoutes() {
     );
   }
 
-  // Plain workers (non-supervisor) get a simplified work-only view
+  // Plain workers (non-supervisor) get a simplified view matching the company's plan:
+  // Standard/Pro → work-order tasks; Lite → scan & flag only.
   if (user.role === "worker" && !user.isSupervisor) {
     return (
       <AppLayout>
-        <WorkerRoutes />
+        {atLeast("standard") ? <WorkerRoutes /> : <LiteWorkerRoutes />}
       </AppLayout>
     );
   }

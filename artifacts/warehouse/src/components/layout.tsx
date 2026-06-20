@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical, Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
@@ -347,7 +347,9 @@ interface WorkerNotifications { total: number; autoClosed: number; leaveDecision
 function WorkerDesktopSidebar() {
   const [location] = useLocation();
   const { logout } = useAuth();
+  const { atLeast } = usePlan();
   const { t } = useLang();
+  const lite = !atLeast("standard");
 
   const { data: painterData } = useQuery<{ isPainter: boolean }>({
     queryKey: ["/api/work/painter-access"],
@@ -376,12 +378,21 @@ function WorkerDesktopSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
         <SidebarSection label={t("navNavigation")} />
-        <SideNavItem href="/tasks" icon={CheckSquare} label={t("navMyTasks")} active={location.startsWith("/tasks")} />
-        <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
-        <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
-        <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
-        {painterData?.isPainter && (
-          <SideNavItem href="/work/paint-queue" icon={Palette} label={t("navPaintShop")} active={location.startsWith("/work/paint-queue")} />
+        {lite ? (
+          <>
+            <SideNavItem href="/scan" icon={ScanLine} label={t("navScan")} active={location.startsWith("/scan") || location.startsWith("/location/")} />
+            <SideNavItem href="/work/reorder-queue" icon={Flag} label={t("reorderReportShortage")} active={location.startsWith("/work/reorder-queue")} />
+          </>
+        ) : (
+          <>
+            <SideNavItem href="/tasks" icon={CheckSquare} label={t("navMyTasks")} active={location.startsWith("/tasks")} />
+            <SideNavItem href="/work/inbound" icon={PackageCheck} label={t("navInbound")} active={location.startsWith("/work/inbound")} />
+            <SideNavItem href="/work/queues" icon={Layers} label={t("navStationQueues")} active={location.startsWith("/work/queue")} />
+            <SideNavItem href="/attendance" icon={CalendarCheck} label={t("navAttendance")} active={location.startsWith("/attendance")} badge={workerNotifs?.total ?? 0} />
+            {painterData?.isPainter && (
+              <SideNavItem href="/work/paint-queue" icon={Palette} label={t("navPaintShop")} active={location.startsWith("/work/paint-queue")} />
+            )}
+          </>
         )}
       </nav>
       <div className="flex-shrink-0 border-t border-border p-2">
@@ -790,12 +801,18 @@ function WorkerBottomNav() {
   const attendanceBadge = workerNotifs?.total ?? 0;
   const queueBadge = queueCount?.pending ?? 0;
 
-  const navItems = [
-    { href: "/tasks", icon: CheckSquare, label: t("navMyTasks"), badge: 0, show: atLeast("standard") },
-    { href: "/work/queues", icon: Layers, label: t("navQueues"), badge: queueBadge, show: atLeast("pro") },
-    { href: "/attendance", icon: CalendarCheck, label: t("navAttendance"), badge: attendanceBadge, show: atLeast("standard") },
-    ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: t("navPaintShop"), badge: 0, show: true }] : []),
-  ].filter((i) => i.show);
+  // Lite worker: only scan & flag.
+  const navItems = !atLeast("standard")
+    ? [
+        { href: "/scan", icon: ScanLine, label: t("navScan"), badge: 0 },
+        { href: "/work/reorder-queue", icon: Flag, label: t("reorderReportShortage"), badge: 0 },
+      ]
+    : [
+        { href: "/tasks", icon: CheckSquare, label: t("navMyTasks"), badge: 0, show: atLeast("standard") },
+        { href: "/work/queues", icon: Layers, label: t("navQueues"), badge: queueBadge, show: atLeast("pro") },
+        { href: "/attendance", icon: CalendarCheck, label: t("navAttendance"), badge: attendanceBadge, show: atLeast("standard") },
+        ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: t("navPaintShop"), badge: 0, show: true }] : []),
+      ].filter((i) => i.show);
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
