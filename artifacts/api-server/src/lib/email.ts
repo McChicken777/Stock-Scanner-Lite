@@ -73,10 +73,10 @@ const ORDER_STRINGS = {
   },
   sl: {
     ourTeam: "naša ekipa",
-    subject: (po: number) => `Naročilnica št. ${po}`,
+    subject: (po: number) => `Naročilo št. ${po}`,
     greeting: (name: string) => `Spoštovani ${name},`,
     intro: "Prosimo, obdelajte naslednje naročilo:",
-    poLabel: (po: number) => `Naročilnica št. ${po}`,
+    poLabel: (po: number) => `Naročilo št. ${po}`,
     sku: "Šifra",
     qty: "Količina",
     each: "/kos",

@@ -28,10 +28,10 @@ const MAIL_STRINGS: Record<MailLang, {
     thanks: "Thank you",
   },
   sl: {
-    subject: (po) => `Naročilnica št. ${po}`,
+    subject: (po) => `Naročilo št. ${po}`,
     greeting: (n) => `Spoštovani ${n},`,
     intro: "Prosimo, obdelajte naslednje naročilo:",
-    poLabel: (po) => `Naročilnica št. ${po}`,
+    poLabel: (po) => `Naročilo št. ${po}`,
     sku: "Šifra", qty: "Količina", each: "/kos",
     totalLabel: "Ocenjena vrednost",
     confirm: "Prosimo, potrdite prejem in predviden datum dobave.",
