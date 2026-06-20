@@ -96,6 +96,7 @@ function BulkCreateDialog() {
   const [open, setOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -175,12 +176,12 @@ function BulkCreateDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="font-bold gap-1.5">
-          <Grid2X2 className="h-4 w-4" /> Bulk create
+          <Grid2X2 className="h-4 w-4" /> {t("locationsBulkCreate")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Bulk create locations</DialogTitle>
+          <DialogTitle>{t("locationsBulkCreateTitle")}</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="pattern" className="mt-2">
           <TabsList className="w-full">
@@ -355,7 +356,7 @@ export default function LocationsPage() {
         <div className="flex items-center gap-2">
           {/* Print all QR codes */}
           <Button size="sm" variant="ghost" className="gap-1.5 font-bold text-muted-foreground" onClick={() => navigate("/locations/print-sheet")}>
-            <Printer className="h-4 w-4" /> Print all
+            <Printer className="h-4 w-4" /> {t("locationsPrintAll")}
           </Button>
 
           {/* Bulk create */}

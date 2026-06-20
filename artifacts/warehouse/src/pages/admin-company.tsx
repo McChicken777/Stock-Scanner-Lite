@@ -194,6 +194,7 @@ const SMTP_PROVIDERS: Record<string, { host: string; port: number }> = {
 
 function EmailSettingsCard({ company }: { company: Company }) {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
   const [fromName, setFromName] = useState(company.emailFromName ?? company.name ?? "");
   const [host, setHost] = useState(company.smtpHost ?? "");
@@ -221,7 +222,7 @@ function EmailSettingsCard({ company }: { company: Company }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/company"] });
       setPass("");
-      toast({ title: "Email settings saved" });
+      toast({ title: t("companyEmailSaved") });
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
@@ -236,7 +237,7 @@ function EmailSettingsCard({ company }: { company: Company }) {
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
       return res.json();
     },
-    onSuccess: (d: { to: string }) => toast({ title: `Test email sent to ${d.to}` }),
+    onSuccess: (d: { to: string }) => toast({ title: `${t("companyEmailTestSentTo")} ${d.to}` }),
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
@@ -250,56 +251,54 @@ function EmailSettingsCard({ company }: { company: Company }) {
       <div className="flex items-center gap-2">
         <Mail className="h-4 w-4 text-muted-foreground" />
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Order email (send from your address)</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyEmailTitle")}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Used to email suppliers your orders. {company.smtpConfigured
-              ? <span className="text-green-600 font-semibold">Configured ✓</span>
-              : <span className="text-amber-600 font-semibold">Not set up</span>}
+            {t("companyEmailDesc")} {company.smtpConfigured
+              ? <span className="text-green-600 font-semibold">{t("companyEmailConfigured")}</span>
+              : <span className="text-amber-600 font-semibold">{t("companyEmailNotSet")}</span>}
           </p>
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">Email provider</label>
+        <label className="text-xs font-semibold text-muted-foreground">{t("companyEmailProvider")}</label>
         <select
           onChange={(e) => applyProvider(e.target.value)}
           defaultValue=""
           className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          <option value="">Pick to auto-fill server / port…</option>
+          <option value="">{t("companyEmailProviderHint")}</option>
           {Object.keys(SMTP_PROVIDERS).map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">From name (shown to suppliers)</label>
+        <label className="text-xs font-semibold text-muted-foreground">{t("companyEmailFromName")}</label>
         <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder={company.name} className="h-10 border-2" />
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-muted-foreground">Your email address (username)</label>
+        <label className="text-xs font-semibold text-muted-foreground">{t("companyEmailAddress")}</label>
         <Input value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} type="email" placeholder="orders@yourbusiness.com" className="h-10 border-2" />
       </div>
 
       <div className="flex gap-2">
         <div className="flex-[2] space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">SMTP server</label>
+          <label className="text-xs font-semibold text-muted-foreground">{t("companyEmailServer")}</label>
           <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.gmail.com" className="h-10 border-2" />
         </div>
         <div className="flex-1 space-y-1.5">
-          <label className="text-xs font-semibold text-muted-foreground">Port</label>
+          <label className="text-xs font-semibold text-muted-foreground">{t("companyEmailPort")}</label>
           <Input value={port} onChange={(e) => setPort(e.target.value)} type="number" placeholder="587" className="h-10 border-2" />
         </div>
       </div>
 
       <div className="space-y-1.5">
         <label className="text-xs font-semibold text-muted-foreground">
-          {company.smtpConfigured ? "App password (leave blank to keep current)" : "App password"}
+          {company.smtpConfigured ? t("companyEmailPasswordKeep") : t("companyEmailPassword")}
         </label>
-        <Input value={pass} onChange={(e) => setPass(e.target.value)} type="password" placeholder={company.smtpConfigured ? "•••••••• (saved)" : "App password"} className="h-10 border-2 font-mono" autoComplete="new-password" />
-        <p className="text-[11px] text-muted-foreground">
-          For Gmail/Outlook, this is an <span className="font-semibold">app password</span>, not your normal login — create one in your email account's security settings (requires 2-step verification).
-        </p>
+        <Input value={pass} onChange={(e) => setPass(e.target.value)} type="password" placeholder={company.smtpConfigured ? t("companyEmailPasswordSaved") : t("companyEmailPassword")} className="h-10 border-2 font-mono" autoComplete="new-password" />
+        <p className="text-[11px] text-muted-foreground">{t("companyEmailPasswordHint")}</p>
       </div>
 
       <div className="flex gap-2">
@@ -309,7 +308,7 @@ function EmailSettingsCard({ company }: { company: Company }) {
           onClick={() => saveMutation.mutate()}
         >
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          Save
+          {t("save")}
         </Button>
         <Button
           variant="outline"
@@ -318,11 +317,11 @@ function EmailSettingsCard({ company }: { company: Company }) {
           onClick={() => testMutation.mutate()}
         >
           {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-          Send test
+          {t("companyEmailSendTest")}
         </Button>
       </div>
       {!company.smtpConfigured && (
-        <p className="text-[11px] text-muted-foreground">Save your settings, then use “Send test” to check it works.</p>
+        <p className="text-[11px] text-muted-foreground">{t("companyEmailTestHint")}</p>
       )}
     </div>
   );
@@ -653,30 +652,30 @@ export default function AdminCompanyPage() {
         {/* Quote branding: logo + signer */}
         <div className="bg-card border-2 border-border rounded-xl p-4 space-y-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quote branding</p>
-            <p className="text-xs text-muted-foreground mt-1">Shown on quote PDFs. Logo: PNG or JPG, under 2MB.</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyBrandingTitle")}</p>
+            <p className="text-xs text-muted-foreground mt-1">{t("companyBrandingDesc")}</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="h-16 w-32 rounded-lg border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-muted/30 flex-shrink-0">
               {company.logo
                 ? <img src={company.logo} alt="Company logo" className="max-h-full max-w-full object-contain" />
-                : <span className="text-[10px] text-muted-foreground">No logo</span>}
+                : <span className="text-[10px] text-muted-foreground">{t("companyNoLogo")}</span>}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="inline-flex items-center justify-center h-9 px-3 rounded-md text-sm font-semibold border-2 border-input bg-background hover:bg-muted cursor-pointer">
                 <input type="file" accept="image/png,image/jpeg" className="hidden" onChange={onLogoFile} />
-                {company.logo ? "Replace logo" : "Upload logo"}
+                {company.logo ? t("companyReplaceLogo") : t("companyUploadLogo")}
               </label>
               {company.logo && (
                 <Button variant="outline" size="sm" className="h-8 text-xs text-destructive border-destructive/30"
                   onClick={() => updateBrandingMutation.mutate({ logo: null })}>
-                  Remove logo
+                  {t("companyRemoveLogo")}
                 </Button>
               )}
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-muted-foreground">Default currency</label>
+            <label className="text-xs font-semibold text-muted-foreground">{t("companyDefaultCurrency")}</label>
             <select
               value={company.currency ?? "USD"}
               onChange={(e) => updateBrandingMutation.mutate({ currency: e.target.value })}
@@ -694,8 +693,8 @@ export default function AdminCompanyPage() {
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quote issuers</p>
-              <p className="text-xs text-muted-foreground mt-0.5">People who issue quotes — selectable per quote and shown on PDFs.</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("companyIssuersTitle")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("companyIssuersDesc")}</p>
             </div>
           </div>
 
@@ -705,11 +704,11 @@ export default function AdminCompanyPage() {
                 editingIssuerId === issuer.id ? (
                   <div key={issuer.id} className="p-2.5 rounded-lg border bg-muted/20 space-y-2 text-sm">
                     <Input value={editIssuerName} onChange={(e) => setEditIssuerName(e.target.value)}
-                      placeholder="Name" className="h-8 text-sm border-2" />
+                      placeholder={t("fieldName")} className="h-8 text-sm border-2" />
                     <Input value={editIssuerEmail} onChange={(e) => setEditIssuerEmail(e.target.value)}
-                      placeholder="Email" type="email" className="h-8 text-sm border-2" />
+                      placeholder={t("fieldEmail")} type="email" className="h-8 text-sm border-2" />
                     <Input value={editIssuerPhone} onChange={(e) => setEditIssuerPhone(e.target.value)}
-                      placeholder="Phone" className="h-8 text-sm border-2" />
+                      placeholder={t("fieldPhone")} className="h-8 text-sm border-2" />
                     <div className="flex gap-2">
                       <Button size="sm" className="flex-1 h-8 gap-1"
                         disabled={!editIssuerName.trim() || updateIssuerMutation.isPending}
@@ -719,7 +718,7 @@ export default function AdminCompanyPage() {
                           ...(editIssuerPhone.trim() ? { phone: editIssuerPhone.trim() } : {}),
                         }})}>
                         {updateIssuerMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                        Save
+                        {t("save")}
                       </Button>
                       <Button size="sm" variant="outline" className="h-8" onClick={() => setEditingIssuerId(null)}>
                         {t("cancel")}
@@ -755,22 +754,22 @@ export default function AdminCompanyPage() {
           )}
 
           <div className="space-y-2 p-3 bg-muted/30 rounded-lg border">
-            <p className="text-xs font-bold text-muted-foreground">Add issuer</p>
+            <p className="text-xs font-bold text-muted-foreground">{t("companyAddIssuer")}</p>
             <Input
-              placeholder="Name (required)"
+              placeholder={t("companyIssuerName")}
               value={newIssuerName}
               onChange={(e) => setNewIssuerName(e.target.value)}
               className="h-9 text-sm border-2"
             />
             <Input
-              placeholder="Email (optional)"
+              placeholder={t("companyIssuerEmail")}
               type="email"
               value={newIssuerEmail}
               onChange={(e) => setNewIssuerEmail(e.target.value)}
               className="h-9 text-sm border-2"
             />
             <Input
-              placeholder="Phone (optional)"
+              placeholder={t("companyIssuerPhone")}
               value={newIssuerPhone}
               onChange={(e) => setNewIssuerPhone(e.target.value)}
               className="h-9 text-sm border-2"
@@ -786,7 +785,7 @@ export default function AdminCompanyPage() {
               })}
             >
               {addIssuerMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Add issuer
+              {t("companyAddIssuer")}
             </Button>
           </div>
         </div>

@@ -564,6 +564,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
 }
 
 function LowStockOrdering() {
+  const { t } = useLang();
   const { data: queue = [], isLoading } = useQuery<ReorderQueueItem[]>({
     queryKey: ["/api/work/reorder-from-flags"],
     queryFn: () => apiFetch("/api/work/reorder-from-flags"),
@@ -603,7 +604,7 @@ function LowStockOrdering() {
   if (queue.length === 0) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 font-semibold">
-        <CheckCircle2 className="h-4 w-4" /> Everything's stocked — nothing needs reordering.
+        <CheckCircle2 className="h-4 w-4" /> {t("suppliersAllStocked")}
       </div>
     );
   }
@@ -611,7 +612,7 @@ function LowStockOrdering() {
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-        <TrendingDown className="h-4 w-4" /> Needs reorder
+        <TrendingDown className="h-4 w-4" /> {t("reorderNeeds")}
         <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
       </h2>
       {groups.map((g, idx) => (
@@ -760,7 +761,7 @@ export default function AdminSuppliersPage() {
 
           {/* Order email language */}
           <div className="space-y-1.5">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Order email language</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("suppliersEmailLang")}</p>
             <select
               value={formData.language}
               onChange={(e) => setFormData({ ...formData, language: e.target.value })}
@@ -770,26 +771,26 @@ export default function AdminSuppliersPage() {
               <option value="en">English</option>
               <option value="sl">Slovenščina</option>
             </select>
-            <p className="text-[11px] text-muted-foreground">The order email to this supplier is written in this language.</p>
+            <p className="text-[11px] text-muted-foreground">{t("suppliersEmailLangHint")}</p>
           </div>
 
           {/* Order method */}
           <div className="space-y-1.5">
-            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Ordering method</p>
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("suppliersOrderingMethod")}</p>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, orderMethod: "email" })}
                 className={`flex-1 flex items-center justify-center gap-2 h-9 rounded-lg border-2 text-sm font-semibold transition-colors ${formData.orderMethod === "email" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-border text-muted-foreground hover:border-blue-300"}`}
               >
-                <Mail className="h-3.5 w-3.5" /> Email order
+                <Mail className="h-3.5 w-3.5" /> {t("suppliersEmailOrder")}
               </button>
               <button
                 type="button"
                 onClick={() => setFormData({ ...formData, orderMethod: "web_store" })}
                 className={`flex-1 flex items-center justify-center gap-2 h-9 rounded-lg border-2 text-sm font-semibold transition-colors ${formData.orderMethod === "web_store" ? "border-purple-500 bg-purple-50 text-purple-700" : "border-border text-muted-foreground hover:border-purple-300"}`}
               >
-                <Globe className="h-3.5 w-3.5" /> Web store
+                <Globe className="h-3.5 w-3.5" /> {t("suppliersWebStore")}
               </button>
             </div>
           </div>

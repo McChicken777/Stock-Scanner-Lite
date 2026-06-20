@@ -4,7 +4,7 @@ import { useListProducts, useDeleteProduct } from "@workspace/api-client-react";
 import type { ProductWithStock } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, Search, AlertTriangle, Edit2, Trash2, MapPin, RefreshCw,
+  Plus, Search, Edit2, Trash2, MapPin,
   Download, Upload, ChevronDown, ChevronRight, X, FileText, CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -329,7 +329,7 @@ export default function ProductsPage() {
       .map((id) => ({ key: String(id), label: supplierNameById.get(id) ?? `Supplier ${id}` }))
       .sort((a, b) => a.label.localeCompare(b.label))
       .forEach((c) => supplierChips.push(c));
-    if (products.some((p) => supplierIdOf(p) == null)) supplierChips.push({ key: "none", label: "No supplier" });
+    if (products.some((p) => supplierIdOf(p) == null)) supplierChips.push({ key: "none", label: t("productsNoSupplier") });
   }
 
   const visibleProducts = lite ? bySupplier(supplierFilter) : byType(activeFilter);
@@ -363,56 +363,28 @@ export default function ProductsPage() {
         product.isLowStock ? "border-destructive/40" : "border-border"
       }`}
     >
-      {product.isLowStock && (
-        <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] font-bold px-2 py-0.5 rounded-bl-lg flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" /> {t("productsLowStock")}
-        </div>
-      )}
-
       <div className="flex justify-between items-start mb-3">
         <div>
-          <h3 className="font-bold text-lg leading-tight pr-16">{product.name}</h3>
-          <div className="flex gap-1.5 mt-1.5 flex-wrap">
-            <Badge
-              className={`font-medium text-xs ${typeBadgeClass(product.itemType)}`}
-              variant="outline"
-            >
-              {product.itemType === "manufactured_part" || product.itemType === "production" ? t("productsManufactured") : product.itemType === "final_product" ? t("productsFinalProduct") : t("productsPurchased")}
-            </Badge>
+          <h3 className="font-bold text-lg leading-tight pr-4">{product.name}</h3>
+          {lite
+            ? (product.category ? <p className="text-xs text-muted-foreground mt-1">{product.category}</p> : null)
+            : (
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                <Badge className={`font-medium text-xs ${typeBadgeClass(product.itemType)}`} variant="outline">
+                  {product.itemType === "manufactured_part" || product.itemType === "production" ? t("productsManufactured") : product.itemType === "final_product" ? t("productsFinalProduct") : t("productsPurchased")}
+                </Badge>
+              </div>
+            )}
+        </div>
+        {!lite && (
+          <div className="text-right">
+            <p className="text-2xl font-black leading-none">{product.totalStock}</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">Total</p>
           </div>
-        </div>
-        <div className="text-right">
-          <p className={`text-2xl font-black leading-none ${product.isLowStock ? "text-destructive" : ""}`}>
-            {product.totalStock}
-          </p>
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mt-1">
-            Total
-          </p>
-        </div>
+        )}
       </div>
 
       <div className="space-y-3 mt-4 pt-4 border-t border-border/50">
-        <div className="grid grid-cols-3 gap-2 text-xs">
-          <div>
-            <p className="text-muted-foreground">Buffer</p>
-            <p className="font-bold text-sm text-foreground">{product.bufferStock}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Target</p>
-            <p className="font-bold text-sm text-foreground">{product.targetStock || 0}</p>
-          </div>
-          {product.totalStock < product.bufferStock && (
-            <div className="bg-red-50 rounded p-2 col-span-3">
-              <div className="flex items-center gap-1 text-red-700">
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span className="font-bold text-xs">
-                  Restock: +{(product.targetStock || 0) - product.totalStock}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
         <div className="flex gap-2">
           <Button
             onClick={() => { setSelectedProduct(product.id); setShowLocationsDialog(true); }}
@@ -420,7 +392,7 @@ export default function ProductsPage() {
             size="sm"
             className="flex-1 h-10 font-bold text-sm"
           >
-            <MapPin className="h-4 w-4 mr-1" /> Locations
+            <MapPin className="h-4 w-4 mr-1" /> {t("productsLocations")}
           </Button>
 
           {isAdmin && (

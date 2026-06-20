@@ -192,8 +192,8 @@ export default function Dashboard() {
           <div className="rounded-xl bg-primary text-primary-foreground p-4 flex items-center gap-3 cursor-pointer active:scale-95 transition-transform">
             <ScanLine className="h-7 w-7 flex-shrink-0" />
             <div>
-              <p className="font-bold text-base">Scan location</p>
-              <p className="text-xs opacity-75">Open a bin to flag what's running low</p>
+              <p className="font-bold text-base">{t("dashScanLocation")}</p>
+              <p className="text-xs opacity-75">{t("dashScanLocationSub")}</p>
             </div>
           </div>
         </Link>
@@ -209,10 +209,10 @@ export default function Dashboard() {
           <CardContent>
             <div className="grid grid-cols-4 gap-2 mb-3">
               {[
-                { key: "draft", label: "Draft", color: "text-slate-700" },
-                { key: "sent", label: "Sent", color: "text-blue-700" },
-                { key: "approved", label: "Approved", color: "text-green-700" },
-                { key: "converted", label: "Converted", color: "text-purple-700" },
+                { key: "draft", label: t("statusDraft"), color: "text-slate-700" },
+                { key: "sent", label: t("statusSent"), color: "text-blue-700" },
+                { key: "approved", label: t("statusApproved"), color: "text-green-700" },
+                { key: "converted", label: t("statusConverted"), color: "text-purple-700" },
               ].map((s) => (
                 <div key={s.key} className="bg-background border border-border rounded-lg p-2 text-center">
                   <p className={`text-xl font-black font-mono ${s.color}`}>{quoteCounts[s.key] ?? 0}</p>
@@ -222,10 +222,10 @@ export default function Dashboard() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <Link href="/quotes" className="text-xs font-semibold text-purple-700 bg-purple-100 hover:bg-purple-200 rounded-lg py-2 text-center flex items-center justify-center gap-1">
-                <FileText className="h-3.5 w-3.5" /> View Quotes
+                <FileText className="h-3.5 w-3.5" /> {t("navQuotes")}
               </Link>
               <Link href="/customers" className="text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg py-2 text-center flex items-center justify-center gap-1">
-                <Users className="h-3.5 w-3.5" /> Customers
+                <Users className="h-3.5 w-3.5" /> {t("navCustomers")}
               </Link>
             </div>
           </CardContent>

@@ -79,7 +79,7 @@ export default function CustomersPage() {
         <div className="flex items-center gap-2">
           <Link href="/quotes">
             <Button size="sm" variant="outline" className="font-bold gap-1 border-2">
-              <FileText className="h-4 w-4" /> Quotes
+              <FileText className="h-4 w-4" /> {t("navQuotes")}
             </Button>
           </Link>
           {isAdmin && (
