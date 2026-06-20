@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Package, MapPin, AlertTriangle, Activity,
   FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
-  Flag, AlertCircle, Inbox, FolderKanban, ScanLine, ClipboardList,
+  Flag, AlertCircle, Inbox, FolderKanban, ScanLine,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,47 +163,40 @@ export default function Dashboard() {
       {/* ── Stock metrics ── */}
       <div className="grid grid-cols-2 gap-3">
         <Link href="/locations">
-          <Card className="bg-secondary text-secondary-foreground border-none hover:bg-secondary/90 transition-colors cursor-pointer active:scale-95 duration-200">
+          <Card className="bg-card border-2 border-border hover:bg-muted/50 transition-colors cursor-pointer active:scale-95 duration-200">
             <CardContent className="p-4 flex flex-col gap-2">
               <MapPin className="h-5 w-5 text-primary" />
               <div className="space-y-0.5">
                 <p className="text-3xl font-black">{summary.totalLocations}</p>
-                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">{t("dashLocations")}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashLocations")}</p>
               </div>
             </CardContent>
           </Card>
         </Link>
         <Link href="/products">
-          <Card className="bg-secondary text-secondary-foreground border-none hover:bg-secondary/90 transition-colors cursor-pointer active:scale-95 duration-200">
+          <Card className="bg-card border-2 border-border hover:bg-muted/50 transition-colors cursor-pointer active:scale-95 duration-200">
             <CardContent className="p-4 flex flex-col gap-2">
               <Package className="h-5 w-5 text-primary" />
               <div className="space-y-0.5">
                 <p className="text-3xl font-black">{summary.totalProducts}</p>
-                <p className="text-xs font-medium text-secondary-foreground/70 uppercase tracking-wider">{t("dashProducts")}</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("dashProducts")}</p>
               </div>
             </CardContent>
           </Card>
         </Link>
       </div>
 
-      {/* ── Lite quick actions ── */}
+      {/* ── Lite quick action ── */}
       {!atLeast("standard") && (
-        <div className="grid grid-cols-2 gap-3">
-          <Link href="/scan">
-            <div className="rounded-xl bg-primary text-primary-foreground p-4 flex flex-col gap-2 cursor-pointer active:scale-95 transition-transform">
-              <ScanLine className="h-6 w-6" />
-              <p className="font-bold text-sm">Scan location</p>
-              <p className="text-xs opacity-75">Update stock by scanning</p>
+        <Link href="/scan">
+          <div className="rounded-xl bg-primary text-primary-foreground p-4 flex items-center gap-3 cursor-pointer active:scale-95 transition-transform">
+            <ScanLine className="h-7 w-7 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-base">Scan location</p>
+              <p className="text-xs opacity-75">Open a bin to flag what's running low</p>
             </div>
-          </Link>
-          <Link href="/work/stocktake">
-            <div className="rounded-xl border-2 border-border bg-card p-4 flex flex-col gap-2 cursor-pointer hover:bg-muted active:scale-95 transition-all">
-              <ClipboardList className="h-6 w-6 text-primary" />
-              <p className="font-bold text-sm">Count stock</p>
-              <p className="text-xs text-muted-foreground">Manually correct quantities</p>
-            </div>
-          </Link>
-        </div>
+          </div>
+        </Link>
       )}
 
       {quoteCounts && (

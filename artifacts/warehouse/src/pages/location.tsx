@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { Link } from "wouter";
 
 function StockItem({
@@ -22,6 +22,7 @@ function StockItem({
   bufferStock,
   reserved = 0,
   available,
+  lite = false,
 }: {
   locationId: string,
   productId: number,
@@ -31,6 +32,7 @@ function StockItem({
   bufferStock: number,
   reserved?: number,
   available?: number,
+  lite?: boolean,
 }) {
   const [optimisticQty, setOptimisticQty] = useState(quantity);
   const [isEditing, setIsEditing] = useState(false);
@@ -124,10 +126,12 @@ function StockItem({
               <span className="text-xs font-medium px-2 py-0.5 bg-secondary text-secondary-foreground rounded-full">
                 {category}
               </span>
-              <span className="text-xs text-muted-foreground">
-                Min: {bufferStock}
-              </span>
-              {reserved > 0 && (
+              {!lite && (
+                <span className="text-xs text-muted-foreground">
+                  Min: {bufferStock}
+                </span>
+              )}
+              {!lite && reserved > 0 && (
                 <span
                   title="Committed to active jobs across all locations"
                   className="text-xs font-semibold px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full"
@@ -195,9 +199,10 @@ function StockItem({
             )}
           </div>
         </div>
-        
+
+        {!lite && (
         <div className="flex h-20 items-stretch bg-background">
-          <button 
+          <button
             onClick={() => optimisticQty > 0 && handleUpdate(optimisticQty - 1)}
             disabled={optimisticQty <= 0}
             className="flex-1 flex justify-center items-center bg-secondary/10 hover:bg-secondary/20 active:bg-secondary/30 transition-colors disabled:opacity-50 disabled:pointer-events-none"
@@ -205,14 +210,14 @@ function StockItem({
           >
             <Minus className="h-8 w-8 text-secondary-foreground/70" />
           </button>
-          
+
           <div className="w-32 flex flex-col justify-center items-center border-x border-border font-mono relative">
             {isEditing ? (
               <div className="absolute inset-0 bg-background z-10 flex flex-col p-1">
                 <div className="flex h-full gap-1">
-                  <Input 
-                    type="number" 
-                    value={editValue} 
+                  <Input
+                    type="number"
+                    value={editValue}
                     onChange={e => setEditValue(e.target.value)}
                     className="h-full text-xl text-center rounded-none border-primary font-bold"
                     autoFocus
@@ -225,7 +230,7 @@ function StockItem({
                 </div>
               </div>
             ) : (
-              <div 
+              <div
                 className="text-4xl font-black cursor-pointer hover:text-primary transition-colors"
                 onClick={() => {
                   setEditValue(optimisticQty.toString());
@@ -236,8 +241,8 @@ function StockItem({
               </div>
             )}
           </div>
-          
-          <button 
+
+          <button
             onClick={() => handleUpdate(optimisticQty + 1)}
             className="flex-1 flex justify-center items-center bg-primary/10 hover:bg-primary/20 active:bg-primary/30 text-primary transition-colors"
             aria-label="Increase quantity"
@@ -245,6 +250,7 @@ function StockItem({
             <Plus className="h-8 w-8" />
           </button>
         </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -480,11 +486,13 @@ function ScanLowStockPrompt({
   stock,
   open,
   onOpenChange,
+  lite = false,
 }: {
   locationId: string;
   stock: PromptStockItem[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  lite?: boolean;
 }) {
   // Per-product flag state: idle → loading → done
   const [flagged, setFlagged] = useState<Record<number, "idle" | "loading" | "done">>({});
@@ -549,8 +557,9 @@ function ScanLowStockPrompt({
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{item.productName}</p>
                   <p className="text-xs text-muted-foreground">
-                    {item.quantity} in stock{item.bufferStock > 0 ? ` · min ${item.bufferStock}` : ""}
-                    {isLow && <span className="text-orange-600 font-semibold"> · low</span>}
+                    {lite
+                      ? item.productCategory || "Item"
+                      : <>{item.quantity} in stock{item.bufferStock > 0 ? ` · min ${item.bufferStock}` : ""}{isLow && <span className="text-orange-600 font-semibold"> · low</span>}</>}
                   </p>
                 </div>
                 {state !== "done" && (
@@ -599,6 +608,8 @@ export default function LocationPage() {
   const [, params] = useRoute("/location/:id");
   const id = params?.id ? decodeURIComponent(params.id) : "";
   const { t } = useLang();
+  const { atLeast } = usePlan();
+  const lite = !atLeast("standard");
   const search = useSearch();
   const cameFromScan = new URLSearchParams(search).get("scanned") === "1";
   const [promptOpen, setPromptOpen] = useState(false);
@@ -655,6 +666,7 @@ export default function LocationPage() {
     <div className="flex flex-col min-h-full pb-6">
       <ScanLowStockPrompt
         locationId={location.id}
+        lite={lite}
         open={promptOpen}
         onOpenChange={setPromptOpen}
         stock={location.stock.map((s) => ({
@@ -688,7 +700,7 @@ export default function LocationPage() {
             <p className="text-muted-foreground font-medium mb-4">{t("locationNoProducts")}</p>
             <div className="space-y-2">
               <AddProductDialog locationId={location.id} />
-              <FillStockDialog locationId={location.id} currentStock={[]} />
+              {!lite && <FillStockDialog locationId={location.id} currentStock={[]} />}
             </div>
           </div>
         ) : (
@@ -705,16 +717,19 @@ export default function LocationPage() {
                   bufferStock={item.bufferStock}
                   reserved={item.reserved}
                   available={item.available}
+                  lite={lite}
                 />
               ))}
             </div>
 
             <div className="pt-4 space-y-2">
               <AddProductDialog locationId={location.id} />
-              <FillStockDialog
-                locationId={location.id}
-                currentStock={location.stock.map((s) => ({ productId: s.productId, quantity: s.quantity }))}
-              />
+              {!lite && (
+                <FillStockDialog
+                  locationId={location.id}
+                  currentStock={location.stock.map((s) => ({ productId: s.productId, quantity: s.quantity }))}
+                />
+              )}
             </div>
           </>
         )}
