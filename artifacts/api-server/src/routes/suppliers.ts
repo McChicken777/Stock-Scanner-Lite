@@ -14,6 +14,7 @@ const createSupplierSchema = z.object({
   orderMethod: z.enum(["email", "web_store"]).optional().default("email"),
   storeUrl: z.string().url().optional().or(z.literal("")),
   storePlatform: z.enum(["shopify", "woocommerce", "custom"]).optional().or(z.literal("")).nullable(),
+  language: z.enum(["en", "sl"]).optional().default("en"),
 });
 
 // GET /api/suppliers - List suppliers
@@ -46,6 +47,7 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
       orderMethod: data.orderMethod ?? "email",
       storeUrl: data.storeUrl || null,
       storePlatform: (data.storePlatform || null) as string | null,
+      language: data.language ?? "en",
       companyId,
     }).returning();
 
@@ -88,6 +90,7 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
         orderMethod: data.orderMethod ?? "email",
         storeUrl: data.storeUrl || null,
         storePlatform: (data.storePlatform || null) as string | null,
+        language: data.language ?? "en",
       })
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.companyId, companyId)))
       .returning();

@@ -19,6 +19,7 @@ interface Supplier {
   orderMethod: string;
   storeUrl: string | null;
   storePlatform: string | null;
+  language: string;
   companyId: number;
 }
 
@@ -122,6 +123,7 @@ interface ReorderQueueItem {
   supplierOrderMethod: string;
   supplierStoreUrl: string | null;
   supplierStorePlatform: string | null;
+  supplierLanguage: string;
   storeProductId: string | null;
   storeProductUrl: string | null;
   pendingPo: { poId: number; quantity: number; status: string } | null;
@@ -134,6 +136,7 @@ interface OrderGroup {
   orderMethod: string;
   storeUrl: string | null;
   storePlatform: string | null;
+  language: string;
   items: ReorderQueueItem[];
 }
 
@@ -264,7 +267,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             group.supplierEmail,
             group.supplierName,
             po.id,
-            lines.map((l) => ({ name: l.name, supplierSku: l.supplierSku, quantity: l.qty, unitCost: l.unitCost }))
+            lines.map((l) => ({ name: l.name, supplierSku: l.supplierSku, quantity: l.qty, unitCost: l.unitCost })),
+            group.language === "sl" ? "sl" : "en"
           )
         );
         // Try to send it server-side; UI falls back to the mailto link if this fails.
@@ -579,6 +583,7 @@ function LowStockOrdering() {
         orderMethod: item.supplierOrderMethod ?? "email",
         storeUrl: item.supplierStoreUrl ?? null,
         storePlatform: item.supplierStorePlatform ?? null,
+        language: item.supplierLanguage ?? "en",
         items: [],
       };
       map.set(key, g);
@@ -624,7 +629,7 @@ export default function AdminSuppliersPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "", language: "en" });
   const [expandedSupplierId, setExpandedSupplierId] = useState<number | null>(null);
 
   const suppliersQuery = useQuery<Supplier[]>({
@@ -640,7 +645,7 @@ export default function AdminSuppliersPage() {
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
-      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
+      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "", language: "en" });
       setShowForm(false);
       toast({ description: "Supplier created" });
     },
@@ -656,7 +661,7 @@ export default function AdminSuppliersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/suppliers"] });
       setEditing(null);
-      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
+      setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "", language: "en" });
       toast({ description: "Supplier updated" });
     },
     onError: () => toast({ description: "Failed to update supplier", variant: "destructive" }),
@@ -694,6 +699,7 @@ export default function AdminSuppliersPage() {
       orderMethod: supplier.orderMethod || "email",
       storeUrl: supplier.storeUrl || "",
       storePlatform: supplier.storePlatform || "",
+      language: supplier.language || "en",
     });
     setShowForm(true);
   };
@@ -705,7 +711,7 @@ export default function AdminSuppliersPage() {
         <Button
           onClick={() => {
             setEditing(null);
-            setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "" });
+            setFormData({ name: "", email: "", phone: "", notes: "", orderMethod: "email", storeUrl: "", storePlatform: "", language: "en" });
             setShowForm(!showForm);
           }}
           className="gap-2"
@@ -751,6 +757,21 @@ export default function AdminSuppliersPage() {
             rows={2}
             disabled={createMutation.isPending || updateMutation.isPending}
           />
+
+          {/* Order email language */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Order email language</p>
+            <select
+              value={formData.language}
+              onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+              className="w-full h-9 px-2 rounded-lg border-2 border-input bg-background text-sm"
+              disabled={createMutation.isPending || updateMutation.isPending}
+            >
+              <option value="en">English</option>
+              <option value="sl">Slovenščina</option>
+            </select>
+            <p className="text-[11px] text-muted-foreground">The order email to this supplier is written in this language.</p>
+          </div>
 
           {/* Order method */}
           <div className="space-y-1.5">

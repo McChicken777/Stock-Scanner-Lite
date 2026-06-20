@@ -266,7 +266,7 @@ router.post("/:id/send-email", requireAdmin, async (req, res) => {
     if (!po) { res.status(404).json({ error: "Purchase order not found" }); return; }
 
     if (!po.supplierId) { res.status(400).json({ error: "This order has no supplier" }); return; }
-    const [supplier] = await db.select({ name: suppliersTable.name, email: suppliersTable.email })
+    const [supplier] = await db.select({ name: suppliersTable.name, email: suppliersTable.email, language: suppliersTable.language })
       .from(suppliersTable)
       .where(and(eq(suppliersTable.id, po.supplierId), eq(suppliersTable.companyId, companyId)));
     if (!supplier?.email) { res.status(400).json({ error: "Supplier has no email address" }); return; }
@@ -298,6 +298,7 @@ router.post("/:id/send-email", requireAdmin, async (req, res) => {
       supplierEmail: supplier.email,
       poId: id,
       companyName: company.name ?? null,
+      lang: supplier.language === "sl" ? "sl" : "en",
       items: items.map((i) => ({ name: i.name, sku: i.sku, quantity: i.quantity, unitCost: i.unitCost })),
     });
 

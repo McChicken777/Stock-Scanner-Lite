@@ -10,6 +10,8 @@ export const suppliersTable = pgTable("suppliers", {
   orderMethod: text("order_method").notNull().default("email"),
   storeUrl: text("store_url"),
   storePlatform: text("store_platform"),
+  // Language for order emails sent to this supplier ('en' | 'sl').
+  language: text("language").notNull().default("en"),
   companyId: integer("company_id")
     .notNull()
     .references(() => companiesTable.id, { onDelete: "cascade" }),

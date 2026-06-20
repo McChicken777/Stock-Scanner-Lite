@@ -3890,6 +3890,7 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
           orderMethod: suppliersTable.orderMethod,
           storeUrl: suppliersTable.storeUrl,
           storePlatform: suppliersTable.storePlatform,
+          language: suppliersTable.language,
         }).from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
       : [];
     const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
@@ -3915,6 +3916,7 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
           supplierOrderMethod: supplier?.orderMethod ?? "email",
           supplierStoreUrl: supplier?.storeUrl ?? null,
           supplierStorePlatform: supplier?.storePlatform ?? null,
+          supplierLanguage: supplier?.language ?? "en",
           storeProductId: null,
           storeProductUrl: p.storeProductUrl ?? null,
           flagIds: a.flagIds,

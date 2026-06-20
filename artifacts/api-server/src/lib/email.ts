@@ -54,30 +54,64 @@ export async function sendTestEmail(smtp: SmtpConfig, to: string): Promise<boole
   }
 }
 
+export type OrderEmailLang = "en" | "sl";
+
+// Order-email strings per language. Add a new key here to support another language.
+const ORDER_STRINGS = {
+  en: {
+    ourTeam: "our team",
+    subject: (po: number) => `Purchase Order #${po} — Order Request`,
+    greeting: (name: string) => `Dear ${name},`,
+    intro: "Please process the following purchase order:",
+    poLabel: (po: number) => `PO #${po}`,
+    sku: "SKU",
+    qty: "Qty",
+    each: "each",
+    totalLabel: "Estimated total",
+    confirm: "Please confirm receipt and expected delivery date.",
+    thanks: "Thank you,",
+  },
+  sl: {
+    ourTeam: "naša ekipa",
+    subject: (po: number) => `Naročilnica št. ${po}`,
+    greeting: (name: string) => `Spoštovani ${name},`,
+    intro: "Prosimo, obdelajte naslednje naročilo:",
+    poLabel: (po: number) => `Naročilnica št. ${po}`,
+    sku: "Šifra",
+    qty: "Količina",
+    each: "/kos",
+    totalLabel: "Ocenjena vrednost",
+    confirm: "Prosimo, potrdite prejem in predviden datum dobave.",
+    thanks: "Hvala,",
+  },
+} as const;
+
 export async function sendSupplierOrderEmail(params: {
   smtp: SmtpConfig;
   supplierName: string;
   supplierEmail: string;
   poId: number;
   companyName?: string | null;
+  lang?: OrderEmailLang;
   items: { name: string; sku?: string | null; quantity: number; unitCost?: number | null }[];
 }): Promise<boolean> {
   try {
-    const from = params.companyName?.trim() || "our team";
-    const subject = `Purchase Order #${params.poId} — Order Request`;
+    const L = ORDER_STRINGS[params.lang === "sl" ? "sl" : "en"];
+    const from = params.companyName?.trim() || L.ourTeam;
+    const subject = L.subject(params.poId);
     const rows = params.items.map((i) => {
-      const sku = i.sku ? ` (SKU: ${i.sku})` : "";
-      const price = i.unitCost && i.unitCost > 0 ? ` @ ${Number(i.unitCost).toFixed(2)} each` : "";
-      return `  • ${i.name}${sku} — Qty: ${i.quantity}${price}`;
+      const sku = i.sku ? ` (${L.sku}: ${i.sku})` : "";
+      const price = i.unitCost && i.unitCost > 0 ? ` @ ${Number(i.unitCost).toFixed(2)} ${L.each}` : "";
+      return `  • ${i.name}${sku} — ${L.qty}: ${i.quantity}${price}`;
     }).join("\n");
     const total = params.items.reduce((s, i) => s + (i.unitCost ?? 0) * i.quantity, 0);
-    const totalLine = total > 0 ? `\n\nEstimated total: ${total.toFixed(2)}` : "";
-    const text = `Dear ${params.supplierName},\n\nPlease process the following purchase order:\n\nPO #${params.poId}\n\n${rows}${totalLine}\n\nPlease confirm receipt and expected delivery date.\n\nThank you,\n${from}`;
+    const totalLine = total > 0 ? `\n\n${L.totalLabel}: ${total.toFixed(2)}` : "";
+    const text = `${L.greeting(params.supplierName)}\n\n${L.intro}\n\n${L.poLabel(params.poId)}\n\n${rows}${totalLine}\n\n${L.confirm}\n\n${L.thanks}\n${from}`;
 
     const htmlRows = params.items.map((i) => {
-      const sku = i.sku ? ` <span style="color:#666">(SKU: ${i.sku})</span>` : "";
-      const price = i.unitCost && i.unitCost > 0 ? ` @ ${Number(i.unitCost).toFixed(2)} ea` : "";
-      return `<li><strong>${i.name}</strong>${sku} — Qty: <strong>${i.quantity}</strong>${price}</li>`;
+      const sku = i.sku ? ` <span style="color:#666">(${L.sku}: ${i.sku})</span>` : "";
+      const price = i.unitCost && i.unitCost > 0 ? ` @ ${Number(i.unitCost).toFixed(2)} ${L.each}` : "";
+      return `<li><strong>${i.name}</strong>${sku} — ${L.qty}: <strong>${i.quantity}</strong>${price}</li>`;
     }).join("");
 
     await buildTransport(params.smtp).sendMail({
@@ -86,16 +120,16 @@ export async function sendSupplierOrderEmail(params: {
       subject,
       text,
       html: `
-<p>Dear ${params.supplierName},</p>
-<p>Please process the following purchase order:</p>
-<p style="font-weight:bold;">PO #${params.poId}</p>
+<p>${L.greeting(params.supplierName)}</p>
+<p>${L.intro}</p>
+<p style="font-weight:bold;">${L.poLabel(params.poId)}</p>
 <ul>${htmlRows}</ul>
-${total > 0 ? `<p>Estimated total: <strong>${total.toFixed(2)}</strong></p>` : ""}
-<p>Please confirm receipt and expected delivery date.</p>
-<p>Thank you,<br/>${from}</p>
+${total > 0 ? `<p>${L.totalLabel}: <strong>${total.toFixed(2)}</strong></p>` : ""}
+<p>${L.confirm}</p>
+<p>${L.thanks}<br/>${from}</p>
       `.trim(),
     });
-    logger.info({ poId: params.poId, to: params.supplierEmail }, "Supplier order email sent");
+    logger.info({ poId: params.poId, to: params.supplierEmail, lang: params.lang }, "Supplier order email sent");
     return true;
   } catch (err) {
     logger.error({ err, poId: params.poId }, "Failed to send supplier order email");
