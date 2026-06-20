@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, companiesTable, workTemplatesTable } from "@workspace/db";
-import { eq, count, and } from "drizzle-orm";
+import { eq, count, and, ne } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import type { CompanyFeatures } from "@workspace/db";
@@ -125,7 +125,8 @@ router.get("/users", requireAdmin, async (req, res) => {
     const users = await db
       .select({ id: usersTable.id, username: usersTable.username, role: usersTable.role, isSupervisor: usersTable.isSupervisor, shiftId: usersTable.shiftId, createdAt: usersTable.createdAt })
       .from(usersTable)
-      .where(eq(usersTable.companyId, companyId))
+      // The owner account is platform-level, not a company member — never list it here.
+      .where(and(eq(usersTable.companyId, companyId), ne(usersTable.role, "owner")))
       .orderBy(usersTable.username);
     res.json(users);
   } catch (err) {
@@ -229,7 +230,13 @@ router.delete("/users/:userId", requireAdmin, async (req, res) => {
       res.status(400).json({ error: "Cannot delete your own account" });
       return;
     }
-    await db.delete(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId)));
+    // Never allow deleting an owner account from the company user management.
+    const [target] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, userId));
+    if (target?.role === "owner") {
+      res.status(403).json({ error: "The owner account can't be deleted here." });
+      return;
+    }
+    await db.delete(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.companyId, companyId), ne(usersTable.role, "owner")));
     res.status(204).send();
   } catch (err) {
     req.log.error({ err }, "Failed to delete user");
