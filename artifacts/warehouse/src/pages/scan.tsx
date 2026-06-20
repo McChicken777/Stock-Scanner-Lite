@@ -162,8 +162,8 @@ export default function ScanPage() {
     <>
       <canvas ref={canvasRef} className="hidden" />
 
-      <div className="fixed inset-0 z-50 bg-black flex flex-col">
-        {/* Live camera feed */}
+      <div className="fixed inset-0 z-50 bg-background flex flex-col">
+        {/* Live camera feed — sits behind the white overlay, visible only through the viewfinder cutout */}
         <video
           ref={videoRef}
           playsInline
@@ -171,20 +171,11 @@ export default function ScanPage() {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {/* Header */}
-        <div className="relative z-20 px-5 pt-12 pb-4">
-          <h1 className="text-white font-bold text-xl flex items-center gap-2 drop-shadow">
-            <Scan className="h-5 w-5" />
-            {t("scanTitle")}
-          </h1>
-          <p className="text-white/60 text-sm mt-0.5">{t("scanDesc")}</p>
-        </div>
-
-        {/* Viewfinder — box-shadow punches a clean hole through the dark overlay */}
+        {/* White overlay with viewfinder cutout via box-shadow */}
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div
             className="relative w-72 h-72"
-            style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.72)" }}
+            style={{ boxShadow: "0 0 0 9999px var(--color-background, white)" }}
           >
             {/* Corner brackets */}
             <div className="absolute top-0 left-0 w-9 h-9 border-t-[3px] border-l-[3px] border-primary rounded-tl-xl" />
@@ -200,11 +191,20 @@ export default function ScanPage() {
           </div>
         </div>
 
+        {/* Header — sits above the overlay */}
+        <div className="relative z-20 px-5 pt-12 pb-4">
+          <h1 className="text-foreground font-bold text-xl flex items-center gap-2">
+            <Scan className="h-5 w-5 text-primary" />
+            {t("scanTitle")}
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("scanDesc")}</p>
+        </div>
+
         {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center gap-3 p-6 pb-10">
+        <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center p-6 pb-10">
           <button
             onClick={() => setManualMode(true)}
-            className="flex items-center justify-center gap-2 w-full max-w-xs h-14 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 text-white font-bold text-sm uppercase tracking-wider active:scale-95 transition-transform"
+            className="flex items-center justify-center gap-2 w-full max-w-xs h-14 rounded-2xl bg-secondary text-secondary-foreground font-bold text-sm uppercase tracking-wider active:scale-95 transition-transform"
           >
             <Keyboard className="h-5 w-5" />
             {t("scanManualEntry")}

@@ -898,6 +898,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       );
     }
+    if (liteWorker) {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
+            <FabriflowMark className="h-3.5 w-3.5 text-primary-foreground" />
+          </div>
+          <span className="font-bold text-sm">Fabriflow</span>
+        </div>
+      );
+    }
     if (isWorker) {
       return (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/60 border text-[11px] font-bold uppercase tracking-wider text-muted-foreground">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -248,102 +248,53 @@ function ProtectedRoutes() {
   );
 }
 
-// ── Splash sparks (canvas, true 60 fps) ──────────────────────────────────────
-
-function SplashParticles() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-
-    type P = { x: number; y: number; vx: number; vy: number; life: number; size: number; color: string };
-    const particles: P[] = [];
-    const COLORS = ["#f97316", "#fb923c", "#fbbf24", "#fdba74", "#fff7ed"];
-
-    function burst(count: number) {
-      for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 1.8 + Math.random() * 5;
-        particles.push({
-          x: cx, y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 1.2,
-          life: 1,
-          size: 1.5 + Math.random() * 2.5,
-          color: COLORS[Math.floor(Math.random() * COLORS.length)],
-        });
-      }
-    }
-
-    burst(35);
-    const t1 = setTimeout(() => burst(28), 520);
-
-    let raf: number;
-    let last = performance.now();
-
-    function frame(now: number) {
-      const dt = Math.min((now - last) / 16.67, 3);
-      last = now;
-      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
-
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vy += 0.13 * dt;
-        p.life -= 0.024 * dt;
-        if (p.life <= 0) { particles.splice(i, 1); continue; }
-        ctx!.save();
-        ctx!.globalAlpha = Math.max(0, p.life);
-        ctx!.fillStyle = p.color;
-        ctx!.beginPath();
-        ctx!.arc(p.x, p.y, p.size * Math.max(0.1, p.life), 0, Math.PI * 2);
-        ctx!.fill();
-        ctx!.restore();
-      }
-
-      if (particles.length > 0) raf = requestAnimationFrame(frame);
-    }
-
-    raf = requestAnimationFrame(frame);
-    return () => { cancelAnimationFrame(raf); clearTimeout(t1); };
-  }, []);
-
-  return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />;
-}
-
 // ── Splash screen ─────────────────────────────────────────────────────────────
 
 function SplashScreen({ onDone }: { onDone: () => void }) {
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFading(true), 1900);
-    const t2 = setTimeout(onDone, 2400);
+    const t1 = setTimeout(() => setFading(true), 1500);
+    const t2 = setTimeout(onDone, 2000);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onDone]);
 
+  // circumference of r=18 circle ≈ 113.1; 28% arc for the spinner gap
+  const r = 18;
+  const circ = 2 * Math.PI * r;
+  const arc = circ * 0.28;
+
   return (
     <div
-      className="fixed inset-0 z-[9999] bg-secondary flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[9999] bg-secondary flex flex-col items-center justify-center gap-8"
       style={{ transition: "opacity 0.5s ease", opacity: fading ? 0 : 1, pointerEvents: "none" }}
     >
-      <SplashParticles />
-      <div className="relative z-10 flex flex-col items-center gap-5 animate-in zoom-in-90 fade-in duration-500">
+      <div className="flex flex-col items-center gap-5 animate-in zoom-in-90 fade-in duration-500">
         <div className="h-24 w-24 rounded-3xl bg-primary flex items-center justify-center shadow-2xl">
           <FabriflowMark className="h-14 w-14 text-white" />
         </div>
         <span className="text-white font-black text-4xl tracking-tight">Fabriflow</span>
       </div>
+
+      {/* Smooth circular loader */}
+      <svg
+        width="40" height="40" viewBox="0 0 40 40"
+        className="animate-spin"
+        style={{ animationDuration: "0.85s", animationTimingFunction: "linear" }}
+      >
+        {/* Track */}
+        <circle cx="20" cy="20" r={r} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5" />
+        {/* Arc */}
+        <circle
+          cx="20" cy="20" r={r}
+          fill="none"
+          stroke="white"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={`${circ - arc} ${arc}`}
+          strokeDashoffset={circ * 0.25}
+        />
+      </svg>
     </div>
   );
 }
