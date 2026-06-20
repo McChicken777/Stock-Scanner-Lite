@@ -6,7 +6,7 @@ import {
   HardHat, LogOut, FolderKanban, Building2, Crown, PackageCheck,
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
-  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical, Flag,
+  BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHealthCheck, getHealthCheckQueryKey } from "@workspace/api-client-react";
@@ -790,18 +790,12 @@ function WorkerBottomNav() {
   const attendanceBadge = workerNotifs?.total ?? 0;
   const queueBadge = queueCount?.pending ?? 0;
 
-  // Lite worker: only scan & flag.
-  const navItems = !atLeast("standard")
-    ? [
-        { href: "/scan", icon: ScanLine, label: t("navScan"), badge: 0 },
-        { href: "/work/reorder-queue", icon: Flag, label: t("reorderReportShortage"), badge: 0 },
-      ]
-    : [
-        { href: "/tasks", icon: CheckSquare, label: t("navMyTasks"), badge: 0, show: atLeast("standard") },
-        { href: "/work/queues", icon: Layers, label: t("navQueues"), badge: queueBadge, show: atLeast("pro") },
-        { href: "/attendance", icon: CalendarCheck, label: t("navAttendance"), badge: attendanceBadge, show: atLeast("standard") },
-        ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: t("navPaintShop"), badge: 0, show: true }] : []),
-      ].filter((i) => i.show);
+  const navItems = [
+    { href: "/tasks", icon: CheckSquare, label: t("navMyTasks"), badge: 0, show: atLeast("standard") },
+    { href: "/work/queues", icon: Layers, label: t("navQueues"), badge: queueBadge, show: atLeast("pro") },
+    { href: "/attendance", icon: CalendarCheck, label: t("navAttendance"), badge: attendanceBadge, show: atLeast("standard") },
+    ...(painterData?.isPainter && atLeast("pro") ? [{ href: "/work/paint-queue", icon: Palette, label: t("navPaintShop"), badge: 0, show: true }] : []),
+  ].filter((i) => i.show);
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
@@ -869,6 +863,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   function BottomNav() {
     if (isOwner) return null;
+    if (liteWorker) return null; // Lite worker: scan-only, no tabs
     if (isAdmin) return <AdminBottomNav />;
     if (isSupervisor) return <SupervisorBottomNav />;
     if (isWorker) return <WorkerBottomNav />;
@@ -925,11 +920,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main content area */}
       <div className={cn(
-        "min-h-[100dvh]",
+        "min-h-[100dvh] overflow-x-hidden",
         hasSidebar && "lg:ml-64",
-        !isOwner && "pb-16 lg:pb-0",
+        !isOwner && !liteWorker && "pb-16 lg:pb-0",
       )}>
-        <main className="w-full max-w-md mx-auto lg:max-w-none bg-background border-x border-border/50 lg:border-x-0 relative">
+        <main className="w-full max-w-md mx-auto lg:max-w-none bg-background border-x border-border/50 lg:border-x-0 relative overflow-x-hidden">
           {/* Top bar */}
           <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-sm border-b border-border/40">
             <div className="flex items-center justify-between px-3 py-2 gap-2">

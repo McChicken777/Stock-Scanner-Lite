@@ -97,14 +97,13 @@ function WorkerRoutes() {
   );
 }
 
-// Lite has no work orders/attendance — a Lite worker can only scan a bin and flag
-// what's running low (plus the manual shortage report).
+// Lite has no work orders/attendance — a Lite worker can ONLY scan a bin and flag
+// what's running low. Everything else redirects to the scanner.
 function LiteWorkerRoutes() {
   return (
     <Switch>
       <Route path="/scan" component={ScanPage} />
       <Route path="/location/:id" component={LocationPage} />
-      <Route path="/work/reorder-queue" component={ReorderQueuePage} />
       <Route path="/"><Redirect to="/scan" /></Route>
       <Route component={() => <Redirect to="/scan" />} />
     </Switch>
