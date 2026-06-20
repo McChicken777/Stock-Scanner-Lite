@@ -4,27 +4,12 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+// In Replit dev/prod these come from artifact.toml (PORT=24594, BASE_PATH="/").
+// Fall back to sane defaults so an ad-hoc `vite build` (e.g. the post-merge hook
+// or a manual shell build) still works without the env being set.
+const parsedPort = Number(process.env.PORT);
+const port = Number.isNaN(parsedPort) || parsedPort <= 0 ? 5173 : parsedPort;
+const basePath = process.env.BASE_PATH || "/";
 
 export default defineConfig({
   base: basePath,
