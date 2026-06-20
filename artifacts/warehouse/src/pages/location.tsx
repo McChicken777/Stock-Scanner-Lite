@@ -11,6 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, usePlan } from "@/contexts/auth";
+import { naturalCompare } from "@/lib/utils";
 import { Link } from "wouter";
 
 function StockItem({
@@ -394,49 +395,78 @@ function FillStockDialog({ locationId, currentStock }: {
   );
 }
 
-function AddProductDialog({ locationId }: { locationId: string }) {
+function AddProductDialog({ locationId, existingProductIds = [] }: { locationId: string; existingProductIds?: number[] }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
   const { data: products, isLoading } = useListProducts({ query: { queryKey: getListProductsQueryKey(), enabled: open } });
-  const updateStock = useUpdateStock();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { t } = useLang();
+  const { user } = useAuth();
 
-  const filteredProducts = products?.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    p.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const existing = new Set(existingProductIds);
+  const filteredProducts = (products ?? [])
+    .filter(p => !existing.has(p.id))
+    .filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.category.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => naturalCompare(a.name, b.name));
 
-  const handleAdd = (productId: number) => {
-    updateStock.mutate(
-      { locationId, productId, data: { quantity: 1 } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });
-          toast({ title: t("locationProductAdded"), description: t("locationProductAddedDesc") });
-          setOpen(false);
-        }
-      }
-    );
-  };
+  function onOpenChange(v: boolean) {
+    setOpen(v);
+    if (!v) { setSelected(new Set()); setSearch(""); }
+  }
+
+  function toggle(id: number) {
+    setSelected(s => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+
+  async function handleAdd() {
+    if (selected.size === 0) return;
+    setSaving(true);
+    try {
+      const entries = [...selected].map(productId => ({ locationId, productId, quantity: 1, changedBy: user?.username ?? null }));
+      const res = await fetch("/api/stock/bulk", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries, reason: "initial_entry" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      queryClient.invalidateQueries({ queryKey: getGetLocationQueryKey(locationId) });
+      toast({ title: t("locationProductAdded"), description: t("locationProductAddedDesc") });
+      onOpenChange(false);
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Failed", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button size="lg" className="w-full h-14 text-lg font-bold">
           <Plus className="mr-2 h-6 w-6" /> {t("locationAddProduct")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[80vh] flex flex-col p-0">
+      <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="p-4 border-b">
-          <DialogTitle>Add Product</DialogTitle>
+          <DialogTitle>{t("locationAddProduct")}</DialogTitle>
         </DialogHeader>
         <div className="p-4 border-b bg-muted/30">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="Search products..."
+              placeholder={`${t("search")}…`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-12 text-lg"
@@ -446,27 +476,39 @@ function AddProductDialog({ locationId }: { locationId: string }) {
         <div className="overflow-y-auto p-4 flex-1">
           {isLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
-          ) : filteredProducts?.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No products found</p>
+          ) : filteredProducts.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">{t("locationNoProducts")}</p>
           ) : (
             <div className="space-y-2">
-              {filteredProducts?.map(product => (
-                <button
-                  key={product.id}
-                  onClick={() => handleAdd(product.id)}
-                  className="w-full flex items-center justify-between p-3 rounded-lg border text-left hover:border-primary hover:bg-primary/5 transition-colors"
-                >
-                  <div>
-                    <p className="font-bold">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">{product.category}</p>
-                  </div>
-                  <Plus className="h-5 w-5 text-primary" />
-                </button>
-              ))}
+              {filteredProducts.map(product => {
+                const checked = selected.has(product.id);
+                return (
+                  <button
+                    key={product.id}
+                    onClick={() => toggle(product.id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-colors ${checked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                  >
+                    <div className={`h-5 w-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${checked ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                      {checked && <Check className="h-3.5 w-3.5" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{product.name}</p>
+                      {product.category && <p className="text-xs text-muted-foreground">{product.category}</p>}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
+        </div>
+        <div className="p-4 border-t bg-background flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>{t("cancel")}</Button>
+          <Button className="flex-1 font-bold gap-1.5" onClick={handleAdd} disabled={saving || selected.size === 0}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {selected.size > 0 ? `${t("add")} ${selected.size}` : t("add")}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -723,7 +765,7 @@ export default function LocationPage() {
             </div>
 
             <div className="pt-4 space-y-2">
-              <AddProductDialog locationId={location.id} />
+              <AddProductDialog locationId={location.id} existingProductIds={location.stock.map((s) => s.productId)} />
               {!lite && (
                 <FillStockDialog
                   locationId={location.id}
