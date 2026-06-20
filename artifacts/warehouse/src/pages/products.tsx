@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProductLocationsDialog } from "@/components/product-locations-dialog";
 import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
+import { naturalCompare } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -301,10 +302,10 @@ export default function ProductsPage() {
     });
   };
 
-  const allFiltered = products?.filter((p) => {
+  const allFiltered = (products?.filter((p) => {
     const q = search.toLowerCase();
     return p.name.toLowerCase().includes(q) || (p.category ?? "").toLowerCase().includes(q);
-  }) ?? [];
+  }) ?? []).sort((a, b) => naturalCompare(a.name, b.name));
 
   const byType = (filter: FilterType) => {
     if (filter === "all") return allFiltered;
@@ -348,7 +349,7 @@ export default function ProductsPage() {
     const sorted = Array.from(groups.entries()).sort(([a], [b]) => {
       if (a === "Uncategorised") return 1;
       if (b === "Uncategorised") return -1;
-      return a.localeCompare(b);
+      return naturalCompare(a, b);
     });
     return sorted.map(([key, items]) => ({ key, label: key, items }));
   };

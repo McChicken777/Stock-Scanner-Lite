@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { naturalCompare } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -319,7 +320,7 @@ export default function LocationsPage() {
   const filteredLocations = locations?.filter(l =>
     l.id.toLowerCase().includes(search.toLowerCase()) ||
     (l.description && l.description.toLowerCase().includes(search.toLowerCase()))
-  );
+  ).sort((a, b) => naturalCompare(a.id, b.id));
 
   const handleDelete = (id: string) => {
     deleteLocation.mutate({ locationId: id }, {
