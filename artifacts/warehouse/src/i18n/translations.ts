@@ -17,7 +17,8 @@ const KEYS = [
   "signOut", "ownerPanel",
   "descJobTemplates", "descMaterials", "descProductionFlow", "descStationQueues",
   "descAnalytics", "descManageUsers", "descAttendance", "descLeaveRequests",
-  "descProductsStock", "descSuppliers", "descCompanyPlan",
+  "descProductsStock", "descSuppliers", "descCompanyPlan", "descCustomers", "descQuotes",
+  "sidebarCollapse", "sidebarExpand",
 
   // ── Common actions ─────────────────────────────────────────────────────────
   "save", "cancel", "delete", "add", "edit", "create", "back", "continue",
@@ -454,6 +455,10 @@ const en: Dict = {
   descProductsStock: "Manage your product catalogue",
   descSuppliers: "Manage your supplier list",
   descCompanyPlan: "Company details & subscription",
+  descCustomers: "Manage your customer list",
+  descQuotes: "Create & track quotes",
+  sidebarCollapse: "Collapse",
+  sidebarExpand: "Expand",
 
   // ── Common actions ─────────────────────────────────────────────────────────
   save: "Save",
@@ -1415,6 +1420,10 @@ const sl: Dict = {
   descProductsStock: "Upravljajte katalog izdelkov",
   descSuppliers: "Upravljajte seznam dobaviteljev",
   descCompanyPlan: "Podatki o podjetju in naročnina",
+  descCustomers: "Upravljajte seznam strank",
+  descQuotes: "Ustvarjajte in spremljajte ponudbe",
+  sidebarCollapse: "Skrči",
+  sidebarExpand: "Razširi",
 
   // ── Common actions ─────────────────────────────────────────────────────────
   save: "Shrani",
