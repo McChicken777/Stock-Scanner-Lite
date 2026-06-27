@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, suppliersTable, supplierProductsTable, productsTable, stockTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
+import { db, suppliersTable, supplierProductsTable, productsTable, stockTable, purchaseOrdersTable, quoteRequestSuppliersTable, quoteRequestsTable } from "@workspace/db";
+import { eq, and, sql, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -130,6 +130,37 @@ router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to delete supplier");
     res.status(500).json({ error: "Failed to delete supplier" });
+  }
+});
+
+// ─── SUPPLIER STATS ────────────────────────────────────────────────────────────
+// Returns per-supplier counts: orders placed, quotes sent, quotes accepted.
+
+router.get("/stats", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const [orders, quotesSent, quotesAccepted] = await Promise.all([
+      db.select({ supplierId: purchaseOrdersTable.supplierId, count: sql<number>`count(*)::int` })
+        .from(purchaseOrdersTable)
+        .where(eq(purchaseOrdersTable.companyId, companyId))
+        .groupBy(purchaseOrdersTable.supplierId),
+      db.select({ supplierId: quoteRequestSuppliersTable.supplierId, count: sql<number>`count(*)::int` })
+        .from(quoteRequestSuppliersTable)
+        .where(eq(quoteRequestSuppliersTable.companyId, companyId))
+        .groupBy(quoteRequestSuppliersTable.supplierId),
+      db.select({ supplierId: quoteRequestsTable.decidedSupplierId, count: sql<number>`count(*)::int` })
+        .from(quoteRequestsTable)
+        .where(and(eq(quoteRequestsTable.companyId, companyId), isNotNull(quoteRequestsTable.decidedSupplierId)))
+        .groupBy(quoteRequestsTable.decidedSupplierId),
+    ]);
+    const stats: Record<number, { ordersPlaced: number; quotesSent: number; quotesAccepted: number }> = {};
+    for (const r of orders) if (r.supplierId != null) (stats[r.supplierId] ??= { ordersPlaced: 0, quotesSent: 0, quotesAccepted: 0 }).ordersPlaced = r.count;
+    for (const r of quotesSent) (stats[r.supplierId] ??= { ordersPlaced: 0, quotesSent: 0, quotesAccepted: 0 }).quotesSent = r.count;
+    for (const r of quotesAccepted) if (r.supplierId != null) (stats[r.supplierId] ??= { ordersPlaced: 0, quotesSent: 0, quotesAccepted: 0 }).quotesAccepted = r.count;
+    res.json(stats);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load supplier stats");
+    res.status(500).json({ error: "Failed to load supplier stats" });
   }
 });
 

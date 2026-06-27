@@ -3,7 +3,7 @@ import { useRoute, useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowLeft, Save, ShoppingCart, Factory, Package } from "lucide-react";
+import { ArrowLeft, Save, ShoppingCart, Factory, Package, Check } from "lucide-react";
 import { useGetProduct } from "@workspace/api-client-react";
 import type { Product } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,6 +78,94 @@ function normalizeItemType(raw: string | undefined | null): ItemType {
   if (raw === "production") return "manufactured_part";
   if (raw === "purchased_part" || raw === "manufactured_part" || raw === "final_product") return raw;
   return "purchased_part";
+}
+
+// ─── Per-supplier SKU panel (edit mode only) ───────────────────────────────────
+// Set once here; auto-fills the supplier's quote form so they just enter the price.
+
+interface SupplierSkuRow { supplierId: number; supplierName: string | null; supplierSku: string | null }
+
+function SupplierSkuPanel({ productId }: { productId: number }) {
+  const { data: allSuppliers = [] } = useQuery<{ id: number; name: string }[]>({
+    queryKey: ["suppliers"],
+    queryFn: () => fetch("/api/suppliers", { credentials: "include" }).then((r) => r.json()),
+  });
+  const { data: existing = [], refetch } = useQuery<SupplierSkuRow[]>({
+    queryKey: [`/api/products/${productId}/supplier-skus`],
+    queryFn: () => fetch(`/api/products/${productId}/supplier-skus`, { credentials: "include" }).then((r) => r.json()),
+    enabled: productId > 0,
+  });
+
+  const [saved, setSaved] = useState<Set<number>>(new Set());
+  const skuBySupplier = new Map(existing.map((r) => [r.supplierId, r.supplierSku ?? ""]));
+
+  async function upsert(supplierId: number, sku: string) {
+    if (sku.trim()) {
+      await fetch(`/api/suppliers/${supplierId}/products`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, supplierSku: sku.trim() }),
+      });
+    } else {
+      await fetch(`/api/suppliers/${supplierId}/products/${productId}`, { method: "DELETE", credentials: "include" });
+    }
+    await refetch();
+    setSaved((s) => new Set([...s, supplierId]));
+    setTimeout(() => setSaved((s) => { const n = new Set(s); n.delete(supplierId); return n; }), 1500);
+  }
+
+  if (allSuppliers.length === 0) return null;
+
+  return (
+    <div className="space-y-3 p-4 bg-muted/30 border-2 border-border/60 rounded-xl">
+      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        SKUs per supplier
+      </p>
+      <p className="text-xs text-muted-foreground -mt-1">
+        Set your SKU for each supplier once — it pre-fills their quote form automatically.
+      </p>
+      <div className="space-y-2">
+        {allSuppliers.map((s) => {
+          const current = skuBySupplier.get(s.id) ?? "";
+          return (
+            <SupplierSkuField
+              key={s.id}
+              supplierId={s.id}
+              supplierName={s.name}
+              initialSku={current}
+              savedFlash={saved.has(s.id)}
+              onBlur={upsert}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SupplierSkuField({
+  supplierId, supplierName, initialSku, savedFlash, onBlur,
+}: { supplierId: number; supplierName: string; initialSku: string; savedFlash: boolean; onBlur: (id: number, sku: string) => Promise<void> }) {
+  const [value, setValue] = useState(initialSku);
+  useEffect(() => { setValue(initialSku); }, [initialSku]);
+
+  async function handleBlur() {
+    if (value !== initialSku) await onBlur(supplierId, value);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground w-28 flex-shrink-0 truncate">{supplierName}</span>
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleBlur}
+        placeholder="SKU (optional)"
+        className="h-8 border-2 font-mono text-sm flex-1"
+      />
+      {savedFlash && <Check className="h-4 w-4 text-green-500 flex-shrink-0" />}
+    </div>
+  );
 }
 
 export default function ProductFormPage() {
@@ -372,6 +460,8 @@ export default function ProductFormPage() {
                 )}
               </div>
             )}
+
+            {isEdit && isPurchased && <SupplierSkuPanel productId={productId} />}
 
             <div className="pt-6 pb-8">
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={isPending}>

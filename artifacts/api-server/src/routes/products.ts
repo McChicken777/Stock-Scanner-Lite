@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable, suppliersTable } from "@workspace/db";
+import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable, suppliersTable, supplierProductsTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
@@ -476,6 +476,28 @@ router.delete("/:productId/procedures/:procedureId", requireAdmin, async (req, r
   } catch (err) {
     req.log.error({ err }, "Failed to remove procedure");
     res.status(500).json({ error: "Failed to remove procedure" });
+  }
+});
+
+// ─── PER-SUPPLIER SKUs FOR A PRODUCT ──────────────────────────────────────────
+// Set once in product editing; consumed by the RFQ quote form to prefill SKUs.
+
+router.get("/:productId/supplier-skus", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const productId = Number(req.params.productId);
+    const rows = await db.select({
+      supplierId: supplierProductsTable.supplierId,
+      supplierName: suppliersTable.name,
+      supplierSku: supplierProductsTable.supplierSku,
+    })
+      .from(supplierProductsTable)
+      .leftJoin(suppliersTable, eq(supplierProductsTable.supplierId, suppliersTable.id))
+      .where(and(eq(supplierProductsTable.productId, productId), eq(supplierProductsTable.companyId, companyId)));
+    res.json(rows);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list supplier SKUs");
+    res.status(500).json({ error: "Failed to list supplier SKUs" });
   }
 });
 
