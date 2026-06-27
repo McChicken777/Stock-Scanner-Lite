@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, ordersTable, orderItemsTable, productsTable, stockTable, suppliersTable } from "@workspace/db";
-import { eq, and, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -9,7 +9,7 @@ const router: IRouter = Router();
 // GET /api/orders/orders - List all orders
 router.get("/orders", requireAuth, async (req, res) => {
   try {
-    const { companyId } = req.session;
+    const companyId = req.session.companyId!;
 
     const orders = await db.select({
       id: ordersTable.id,
@@ -35,12 +35,12 @@ router.get("/orders", requireAuth, async (req, res) => {
 // GET /api/orders/:id - Get order with items
 router.get("/:id", requireAuth, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
 
     const order = await db.query.ordersTable.findFirst({
       where: and(
-        eq(ordersTable.id, parseInt(id)),
+        eq(ordersTable.id, id),
         eq(ordersTable.companyId, companyId)
       ),
     });
@@ -63,7 +63,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     })
       .from(orderItemsTable)
       .innerJoin(productsTable, eq(orderItemsTable.productId, productsTable.id))
-      .where(eq(orderItemsTable.orderId, parseInt(id)));
+      .where(eq(orderItemsTable.orderId, id));
 
     res.json({ ...order, items });
   } catch (err) {
@@ -75,9 +75,8 @@ router.get("/:id", requireAuth, async (req, res) => {
 // POST /api/orders/generate-drafts - Generate order drafts for all low-stock items
 router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
+    const companyId = req.session.companyId!;
 
-    // Get all purchase items below buffer stock with suppliers
     const lowStockItems = await db.select({
       product: productsTable,
       supplier: suppliersTable,
@@ -96,7 +95,6 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
       .groupBy(productsTable.id, suppliersTable.id)
       .having(sql`COALESCE(SUM(${stockTable.quantity}), 0) < ${productsTable.bufferStock}`);
 
-    // Group by supplierId and create orders
     const ordersBySupplier = new Map<number, typeof lowStockItems>();
     lowStockItems.forEach((item) => {
       if (item.supplier) {
@@ -110,10 +108,9 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
 
     const createdOrders = [];
 
-    for (const [supplierId, items] of ordersBySupplier.entries()) {
+    for (const [, items] of ordersBySupplier.entries()) {
       const supplierName = items[0]?.supplier?.name || "Unknown";
-      
-      // Check if draft already exists for this supplier
+
       const existing = await db.query.ordersTable.findFirst({
         where: and(
           eq(ordersTable.companyId, companyId),
@@ -134,11 +131,9 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
         orderId = inserted.id;
       }
 
-      // Add items to order
       for (const item of items) {
         const restockAmount = item.product.targetStock - (item.totalStock || 0);
         if (restockAmount > 0) {
-          // Check if item already in order
           const existingItem = await db.query.orderItemsTable.findFirst({
             where: and(
               eq(orderItemsTable.orderId, orderId),
@@ -166,10 +161,7 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
       });
     }
 
-    res.json({
-      message: "Order drafts generated",
-      orders: createdOrders,
-    });
+    res.json({ message: "Order drafts generated", orders: createdOrders });
   } catch (err) {
     req.log.error({ err }, "Failed to generate order drafts");
     res.status(500).json({ error: "Failed to generate order drafts" });
@@ -179,8 +171,9 @@ router.post("/generate-drafts", requireAuth, requireAdmin, async (req, res) => {
 // PUT /api/orders/:id/items/:itemId - Update order item quantity
 router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id, itemId } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
+    const itemId = parseInt(req.params.itemId as string, 10);
     const { quantity } = req.body;
 
     if (!Number.isInteger(quantity) || quantity < 0) {
@@ -190,8 +183,8 @@ router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => 
 
     const item = await db.query.orderItemsTable.findFirst({
       where: and(
-        eq(orderItemsTable.id, parseInt(itemId)),
-        eq(orderItemsTable.orderId, parseInt(id)),
+        eq(orderItemsTable.id, itemId),
+        eq(orderItemsTable.orderId, id),
         eq(orderItemsTable.companyId, companyId)
       ),
     });
@@ -203,7 +196,7 @@ router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => 
 
     await db.update(orderItemsTable)
       .set({ quantity })
-      .where(and(eq(orderItemsTable.id, parseInt(itemId)), eq(orderItemsTable.companyId, companyId!)));
+      .where(and(eq(orderItemsTable.id, itemId), eq(orderItemsTable.companyId, companyId)));
 
     res.json({ success: true });
   } catch (err) {
@@ -215,13 +208,14 @@ router.put("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => 
 // DELETE /api/orders/:id/items/:itemId - Remove item from order
 router.delete("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id, itemId } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
+    const itemId = parseInt(req.params.itemId as string, 10);
 
     const item = await db.query.orderItemsTable.findFirst({
       where: and(
-        eq(orderItemsTable.id, parseInt(itemId)),
-        eq(orderItemsTable.orderId, parseInt(id)),
+        eq(orderItemsTable.id, itemId),
+        eq(orderItemsTable.orderId, id),
         eq(orderItemsTable.companyId, companyId)
       ),
     });
@@ -231,7 +225,7 @@ router.delete("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) 
       return;
     }
 
-    await db.delete(orderItemsTable).where(and(eq(orderItemsTable.id, parseInt(itemId)), eq(orderItemsTable.companyId, companyId!)));
+    await db.delete(orderItemsTable).where(and(eq(orderItemsTable.id, itemId), eq(orderItemsTable.companyId, companyId)));
 
     res.json({ success: true });
   } catch (err) {
@@ -243,12 +237,12 @@ router.delete("/:id/items/:itemId", requireAuth, requireAdmin, async (req, res) 
 // PUT /api/orders/:id/mark-sent - Mark order as sent
 router.put("/:id/mark-sent", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { companyId } = req.session;
-    const { id } = req.params;
+    const companyId = req.session.companyId!;
+    const id = parseInt(req.params.id as string, 10);
 
     const order = await db.query.ordersTable.findFirst({
       where: and(
-        eq(ordersTable.id, parseInt(id)),
+        eq(ordersTable.id, id),
         eq(ordersTable.companyId, companyId)
       ),
     });
@@ -260,7 +254,7 @@ router.put("/:id/mark-sent", requireAuth, requireAdmin, async (req, res) => {
 
     await db.update(ordersTable)
       .set({ status: "sent" })
-      .where(and(eq(ordersTable.id, parseInt(id)), eq(ordersTable.companyId, companyId!)));
+      .where(and(eq(ordersTable.id, id), eq(ordersTable.companyId, companyId)));
 
     res.json({ success: true });
   } catch (err) {

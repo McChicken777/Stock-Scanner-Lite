@@ -654,7 +654,7 @@ router.get("/restock-requests", requireAdmin, async (req, res) => {
 router.put("/restock-requests/:id", requireAdmin, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const parsed = z.object({
       status: z.enum(["approved", "ordered", "dismissed"]),
     }).safeParse(req.body);
