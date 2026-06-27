@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRoute, useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,23 +46,9 @@ const formSchema = z.object({
   name: z.string().min(2, "Name is required"),
   itemType: z.enum(["purchased_part", "manufactured_part", "final_product"]).default("purchased_part"),
   category: z.string().default(""),
-  supplierId: z.coerce.number().optional().or(z.literal("")),
-  supplierProductName: z.string().optional().or(z.literal("")),
-  supplierSku: z.string().optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof formSchema>;
-
-interface Supplier {
-  id: number;
-  name: string;
-}
-
-async function fetchSuppliers(): Promise<Supplier[]> {
-  const res = await fetch("/api/suppliers", { credentials: "include" });
-  if (!res.ok) throw new Error("Failed");
-  return res.json();
-}
 
 async function fetchCategories(): Promise<string[]> {
   const res = await fetch("/api/products/categories", { credentials: "include" });
@@ -77,16 +63,22 @@ function normalizeItemType(raw: string | undefined | null): ItemType {
   return "purchased_part";
 }
 
-// ─── Per-supplier SKU panel (edit mode only) ───────────────────────────────────
-// Set once here; auto-fills the supplier's quote form so they just enter the price.
+// ─── Per-supplier SKU panel (edit mode, purchased parts) ──────────────────────
 
 interface SupplierSkuRow { supplierId: number; supplierName: string | null; supplierSku: string | null }
 
-function SupplierSkuPanel({ productId }: { productId: number }) {
-  const { data: allSuppliers = [] } = useQuery<{ id: number; name: string }[]>({
-    queryKey: ["suppliers"],
-    queryFn: () => fetch("/api/suppliers", { credentials: "include" }).then((r) => r.json()),
+function SupplierSkuPanel({ productId, category }: { productId: number; category: string }) {
+  const { data: categorySuppliers = [] } = useQuery<{ id: number; name: string; categories?: string[] }[]>({
+    queryKey: ["/api/suppliers/by-categories", category],
+    queryFn: () => {
+      if (!category) return Promise.resolve([]);
+      const params = new URLSearchParams();
+      params.append("cats[]", category);
+      return fetch(`/api/suppliers/by-categories?${params.toString()}`, { credentials: "include" }).then((r) => r.json());
+    },
+    enabled: !!category,
   });
+
   const { data: existing = [], refetch } = useQuery<SupplierSkuRow[]>({
     queryKey: [`/api/products/${productId}/supplier-skus`],
     queryFn: () => fetch(`/api/products/${productId}/supplier-skus`, { credentials: "include" }).then((r) => r.json()),
@@ -111,8 +103,6 @@ function SupplierSkuPanel({ productId }: { productId: number }) {
     setTimeout(() => setSaved((s) => { const n = new Set(s); n.delete(supplierId); return n; }), 1500);
   }
 
-  if (allSuppliers.length === 0) return null;
-
   return (
     <div className="space-y-3 p-4 bg-muted/30 border-2 border-border/60 rounded-xl">
       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -121,21 +111,27 @@ function SupplierSkuPanel({ productId }: { productId: number }) {
       <p className="text-xs text-muted-foreground -mt-1">
         Set your SKU for each supplier once — it pre-fills their quote form automatically.
       </p>
-      <div className="space-y-2">
-        {allSuppliers.map((s) => {
-          const current = skuBySupplier.get(s.id) ?? "";
-          return (
-            <SupplierSkuField
-              key={s.id}
-              supplierId={s.id}
-              supplierName={s.name}
-              initialSku={current}
-              savedFlash={saved.has(s.id)}
-              onBlur={upsert}
-            />
-          );
-        })}
-      </div>
+      {!category ? (
+        <p className="text-xs text-muted-foreground italic">Select a category above to see supplier SKU fields.</p>
+      ) : categorySuppliers.length === 0 ? (
+        <p className="text-xs text-amber-600">No suppliers assigned to "{category}" yet — go to the Suppliers tab to assign some.</p>
+      ) : (
+        <div className="space-y-2">
+          {categorySuppliers.map((s) => {
+            const current = skuBySupplier.get(s.id) ?? "";
+            return (
+              <SupplierSkuField
+                key={s.id}
+                supplierId={s.id}
+                supplierName={s.name}
+                initialSku={current}
+                savedFlash={saved.has(s.id)}
+                onBlur={upsert}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,15 +172,9 @@ export default function ProductFormPage() {
   const { atLeast } = usePlan();
   const { t } = useLang();
   const isAdmin = user?.role === "admin" || user?.role === "owner";
-  const categoryListId = useRef(`cat-list-${Math.random().toString(36).slice(2)}`).current;
 
   const { data: product, isLoading: isProductLoading } = useGetProduct(productId, {
     query: { enabled: isEdit, queryKey: [`/api/products/${productId}`] }
-  });
-
-  const { data: suppliers = [] } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
   });
 
   const { data: categories = [] } = useQuery({
@@ -200,13 +190,11 @@ export default function ProductFormPage() {
       name: "",
       itemType: "purchased_part",
       category: "",
-      supplierId: "",
-      supplierProductName: "",
-      supplierSku: "",
     },
   });
 
   const watchedItemType = form.watch("itemType");
+  const watchedCategory = form.watch("category");
   const isPurchased = watchedItemType === "purchased_part";
 
   useEffect(() => {
@@ -216,22 +204,15 @@ export default function ProductFormPage() {
         name: p.name,
         itemType: normalizeItemType(p.itemType),
         category: p.category || "",
-        supplierId: p.supplierId ?? "",
-        supplierProductName: p.supplierProductName || "",
-        supplierSku: p.supplierSku || "",
       });
     }
   }, [product, isEdit, form]);
 
   const onSubmit = async (data: FormValues) => {
-    const linkedSupplier = isPurchased && data.supplierId ? parseInt(String(data.supplierId)) : null;
     const payload = {
       name: data.name,
       category: data.category || "",
       itemType: data.itemType,
-      supplierId: linkedSupplier,
-      supplierProductName: linkedSupplier ? (data.supplierProductName || null) : null,
-      supplierSku: linkedSupplier ? (data.supplierSku || null) : null,
     };
 
     setIsSaving(true);
@@ -349,16 +330,16 @@ export default function ProductFormPage() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsCategory")}</FormLabel>
-                  <datalist id={categoryListId}>
-                    {categories.map((c) => <option key={c} value={c} />)}
-                  </datalist>
                   <FormControl>
-                    <Input
-                      placeholder="e.g. Fasteners, Hydraulics, Welding Consumables"
-                      className="h-12 border-2 shadow-sm"
-                      list={categoryListId}
-                      {...field}
-                    />
+                    <select className="w-full h-12 px-3 border-2 rounded-lg text-base shadow-sm bg-background" {...field}>
+                      <option value="">— select category —</option>
+                      {field.value && !categories.includes(field.value) && (
+                        <option value={field.value}>{field.value}</option>
+                      )}
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </FormControl>
                   <p className="text-xs text-muted-foreground mt-1">Groups items together on the products page</p>
                   <FormMessage />
@@ -366,65 +347,7 @@ export default function ProductFormPage() {
               )}
             />
 
-            {isPurchased && (
-              <div className="space-y-4 p-4 bg-blue-50/50 border-2 border-blue-100 rounded-xl">
-                <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Supplier Information</p>
-
-                <FormField
-                  control={form.control}
-                  name="supplierId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">{t("productsSupplier")}</FormLabel>
-                      <FormControl>
-                        <select className="w-full h-12 px-3 border-2 rounded-lg text-base shadow-sm bg-background" {...field}>
-                          <option value="">No supplier linked</option>
-                          {suppliers.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="supplierProductName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="supplierSku"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
-                      </FormControl>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Included when emailing this supplier an order.
-                      </p>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            )}
-
-            {isEdit && isPurchased && <SupplierSkuPanel productId={productId} />}
+            {isEdit && isPurchased && <SupplierSkuPanel productId={productId} category={watchedCategory} />}
 
             <div className="pt-6 pb-8">
               <Button type="submit" size="lg" className="w-full h-14 text-lg font-bold" disabled={isPending}>

@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, CheckCircle2 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -85,7 +85,7 @@ const T = {
   },
 };
 
-// ─── Low-stock summary ────────────────────────────────────────────────────────
+// ─── Low-stock reorder types ───────────────────────────────────────────────────
 
 interface ReorderQueueItem {
   id: number;
@@ -105,12 +105,148 @@ interface ReorderQueueItem {
   pendingPo: { poId: number; quantity: number; status: string } | null;
 }
 
-function LowStockOrdering({ onCreateRfq }: { onCreateRfq: () => void }) {
+// ─── Per-category RFQ card ────────────────────────────────────────────────────
+
+function CategoryRfqCard({ categoryName, items, suppliers }: {
+  categoryName: string;
+  items: ReorderQueueItem[];
+  suppliers: Supplier[];
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const [checkedSupplierIds, setCheckedSupplierIds] = useState<Set<number>>(
+    () => new Set(suppliers.map((s) => s.id))
+  );
+  const [quantities, setQuantities] = useState<Record<number, number>>(
+    () => Object.fromEntries(items.map((i) => [i.id, i.quantityNeeded || i.shortfall || 1]))
+  );
+  const [sent, setSent] = useState(false);
+
+  const createMutation = useMutation({
+    mutationFn: () => apiFetch("/api/quote-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: items.map((i) => ({
+          productId: i.id,
+          productName: i.name,
+          quantity: quantities[i.id] ?? (i.quantityNeeded || i.shortfall || 1),
+          flagId: i.flagIds?.[0] ?? null,
+        })),
+        supplierIds: Array.from(checkedSupplierIds),
+        origin: window.location.origin,
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quote-requests"] });
+      setSent(true);
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  if (sent) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border-2 border-green-200 bg-green-50 px-4 py-3">
+        <Check className="h-4 w-4 text-green-600" />
+        <span className="text-sm font-semibold text-green-700">Quotes sent for {categoryName}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-2 border-amber-200 rounded-xl overflow-hidden bg-card">
+      <div className="px-4 py-2.5 bg-amber-50 flex items-center gap-2">
+        <TrendingDown className="h-4 w-4 text-amber-700 flex-shrink-0" />
+        <h3 className="text-sm font-bold text-amber-800 flex-1">{categoryName}</h3>
+        <span className="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold">{items.length}</span>
+      </div>
+
+      <div className="divide-y divide-border/40 px-4">
+        {items.map((item) => (
+          <div key={item.id} className="flex items-center gap-2 py-2">
+            <span className="text-sm font-medium flex-1 min-w-0 truncate">{item.name}</span>
+            <Input
+              type="number"
+              min={1}
+              value={quantities[item.id] ?? (item.quantityNeeded || item.shortfall || 1)}
+              onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: Math.max(1, Number(e.target.value)) }))}
+              className="h-7 border-2 w-16 text-center text-sm"
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="px-4 py-3 border-t border-border/40 space-y-2">
+        {suppliers.length === 0 ? (
+          <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <span className="text-xs text-amber-700">
+              No suppliers assigned to "{categoryName}" — go to the Suppliers tab to assign some.
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {suppliers.map((s) => {
+              const checked = checkedSupplierIds.has(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setCheckedSupplierIds((set) => {
+                    const n = new Set(set);
+                    if (n.has(s.id)) n.delete(s.id); else n.add(s.id);
+                    return n;
+                  })}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border-2 text-xs font-semibold transition-colors ${checked ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
+                >
+                  <span className={`h-3.5 w-3.5 rounded-sm border-2 flex items-center justify-center flex-shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                    {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  {s.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 py-3 border-t border-border bg-muted/20">
+        <Button
+          size="sm"
+          className="gap-1.5 font-bold"
+          disabled={checkedSupplierIds.size === 0 || suppliers.length === 0 || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+        >
+          {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+          Send quotes
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Low-stock ordering: one card per category ────────────────────────────────
+
+function LowStockOrdering() {
   const { t } = useLang();
   const { data: queue = [], isLoading } = useQuery<ReorderQueueItem[]>({
     queryKey: ["/api/work/reorder-from-flags"],
     queryFn: () => apiFetch("/api/work/reorder-from-flags"),
     refetchInterval: 60000,
+  });
+
+  const categories = [...new Set(queue.map((i) => i.category || "Uncategorised"))];
+  const catKey = categories.sort().join(",");
+
+  const { data: categorySuppliers = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers/by-categories", catKey],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      categories.forEach((c) => params.append("cats[]", c));
+      return apiFetch(`/api/suppliers/by-categories?${params.toString()}`);
+    },
+    enabled: categories.length > 0,
   });
 
   if (isLoading) return <Skeleton className="h-28 w-full rounded-xl" />;
@@ -129,39 +265,23 @@ function LowStockOrdering({ onCreateRfq }: { onCreateRfq: () => void }) {
   }, {});
 
   return (
-    <div className="border-2 border-amber-200 rounded-xl overflow-hidden bg-card">
-      <div className="px-4 py-3 bg-amber-50 flex items-center gap-2">
-        <TrendingDown className="h-4 w-4 text-amber-700" />
-        <h2 className="text-sm font-bold text-amber-800 flex-1">{t("reorderNeeds")}</h2>
-        <span className="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold">{queue.length}</span>
-      </div>
-      <div className="divide-y divide-border/60">
-        {Object.entries(byCategory).map(([cat, items]) => (
-          <div key={cat} className="px-4 py-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{cat}</p>
-            {items.map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-0.5 text-sm">
-                <span className="font-medium truncate flex-1 min-w-0">{item.name}</span>
-                <span className="text-xs text-amber-600 font-semibold ml-2 flex-shrink-0">need {item.quantityNeeded || item.shortfall}</span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-      <div className="border-t border-border bg-muted/20 px-4 py-3">
-        <Button className="gap-1.5 font-bold" onClick={onCreateRfq}>
-          <FileText className="h-3.5 w-3.5" /> Create RFQ for these items
-        </Button>
-      </div>
+    <div className="space-y-3">
+      {Object.entries(byCategory).map(([cat, items]) => (
+        <CategoryRfqCard
+          key={cat}
+          categoryName={cat}
+          items={items}
+          suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
+        />
+      ))}
     </div>
   );
 }
 
-// ─── New request dialog ────────────────────────────────────────────────────────
+// ─── New request dialog (manual) ──────────────────────────────────────────────
 
 interface DraftItem { key: string; productId: number | null; productName: string; quantity: number; flagId: number | null; category?: string }
 
-// Inline price hints — shows what suppliers last charged for a product.
 function PriceHints({ productId, label }: { productId: number; label: string }) {
   const { data } = useQuery<PriceHistoryResp>({
     queryKey: [`/api/quote-requests/price-history/${productId}`],
@@ -203,7 +323,6 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
   const [selectedSuppliers, setSelectedSuppliers] = useState<Set<number>>(new Set());
   const [note, setNote] = useState("");
 
-  // Seed the draft from low-stock the first time the data arrives.
   const [seeded, setSeeded] = useState(false);
   if (!seeded && reorder.length > 0) {
     setItems(reorder.map((r) => ({
@@ -213,32 +332,6 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
     })));
     setSeeded(true);
   }
-
-  // Derive unique categories from current items for supplier suggestion.
-  const categories = [...new Set(items.map((i) => i.category).filter(Boolean) as string[])];
-  const catKey = categories.sort().join(",");
-
-  const { data: categorySuggestions = [] } = useQuery<Supplier[]>({
-    queryKey: ["/api/suppliers/by-categories", catKey],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      categories.forEach((c) => params.append("cats[]", c));
-      return apiFetch(`/api/suppliers/by-categories?${params.toString()}`);
-    },
-    enabled: categories.length > 0,
-  });
-
-  // Apply category suggestions to the supplier selection exactly once after seeding.
-  const suggestionsApplied = useRef(false);
-  useEffect(() => {
-    if (suggestionsApplied.current || !seeded || categorySuggestions.length === 0) return;
-    suggestionsApplied.current = true;
-    setSelectedSuppliers((prev) => {
-      const next = new Set(prev);
-      categorySuggestions.forEach((s) => next.add(s.id));
-      return next;
-    });
-  }, [seeded, categorySuggestions]);
 
   const createMutation = useMutation({
     mutationFn: () => apiFetch("/api/quote-requests", {
@@ -304,14 +397,7 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.suppliers}</p>
-              {categorySuggestions.length > 0 && (
-                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
-                  {categorySuggestions.length} suggested from item categories
-                </span>
-              )}
-            </div>
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.suppliers}</p>
             {suppliers.length === 0 ? (
               <p className="text-xs text-muted-foreground">{L.noSuppliers}</p>
             ) : suppliers.map((s) => {
@@ -349,8 +435,8 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-// Phase 2 — predicted cheapest supplier for the current low-stock basket.
-// Predict-then-verify: order immediately from known prices, or send an RFQ to confirm.
+// ─── Predicted cheapest supplier card ─────────────────────────────────────────
+
 function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => void }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -470,6 +556,8 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function SourcingPage() {
   const { lang } = useLang();
   const L = T[lang === "sl" ? "sl" : "en"];
@@ -508,7 +596,7 @@ export default function SourcingPage() {
 
       <PredictedCard L={L} onSendRfq={() => setShowNew(true)} />
 
-      <LowStockOrdering onCreateRfq={() => setShowNew(true)} />
+      <LowStockOrdering />
 
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
