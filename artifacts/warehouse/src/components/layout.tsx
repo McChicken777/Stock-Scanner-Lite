@@ -7,7 +7,7 @@ import {
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
-  PanelLeft, PanelLeftClose,
+  PanelLeft, PanelLeftClose, Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
@@ -304,6 +304,7 @@ function AdminDesktopSidebar() {
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
           </>
@@ -354,6 +355,7 @@ function AdminDesktopSidebar() {
 
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
           </>
@@ -682,6 +684,15 @@ function AdminBottomNav() {
                 </Link>
               </>
             )}
+            <Link href="/sourcing" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Scale className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{t("navSourcing")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descSourcing")}</p>
+                </div>
+              </div>
+            </Link>
             <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />

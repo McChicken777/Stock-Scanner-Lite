@@ -26,6 +26,8 @@ import adminRouter from "./admin";
 import kioskRouter from "./kiosk";
 import rawMaterialsRouter from "./raw-materials";
 import joinRouter from "./join";
+import rfqRouter from "./rfq";
+import rfqPublicRouter from "./rfq-public";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -57,5 +59,7 @@ router.use("/admin", requireAuth, adminRouter);
 router.use("/kiosk", kioskRouter);
 router.use("/raw-materials", requireAuth, rawMaterialsRouter);
 router.use("/join", joinRouter); // public — no requireAuth
+router.use("/quote-requests", requireAuth, rfqRouter);
+router.use("/rfq", rfqPublicRouter); // public — no requireAuth (supplier self-service quotes)
 
 export default router;

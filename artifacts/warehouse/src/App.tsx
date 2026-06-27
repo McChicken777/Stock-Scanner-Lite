@@ -68,6 +68,9 @@ import KioskPage from "@/pages/kiosk";
 import AdminAiWizardPage from "@/pages/admin-ai-wizard";
 import JoinPage from "@/pages/join";
 import StockImportPage from "@/pages/stock-import";
+import SourcingPage from "@/pages/sourcing";
+import SourcingDetailPage from "@/pages/sourcing-detail";
+import RfqQuotePage from "@/pages/rfq-quote";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -192,6 +195,8 @@ function ProtectedRoutes() {
         <Route path="/admin/users" component={AdminUsersPage} />
         <Route path="/admin/company" component={AdminCompanyPage} />
         <Route path="/admin/suppliers" component={AdminSuppliersPage} />
+        <Route path="/sourcing" component={SourcingPage} />
+        <Route path="/sourcing/:id" component={SourcingDetailPage} />
         <Route path="/admin/roles" component={AdminRolesPage} />
         <Route path="/admin/procedures" component={AdminProceduresPage} />
         <Route path="/admin/procedure-inputs/:procId" component={AdminProcedureInputsPage} />
@@ -312,6 +317,7 @@ function App() {
               <Switch>
                 <Route path="/kiosk" component={KioskPage} />
                 <Route path="/join/:token" component={JoinPage} />
+                <Route path="/rfq/:token" component={RfqQuotePage} />
                 <Route component={ProtectedRoutes} />
               </Switch>
             </WouterRouter>

@@ -611,10 +611,15 @@ function LowStockOrdering() {
 
   return (
     <div className="space-y-3">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-        <TrendingDown className="h-4 w-4" /> {t("reorderNeeds")}
-        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
-      </h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+          <TrendingDown className="h-4 w-4" /> {t("reorderNeeds")}
+          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
+        </h2>
+        <Link href="/sourcing" className="text-xs font-bold text-primary hover:underline whitespace-nowrap">
+          {t("navSourcing")} →
+        </Link>
+      </div>
       {groups.map((g, idx) => (
         <SupplierOrderCard key={g.supplierId ?? `__none__${idx}`} group={g} />
       ))}

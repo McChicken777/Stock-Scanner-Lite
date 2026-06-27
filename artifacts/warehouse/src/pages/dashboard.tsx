@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Package, MapPin, AlertTriangle, Activity,
   FileText, Users, Zap, Clock, CheckCircle2, UserCheck, Calendar,
-  Flag, AlertCircle, Inbox, FolderKanban, ScanLine,
+  Flag, AlertCircle, Inbox, FolderKanban, ScanLine, Scale,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -436,6 +436,9 @@ export default function Dashboard() {
                   View all {summary.lowStockProducts.length} flagged
                 </Link>
               )}
+              <Link href="/sourcing" className="mt-1 flex items-center justify-center gap-1.5 text-xs font-bold text-white bg-secondary hover:bg-secondary/90 rounded-lg py-2.5">
+                <Scale className="h-3.5 w-3.5" /> {t("dashGetQuotes")}
+              </Link>
             </div>
           </CardContent>
         </Card>

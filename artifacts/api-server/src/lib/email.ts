@@ -139,6 +139,80 @@ ${total > 0 ? `<p>${L.totalLabel}: <strong>${total.toFixed(2)}</strong></p>` : "
   }
 }
 
+// RFQ (request-for-quote) email strings per language.
+const RFQ_STRINGS = {
+  en: {
+    ourTeam: "our team",
+    subject: (company: string) => `${company} — Request for quote`,
+    greeting: (name: string) => `Dear ${name},`,
+    intro: "We would like to request your best price and delivery time for the following items:",
+    sku: "Your SKU",
+    qty: "Qty",
+    cta: "Please enter your prices and lead time using the link below — no login required:",
+    button: "Submit your quote",
+    thanks: "Thank you,",
+  },
+  sl: {
+    ourTeam: "naša ekipa",
+    subject: (company: string) => `${company} — Povpraševanje po ponudbi`,
+    greeting: (name: string) => `Spoštovani ${name},`,
+    intro: "Prosimo za vašo najboljšo ceno in rok dobave za naslednje izdelke:",
+    sku: "Vaša šifra",
+    qty: "Količina",
+    cta: "Prosimo, vnesite cene in rok dobave preko spodnje povezave — prijava ni potrebna:",
+    button: "Oddajte ponudbo",
+    thanks: "Hvala,",
+  },
+} as const;
+
+export async function sendRfqRequestEmail(params: {
+  smtp: SmtpConfig;
+  supplierName: string;
+  supplierEmail: string;
+  quoteUrl: string;
+  companyName?: string | null;
+  lang?: OrderEmailLang;
+  items: { name: string; sku?: string | null; quantity: number }[];
+}): Promise<boolean> {
+  try {
+    const L = RFQ_STRINGS[params.lang === "sl" ? "sl" : "en"];
+    const company = params.companyName?.trim() || params.smtp.fromName?.trim() || L.ourTeam;
+    const from = params.smtp.fromName?.trim() || params.companyName?.trim() || L.ourTeam;
+    const subject = L.subject(company);
+    const rows = params.items.map((i) => {
+      const sku = i.sku ? ` (${L.sku}: ${i.sku})` : "";
+      return `  • ${i.name}${sku} — ${L.qty}: ${i.quantity}`;
+    }).join("\n");
+    const text = `${L.greeting(params.supplierName)}\n\n${L.intro}\n\n${rows}\n\n${L.cta}\n${params.quoteUrl}\n\n${L.thanks}\n${from}`;
+
+    const htmlRows = params.items.map((i) => {
+      const sku = i.sku ? ` <span style="color:#666">(${L.sku}: ${i.sku})</span>` : "";
+      return `<li><strong>${i.name}</strong>${sku} — ${L.qty}: <strong>${i.quantity}</strong></li>`;
+    }).join("");
+
+    await buildTransport(params.smtp).sendMail({
+      from: fromHeader(params.smtp),
+      to: params.supplierEmail,
+      subject,
+      text,
+      html: `
+<p>${L.greeting(params.supplierName)}</p>
+<p>${L.intro}</p>
+<ul>${htmlRows}</ul>
+<p>${L.cta}</p>
+<p><a href="${params.quoteUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">${L.button}</a></p>
+<p style="color:#666;font-size:12px;">${params.quoteUrl}</p>
+<p>${L.thanks}<br/>${from}</p>
+      `.trim(),
+    });
+    logger.info({ to: params.supplierEmail, lang: params.lang }, "RFQ request email sent");
+    return true;
+  } catch (err) {
+    logger.error({ err }, "Failed to send RFQ request email");
+    return false;
+  }
+}
+
 export async function sendLowStockAlert(params: {
   productName: string;
   category: string;
