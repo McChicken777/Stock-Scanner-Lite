@@ -11,9 +11,6 @@ const createSupplierSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
-  orderMethod: z.enum(["email", "web_store"]).optional().default("email"),
-  storeUrl: z.string().url().optional().or(z.literal("")),
-  storePlatform: z.enum(["shopify", "woocommerce", "custom"]).optional().or(z.literal("")).nullable(),
   language: z.enum(["en", "sl"]).optional().default("en"),
 });
 
@@ -44,9 +41,6 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
       email: data.email || null,
       phone: data.phone || null,
       notes: data.notes || null,
-      orderMethod: data.orderMethod ?? "email",
-      storeUrl: data.storeUrl || null,
-      storePlatform: (data.storePlatform || null) as string | null,
       language: data.language ?? "en",
       companyId,
     }).returning();
@@ -87,9 +81,6 @@ router.put("/:id", requireAuth, requireAdmin, async (req, res) => {
         email: data.email || null,
         phone: data.phone || null,
         notes: data.notes || null,
-        orderMethod: data.orderMethod ?? "email",
-        storeUrl: data.storeUrl || null,
-        storePlatform: (data.storePlatform || null) as string | null,
         language: data.language ?? "en",
       })
       .where(and(eq(suppliersTable.id, id), eq(suppliersTable.companyId, companyId)))

@@ -10,9 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, AlertTriangle, ShoppingCart, CheckCircle2,
   Package2, TrendingDown, Plus, Mail, ChevronDown, ChevronUp,
-  Truck, Building2, HelpCircle, Lock, Globe, ExternalLink,
+  Truck, Building2, HelpCircle, Lock,
 } from "lucide-react";
-import { buildMailtoLink, buildCartUrl } from "@/lib/ordering";
+import { buildMailtoLink } from "@/lib/ordering";
 
 interface ReorderItem {
   id: number;
@@ -31,11 +31,6 @@ interface ReorderItem {
   supplierSku: string | null;
   supplierName: string | null;
   supplierEmail: string | null;
-  supplierOrderMethod: string;
-  supplierStoreUrl: string | null;
-  supplierStorePlatform: string | null;
-  storeProductId: string | null;
-  storeProductUrl: string | null;
   unitCost: number;
   estimatedReorderCost: number;
 }
@@ -54,9 +49,6 @@ interface SupplierGroup {
   supplierId: number | null;
   supplierName: string | null;
   supplierEmail: string | null;
-  orderMethod: string;
-  storeUrl: string | null;
-  storePlatform: string | null;
   items: ReorderItem[];
 }
 
@@ -89,37 +81,15 @@ function SupplierGroupCard({
   const { t } = useLang();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const [webStorePoId, setWebStorePoId] = useState<number | null>(null);
-  const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
-  // Frozen snapshot of what was ordered — the post-order queue refetch re-tags these
-  // items with their new pending PO, so the live filtered list would otherwise empty out.
-  const [orderedLines, setOrderedLines] = useState<Array<{ id: number; name: string; qty: number; storeProductId: string | null; storeProductUrl: string | null }>>([]);
 
   const hasSupplier = group.supplierId != null;
   const allPending = group.items.every((i) => i.pendingPo != null);
   const totalCost = group.items.reduce((s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0), 0);
-  const isWebStore = group.orderMethod === "web_store";
-  const isCustomStore = isWebStore && group.storePlatform === "custom";
-
-  const markOrderedMutation = useMutation({
-    mutationFn: (poId: number) => apiFetch(`/api/purchase-orders/${poId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "ordered" }),
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
-      setWebStorePoId(null);
-      toast({ title: "Order marked as placed" });
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
 
   const itemsToOrder = group.items.filter((i) => !i.pendingPo);
 
   const batchMutation = useMutation({
-    mutationFn: (lines: Array<{ id: number; name: string; qty: number; storeProductId: string | null; storeProductUrl: string | null; unitCost: number; supplierSku: string | null }>) =>
+    mutationFn: (lines: Array<{ id: number; qty: number; unitCost: number; supplierSku: string | null }>) =>
       apiFetch("/api/purchase-orders/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -132,53 +102,34 @@ function SupplierGroupCard({
           })),
         }),
       }),
-    onSuccess: (po, lines) => {
+    onSuccess: (po) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-queue"] });
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: `PO #${po.id} created` });
-      if (isCustomStore) {
-        // No combined cart URL — the confirmation banner lists each product link to open one-by-one.
-        setOpenedItems(new Set());
-        setWebStorePoId(po.id);
-      } else if (isWebStore && group.storeUrl) {
-        // Open the pre-filled cart in a new tab
-        const cartItems = lines.map((l) => ({ storeProductId: l.storeProductId, qty: Math.max(1, l.qty) }));
-        window.open(buildCartUrl(group.storeUrl, group.storePlatform, cartItems), "_blank", "noopener,noreferrer");
-        setWebStorePoId(po.id);
-      } else {
-        onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
-      }
+      onOrderCreated(po.id, group.supplierEmail, group.supplierName, group.items.filter((i) => !i.pendingPo));
     },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
   function confirmOrder() {
-    // Snapshot the lines before the mutation triggers a queue refetch.
-    const snapshot = itemsToOrder.map((i) => ({
+    const lines = itemsToOrder.map((i) => ({
       id: i.id,
-      name: i.name,
       qty: Math.max(1, quantities[i.id] ?? i.shortfall),
-      storeProductId: i.storeProductId,
-      storeProductUrl: i.storeProductUrl,
       unitCost: i.unitCost,
       supplierSku: i.supplierSku,
     }));
-    setOrderedLines(snapshot.map((l) => ({ id: l.id, name: l.name, qty: l.qty, storeProductId: l.storeProductId, storeProductUrl: l.storeProductUrl })));
-    batchMutation.mutate(snapshot);
+    batchMutation.mutate(lines);
   }
 
   return (
     <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
-      {/* Supplier header */}
       <button
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
-        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? (isWebStore ? "bg-purple-100" : "bg-blue-100") : "bg-muted"}`}>
+        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? "bg-blue-100" : "bg-muted"}`}>
           {hasSupplier
-            ? isWebStore
-              ? <Globe className="h-4 w-4 text-purple-700" />
-              : <Building2 className="h-4 w-4 text-blue-700" />
+            ? <Building2 className="h-4 w-4 text-blue-700" />
             : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
         </div>
         <div className="flex-1 min-w-0">
@@ -188,21 +139,16 @@ function SupplierGroupCard({
             {totalCost > 0 && ` · est. $${totalCost.toFixed(2)}`}
           </p>
         </div>
-        {isWebStore ? (
-          <span className="flex items-center gap-1 text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded-full px-2 py-0.5 flex-shrink-0">
-            <Globe className="h-3 w-3" /> web store
-          </span>
-        ) : group.supplierEmail ? (
+        {group.supplierEmail && (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
             <Mail className="h-3 w-3" /> {group.supplierEmail}
           </span>
-        ) : null}
+        )}
         {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
       </button>
 
       {expanded && (
         <>
-          {/* Item rows */}
           <div className="border-t border-border divide-y divide-border/60">
             {group.items.map((item) => {
               const flagsForItem = activeFlags.filter((f) =>
@@ -237,7 +183,6 @@ function SupplierGroupCard({
                       )}
                     </div>
                   </div>
-                  {/* Editable quantity — only for items without a pending PO */}
                   {!item.pendingPo && (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <span className="text-xs text-muted-foreground">Qty:</span>
@@ -255,108 +200,26 @@ function SupplierGroupCard({
             })}
           </div>
 
-          {/* Action bar */}
-          <div className="border-t border-border bg-muted/20 px-4 py-3 flex flex-col gap-2">
-            {/* Custom store: per-item link checklist + "Order placed" */}
-            {webStorePoId && isCustomStore && (
-              <div className="rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2 space-y-2">
-                <p className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-                  <Globe className="h-3.5 w-3.5" /> Open each item, add to cart, then check out
-                </p>
-                <div className="space-y-1">
-                  {orderedLines.map((line) => {
-                    const opened = openedItems.has(line.id);
-                    return (
-                      <div key={line.id} className="flex items-center gap-2">
-                        <span className="flex-1 min-w-0 text-xs font-medium text-purple-900 truncate">{line.name} <span className="opacity-60">×{line.qty}</span></span>
-                        {line.storeProductUrl ? (
-                          <a href={line.storeProductUrl} target="_blank" rel="noopener noreferrer" onClick={() => setOpenedItems((s) => new Set(s).add(line.id))}>
-                            <Button size="sm" variant={opened ? "outline" : "default"} className={`h-7 text-[11px] font-bold gap-1 ${opened ? "border-green-300 text-green-700" : "bg-purple-600 hover:bg-purple-700"}`}>
-                              {opened ? <><CheckCircle2 className="h-3 w-3" /> Opened</> : <><ExternalLink className="h-3 w-3" /> Open</>}
-                            </Button>
-                          </a>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-0.5"><AlertTriangle className="h-3 w-3" /> no link</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex gap-1.5">
-                  {group.storeUrl && (
-                    <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-                      <Button size="sm" variant="outline" className="w-full h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
-                        <ExternalLink className="h-3 w-3" /> Open store
-                      </Button>
-                    </a>
-                  )}
-                  <Button
-                    size="sm"
-                    className="flex-1 h-8 text-xs font-bold gap-1 bg-purple-600 hover:bg-purple-700"
-                    disabled={markOrderedMutation.isPending}
-                    onClick={() => markOrderedMutation.mutate(webStorePoId)}
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Order placed
-                  </Button>
-                </div>
+          <div className="border-t border-border bg-muted/20 px-4 py-3 flex items-center gap-2 flex-wrap">
+            {allPending ? (
+              <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
+                <CheckCircle2 className="h-4 w-4" /> {t("reorderAllPending")}
               </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-9 font-bold gap-1.5"
+                disabled={batchMutation.isPending || itemsToOrder.length === 0}
+                onClick={confirmOrder}
+              >
+                <ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}
+              </Button>
             )}
-
-            {/* Web store (Shopify/Woo) "Order placed" confirmation banner */}
-            {webStorePoId && !isCustomStore && (
-              <div className="flex items-center gap-3 rounded-lg border-2 border-purple-300 bg-purple-50 px-3 py-2">
-                <Globe className="h-4 w-4 text-purple-700 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-purple-900">Cart opened — finish checkout in the store</p>
-                  <p className="text-[11px] text-purple-700">Once you've paid, confirm below so stock is tracked as ordered.</p>
-                </div>
-                <div className="flex gap-1.5 flex-shrink-0">
-                  {group.storeUrl && (
-                    <a href={buildCartUrl(group.storeUrl, group.storePlatform, orderedLines.map((l) => ({ storeProductId: l.storeProductId, qty: l.qty })))} target="_blank" rel="noopener noreferrer">
-                      <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
-                        <ExternalLink className="h-3 w-3" /> Reopen
-                      </Button>
-                    </a>
-                  )}
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs font-bold gap-1 bg-purple-600 hover:bg-purple-700"
-                    disabled={markOrderedMutation.isPending}
-                    onClick={() => markOrderedMutation.mutate(webStorePoId)}
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Order placed
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {allPending ? (
-                <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
-                  <CheckCircle2 className="h-4 w-4" /> {t("reorderAllPending")}
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  className={`h-9 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
-                  disabled={batchMutation.isPending || itemsToOrder.length === 0}
-                  onClick={confirmOrder}
-                >
-                  {batchMutation.isPending
-                    ? (isWebStore && !isCustomStore ? "Opening cart…" : "Creating…")
-                    : isCustomStore
-                      ? <><Globe className="h-3.5 w-3.5" /> Order · list {itemsToOrder.length} items</>
-                      : isWebStore
-                        ? <><Globe className="h-3.5 w-3.5" /> Open cart · {itemsToOrder.length} items</>
-                        : <><ShoppingCart className="h-3.5 w-3.5" /> Order {itemsToOrder.length} {t("reorderItemsToReorder")} from {group.supplierName ?? t("reorderNoSupplier")}</>}
-                </Button>
-              )}
-              <Link href="/work/purchase-orders">
-                <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
-                  <Truck className="h-3.5 w-3.5" /> {t("reorderViewPO")}
-                </Button>
-              </Link>
-            </div>
+            <Link href="/work/purchase-orders">
+              <Button size="sm" variant="outline" className="h-9 font-semibold gap-1 text-xs">
+                <Truck className="h-3.5 w-3.5" /> {t("reorderViewPO")}
+              </Button>
+            </Link>
           </div>
         </>
       )}
@@ -374,7 +237,6 @@ export default function ReorderQueuePage() {
   const [showFlagForm, setShowFlagForm] = useState(false);
   const [flagProductName, setFlagProductName] = useState("");
   const [flagNote, setFlagNote] = useState("");
-  // After a batch order: prompt to email
   const [emailPrompt, setEmailPrompt] = useState<{ poId: number; mailtoUrl: string; supplierName: string } | null>(null);
 
   const { data: queue = [], isLoading } = useQuery<ReorderItem[]>({
@@ -426,7 +288,6 @@ export default function ReorderQueuePage() {
     }
   }
 
-  // Group items by supplier
   const supplierGroups: SupplierGroup[] = [];
   const supplierMap = new Map<string, SupplierGroup>();
   for (const item of queue) {
@@ -436,9 +297,6 @@ export default function ReorderQueuePage() {
         supplierId: item.supplierId,
         supplierName: item.supplierName,
         supplierEmail: item.supplierEmail,
-        orderMethod: item.supplierOrderMethod ?? "email",
-        storeUrl: item.supplierStoreUrl ?? null,
-        storePlatform: item.supplierStorePlatform ?? null,
         items: [],
       };
       supplierMap.set(key, group);
@@ -446,14 +304,12 @@ export default function ReorderQueuePage() {
     }
     supplierMap.get(key)!.items.push(item);
   }
-  // Sort: suppliers with items first, no-supplier last
   supplierGroups.sort((a, b) => {
     if (a.supplierId == null && b.supplierId != null) return 1;
     if (a.supplierId != null && b.supplierId == null) return -1;
     return (a.supplierName ?? "").localeCompare(b.supplierName ?? "");
   });
 
-  // Non-admin view
   if (!isAdmin) {
     return (
       <div className="flex flex-col min-h-full">
@@ -542,7 +398,6 @@ export default function ReorderQueuePage() {
 
       <div className="p-4 space-y-5 pb-24">
 
-        {/* Email prompt — shown after batch order if supplier has email */}
         {emailPrompt && (
           <div className="border-2 border-blue-300 bg-blue-50 rounded-xl p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
@@ -565,7 +420,6 @@ export default function ReorderQueuePage() {
           </div>
         )}
 
-        {/* Shortage flags */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
@@ -630,7 +484,6 @@ export default function ReorderQueuePage() {
           )}
         </div>
 
-        {/* Reorder queue — grouped by supplier */}
         <div className="space-y-2">
           <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
             <TrendingDown className="h-3.5 w-3.5" /> {t("reorderBelowMin")}

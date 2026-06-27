@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, AlertTriangle, ShoppingCart, Globe, CheckCircle2, Building2, HelpCircle, Mail } from "lucide-react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, AlertTriangle, ShoppingCart, CheckCircle2, Building2, HelpCircle, Mail } from "lucide-react";
 import { useState } from "react";
-import { buildMailtoLink, buildCartUrl } from "@/lib/ordering";
+import { buildMailtoLink } from "@/lib/ordering";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -102,12 +102,7 @@ interface ReorderQueueItem {
   supplierSku: string | null;
   supplierName: string | null;
   supplierEmail: string | null;
-  supplierOrderMethod: string;
-  supplierStoreUrl: string | null;
-  supplierStorePlatform: string | null;
   supplierLanguage: string;
-  storeProductId: string | null;
-  storeProductUrl: string | null;
   pendingPo: { poId: number; quantity: number; status: string } | null;
 }
 
@@ -115,9 +110,6 @@ interface OrderGroup {
   supplierId: number | null;
   supplierName: string | null;
   supplierEmail: string | null;
-  orderMethod: string;
-  storeUrl: string | null;
-  storePlatform: string | null;
   language: string;
   items: ReorderQueueItem[];
 }
@@ -128,8 +120,6 @@ interface OrderLine {
   qty: number;
   unitCost: number;
   supplierSku: string | null;
-  storeProductId: string | null;
-  storeProductUrl: string | null;
   flagIds: number[];
 }
 
@@ -143,7 +133,6 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   const [phase, setPhase] = useState<"review" | "done">("review");
   const [resultPoId, setResultPoId] = useState<number | null>(null);
   const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
-  const [openedItems, setOpenedItems] = useState<Set<number>>(new Set());
   const [orderedLines, setOrderedLines] = useState<OrderLine[]>([]);
   const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
 
@@ -157,8 +146,6 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     }
   }
 
-  const isWebStore = group.orderMethod === "web_store";
-  const isCustomStore = isWebStore && group.storePlatform === "custom";
   const hasSupplier = group.supplierId != null;
   const itemsToOrder = group.items.filter((i) => !i.pendingPo);
   const allPending = itemsToOrder.length === 0;
@@ -173,18 +160,10 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     qty: Math.max(1, quantities[i.id] ?? i.shortfall),
     unitCost: i.unitCost,
     supplierSku: i.supplierSku,
-    storeProductId: i.storeProductId,
-    storeProductUrl: i.storeProductUrl,
     flagIds: i.flagIds ?? [],
   }));
   const dialogLines = phase === "review" ? reviewLines : orderedLines;
   const dialogTotal = dialogLines.reduce((s, l) => s + (l.unitCost > 0 ? l.qty * l.unitCost : 0), 0);
-  const checkedCount = dialogLines.filter((l) => openedItems.has(l.id)).length;
-  const missingStoreIds = isCustomStore
-    ? dialogLines.filter((l) => !l.storeProductUrl)
-    : isWebStore
-      ? dialogLines.filter((l) => !l.storeProductId)
-      : [];
 
   const markOrderedMutation = useMutation({
     mutationFn: async (poId: number) => {
@@ -225,12 +204,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
     onSuccess: (po: { id: number }, lines) => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       setResultPoId(po.id);
-      if (isCustomStore) {
-        // done-phase checklist handles per-item links
-      } else if (isWebStore && group.storeUrl) {
-        const cartItems = lines.map((l) => ({ storeProductId: l.storeProductId, qty: Math.max(1, l.qty) }));
-        window.open(buildCartUrl(group.storeUrl, group.storePlatform, cartItems), "_blank", "noopener,noreferrer");
-      } else if (group.supplierEmail && group.supplierName) {
+      if (group.supplierEmail && group.supplierName) {
         setMailtoUrl(
           buildMailtoLink(
             group.supplierEmail,
@@ -249,38 +223,25 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
   });
 
   function confirmOrder() {
-    const snapshot = reviewLines;
-    setOrderedLines(snapshot);
-    batchMutation.mutate(snapshot);
+    setOrderedLines(reviewLines);
+    batchMutation.mutate(reviewLines);
   }
 
   function openReview() {
     setPhase("review");
     setResultPoId(null);
     setMailtoUrl(null);
-    setOpenedItems(new Set());
     setOrderedLines([]);
     setEmailStatus("idle");
     setOpen(true);
   }
 
-  const cartUrl =
-    isWebStore && group.storeUrl
-      ? buildCartUrl(
-          group.storeUrl,
-          group.storePlatform,
-          dialogLines.map((l) => ({ storeProductId: l.storeProductId, qty: l.qty }))
-        )
-      : null;
-
   return (
     <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? (isWebStore ? "bg-purple-100" : "bg-blue-100") : "bg-muted"}`}>
+        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? "bg-blue-100" : "bg-muted"}`}>
           {hasSupplier
-            ? isWebStore
-              ? <Globe className="h-4 w-4 text-purple-700" />
-              : <Building2 className="h-4 w-4 text-blue-700" />
+            ? <Building2 className="h-4 w-4 text-blue-700" />
             : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
         </div>
         <div className="flex-1 min-w-0">
@@ -290,8 +251,8 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             {liveTotal > 0 && ` · est. $${liveTotal.toFixed(2)}`}
           </p>
         </div>
-        <span className={`flex items-center gap-1 text-[10px] font-semibold rounded-full px-2 py-0.5 flex-shrink-0 ${isWebStore ? "text-purple-700 bg-purple-50 border border-purple-200" : "text-blue-600 bg-blue-50 border border-blue-200"}`}>
-          {isWebStore ? <><Globe className="h-3 w-3" /> web store</> : <><Mail className="h-3 w-3" /> email</>}
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
+          <Mail className="h-3 w-3" /> email
         </span>
       </div>
 
@@ -316,11 +277,7 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
             <CheckCircle2 className="h-4 w-4" /> All items already on order
           </div>
         ) : (
-          <Button
-            size="sm"
-            className={`h-9 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
-            onClick={openReview}
-          >
+          <Button size="sm" className="h-9 font-bold gap-1.5" onClick={openReview}>
             <ShoppingCart className="h-3.5 w-3.5" /> Review & order {itemsToOrder.length} item{itemsToOrder.length !== 1 ? "s" : ""}
           </Button>
         )}
@@ -330,27 +287,17 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
           <DialogHeader className="p-4 border-b">
             <DialogTitle className="flex items-center gap-2">
-              {isWebStore ? <Globe className="h-5 w-5 text-purple-600" /> : <Mail className="h-5 w-5 text-blue-600" />}
+              <Mail className="h-5 w-5 text-blue-600" />
               {phase === "review" ? "Review order" : `PO #${resultPoId} created`}
             </DialogTitle>
             <p className="text-sm text-muted-foreground pt-1">
               {phase === "review"
-                ? <>Ordering from <span className="font-semibold">{group.supplierName ?? "no supplier"}</span> {isWebStore ? "via web store" : "by email"}. Adjust quantities, then confirm.</>
-                : isCustomStore
-                  ? "Open each item below, add it to your cart on the store, then check out. Mark the order placed when done."
-                  : isWebStore
-                    ? "We opened the store cart in a new tab. Finish checkout there, then mark the order as placed."
-                    : "Open your email app to send the order, then it's tracked as a draft PO."}
+                ? <>Ordering from <span className="font-semibold">{group.supplierName ?? "no supplier"}</span> by email. Adjust quantities, then confirm.</>
+                : "Open your email app to send the order, then it's tracked as a draft PO."}
             </p>
           </DialogHeader>
 
           <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
-            {phase === "review" && missingStoreIds.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
-                {missingStoreIds.length} item{missingStoreIds.length !== 1 ? "s have" : " has"} no {isCustomStore ? "product link" : "store product ID"} and won't be auto-added. Add {isCustomStore ? "links" : "IDs"} in the supplier's product list.
-              </div>
-            )}
             {dialogLines.map((line) => {
               const lineTotal = line.unitCost > 0 ? line.qty * line.unitCost : 0;
               return (
@@ -360,8 +307,6 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
                     <p className="text-xs text-muted-foreground">
                       {line.unitCost > 0 ? `$${Number(line.unitCost).toFixed(2)} ea` : "no price"}
                       {lineTotal > 0 && ` · $${lineTotal.toFixed(2)}`}
-                      {isCustomStore && !line.storeProductUrl && <span className="text-amber-600"> · no link</span>}
-                      {isWebStore && !isCustomStore && !line.storeProductId && <span className="text-amber-600"> · no store ID</span>}
                     </p>
                   </div>
                   {phase === "review" ? (
@@ -391,94 +336,13 @@ function SupplierOrderCard({ group }: { group: OrderGroup }) {
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button
-                  className={`flex-1 font-bold gap-1.5 ${isWebStore ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                  className="flex-1 font-bold gap-1.5"
                   disabled={batchMutation.isPending || reviewLines.length === 0}
                   onClick={confirmOrder}
                 >
                   {batchMutation.isPending
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> {isWebStore && !isCustomStore ? "Opening cart…" : "Creating…"}</>
-                    : isCustomStore
-                      ? <><Globe className="h-4 w-4" /> Confirm & list items</>
-                      : isWebStore
-                        ? <><Globe className="h-4 w-4" /> Confirm & open cart</>
-                        : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
-                </Button>
-              </div>
-            ) : isCustomStore ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-muted-foreground">
-                    {checkedCount} of {dialogLines.length} added to cart
-                  </span>
-                  {group.storeUrl && (
-                    <a href={group.storeUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-purple-700">
-                      <ExternalLink className="h-3 w-3" /> Open store
-                    </a>
-                  )}
-                </div>
-                <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                  {dialogLines.map((line) => {
-                    const checked = openedItems.has(line.id);
-                    return (
-                      <div key={line.id} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${checked ? "border-green-300 bg-green-50" : "border-border"}`}>
-                        <button
-                          type="button"
-                          title={checked ? "Added — tap to undo" : "Mark as added to cart"}
-                          onClick={() => setOpenedItems((s) => {
-                            const n = new Set(s);
-                            if (n.has(line.id)) n.delete(line.id); else n.add(line.id);
-                            return n;
-                          })}
-                          className={`h-6 w-6 flex-shrink-0 rounded-md border-2 flex items-center justify-center transition-colors ${checked ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/40 text-transparent hover:border-green-400"}`}
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-semibold truncate ${checked ? "line-through text-muted-foreground" : ""}`}>
-                            {line.name} <span className="font-normal opacity-70">×{line.qty}</span>
-                          </p>
-                        </div>
-                        {line.storeProductUrl ? (
-                          <a href={line.storeProductUrl} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="outline" className="h-8 text-xs font-bold gap-1 border-purple-300 text-purple-700">
-                              <ExternalLink className="h-3.5 w-3.5" /> Open
-                            </Button>
-                          </a>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-amber-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> no link</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Open each item, add it to your cart on the store, then tick it. Confirm below once your whole cart is correct.
-                </p>
-                <Button
-                  className="w-full font-bold gap-1.5 bg-purple-600 hover:bg-purple-700"
-                  disabled={markOrderedMutation.isPending || resultPoId == null}
-                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
-                >
-                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  {checkedCount < dialogLines.length ? `Confirm whole order placed (${checkedCount}/${dialogLines.length})` : "Confirm — whole order placed"}
-                </Button>
-              </div>
-            ) : isWebStore ? (
-              <div className="flex gap-2">
-                {cartUrl && (
-                  <a href={cartUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
-                    <Button variant="outline" className="w-full font-semibold gap-1.5 border-purple-300 text-purple-700">
-                      <ExternalLink className="h-4 w-4" /> Reopen cart
-                    </Button>
-                  </a>
-                )}
-                <Button
-                  className="flex-1 font-bold gap-1.5 bg-purple-600 hover:bg-purple-700"
-                  disabled={markOrderedMutation.isPending || resultPoId == null}
-                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
-                >
-                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  Order placed
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
+                    : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
                 </Button>
               </div>
             ) : (
@@ -543,9 +407,6 @@ function LowStockOrdering() {
         supplierId: item.supplierId,
         supplierName: item.supplierName,
         supplierEmail: item.supplierEmail,
-        orderMethod: item.supplierOrderMethod ?? "email",
-        storeUrl: item.supplierStoreUrl ?? null,
-        storePlatform: item.supplierStorePlatform ?? null,
         language: item.supplierLanguage ?? "en",
         items: [],
       };

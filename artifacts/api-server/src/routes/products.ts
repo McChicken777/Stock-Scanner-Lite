@@ -81,7 +81,6 @@ const importRowSchema = z.object({
   target_stock: z.coerce.number().int().min(0).default(0),
   supplier_name: z.string().default(""),
   supplier_sku: z.string().default(""),
-  product_link: z.string().url().or(z.literal("")).default(""),
   alert_email: z.string().email().or(z.literal("")).default(""),
 });
 
@@ -94,10 +93,10 @@ router.post("/import", requireAdmin, async (req, res) => {
       return;
     }
 
-    const suppliers = await db.select({ id: suppliersTable.id, name: suppliersTable.name, orderMethod: suppliersTable.orderMethod })
+    const suppliers = await db.select({ id: suppliersTable.id, name: suppliersTable.name })
       .from(suppliersTable)
       .where(eq(suppliersTable.companyId, companyId));
-    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), { id: s.id, orderMethod: s.orderMethod }]));
+    const supplierMap = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.id]));
 
     const skipped: { row: number; reason: string }[] = [];
     const toInsert: { rowIndex: number; values: typeof productsTable.$inferInsert }[] = [];
@@ -110,10 +109,9 @@ router.post("/import", requireAdmin, async (req, res) => {
       }
 
       const d = parsed.data;
-      const supplier = d.supplier_name
+      const supplierId = d.supplier_name
         ? (supplierMap.get(d.supplier_name.toLowerCase().trim()) ?? null)
         : null;
-      const isWebStore = supplier?.orderMethod === "web_store";
 
       toInsert.push({
         rowIndex: i + 1,
@@ -124,11 +122,8 @@ router.post("/import", requireAdmin, async (req, res) => {
           minStock: d.min_stock,
           bufferStock: 0,
           targetStock: d.target_stock,
-          supplierId: supplier?.id ?? null,
-          // Use the column that matches how this supplier takes orders: a web-store
-          // supplier gets the product link; an email supplier gets the SKU.
-          supplierSku: supplier && !isWebStore ? (d.supplier_sku || null) : null,
-          storeProductUrl: isWebStore ? (d.product_link || null) : null,
+          supplierId,
+          supplierSku: supplierId ? (d.supplier_sku || null) : null,
           alertEmail: d.alert_email || null,
           companyId,
         },
@@ -196,7 +191,6 @@ const updateProductSchema = z.object({
   supplierId: z.number().int().nullable().optional(),
   supplierProductName: z.string().nullable().optional(),
   supplierSku: z.string().nullable().optional(),
-  storeProductUrl: z.string().url().nullable().optional().or(z.literal("")),
   unitCost: z.number().min(0).optional(),
   salePrice: z.number().min(0).optional(),
 });
@@ -211,7 +205,6 @@ router.put("/:productId", requireAdmin, async (req, res) => {
       return;
     }
     const updateValues = { ...parsed.data };
-    if (updateValues.storeProductUrl === "") updateValues.storeProductUrl = null;
     const [product] = await db
       .update(productsTable)
       .set(updateValues)

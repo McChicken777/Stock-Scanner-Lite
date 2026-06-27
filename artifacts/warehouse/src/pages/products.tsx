@@ -45,7 +45,6 @@ interface CsvRow {
   target_stock: string;
   supplier_name: string;
   supplier_sku: string;
-  product_link: string;
   alert_email: string;
   _valid: boolean;
   _error: string;
@@ -92,17 +91,14 @@ function validateRows(
   raw: Record<string, string>[],
   knownSuppliers: string[],
   lite: boolean,
-  methodByName: Map<string, string>,
 ): CsvRow[] {
   const supplierSet = new Set(knownSuppliers.map((s) => s.toLowerCase().trim()));
   return raw.map((r) => {
     const name = (r["name"] ?? "").trim();
-    // Lite only handles purchased products, so the type column is optional/forced.
     const type = lite ? "purchased_part" : (r["type"] ?? "").trim();
     const minStockRaw = (r["min_stock"] ?? "0").trim();
     const targetStockRaw = (r["target_stock"] ?? "0").trim();
     const alertEmailRaw = (r["alert_email"] ?? "").trim();
-    const productLink = (r["product_link"] ?? "").trim();
     const errors: string[] = [];
     let supplierWarning: string | undefined;
 
@@ -115,17 +111,10 @@ function validateRows(
       errors.push("target_stock must be a non-negative integer");
     if (!lite && alertEmailRaw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertEmailRaw))
       errors.push("alert_email must be a valid email or blank");
-    if (productLink && !/^https?:\/\/.+/i.test(productLink))
-      errors.push("product_link must be a valid URL (http/https) or blank");
 
     const supplierName = (r["supplier_name"] ?? "").trim();
     if (supplierName && !supplierSet.has(supplierName.toLowerCase())) {
       supplierWarning = `Supplier "${supplierName}" not found — will import without supplier link`;
-    } else if (supplierName) {
-      // Gentle hint: web-store supplier wants a product link; email supplier wants a SKU.
-      const method = methodByName.get(supplierName.toLowerCase());
-      if (method === "web_store" && !productLink)
-        supplierWarning = `"${supplierName}" orders via web store — add a product_link`;
     }
 
     const error = errors.join("; ");
@@ -137,7 +126,6 @@ function validateRows(
       target_stock: targetStockRaw || "0",
       supplier_name: supplierName,
       supplier_sku: (r["supplier_sku"] ?? "").trim(),
-      product_link: productLink,
       alert_email: alertEmailRaw,
       _valid: errors.length === 0,
       _error: error,
@@ -150,18 +138,16 @@ function downloadTemplate(lite: boolean) {
   let headers: string;
   let examples: string[];
   if (lite) {
-    // Lite products are always purchased. Fill supplier_sku for email suppliers,
-    // or product_link for web-store suppliers — the importer uses whichever fits.
-    headers = "name,category,supplier_name,supplier_sku,product_link";
+    headers = "name,category,supplier_name,supplier_sku";
     examples = [
-      "M10x25mm Screws,Fasteners,Acme Hardware,ACM-M10-25,",
-      "Blue Paint 5L,Paint,PaintWorld Online,,https://paintworld.example/products/blue-5l",
+      "M10x25mm Screws,Fasteners,Acme Hardware,ACM-M10-25",
+      "Blue Paint 5L,Paint,ColorSupply,CS-BLUE-5L",
     ];
   } else {
-    headers = "name,type,category,min_stock,target_stock,supplier_name,supplier_sku,product_link,alert_email";
+    headers = "name,type,category,min_stock,target_stock,supplier_name,supplier_sku,alert_email";
     examples = [
-      "M10 Hex Bolts,purchased_part,Fasteners,50,200,Acme Hardware,ACM-M10-HB,,",
-      "Side Panel Bracket,manufactured_part,Frames,5,20,,,,",
+      "M10 Hex Bolts,purchased_part,Fasteners,50,200,Acme Hardware,ACM-M10-HB,",
+      "Side Panel Bracket,manufactured_part,Frames,5,20,,,",
     ];
   }
   const content = [headers, ...examples].join("\n");
@@ -186,7 +172,7 @@ function typeBadgeClass(raw: string | undefined | null): string {
   return "bg-blue-100 text-blue-700 hover:bg-blue-100";
 }
 
-async function fetchSuppliers(): Promise<{ id: number; name: string; orderMethod?: string }[]> {
+async function fetchSuppliers(): Promise<{ id: number; name: string }[]> {
   const res = await fetch("/api/suppliers", { credentials: "include" });
   if (!res.ok) return [];
   return res.json();
@@ -201,7 +187,6 @@ async function importProducts(rows: CsvRow[]): Promise<{ created: number; skippe
     target_stock: r.target_stock,
     supplier_name: r.supplier_name,
     supplier_sku: r.supplier_sku,
-    product_link: r.product_link,
     alert_email: r.alert_email,
   }));
   const res = await fetch("/api/products/import", {
@@ -286,8 +271,7 @@ export default function ProductsPage() {
         toast({ title: "No rows found in file", variant: "destructive" });
         return;
       }
-      const methodByName = new Map(suppliers.map((s) => [s.name.toLowerCase().trim(), s.orderMethod ?? "email"]));
-      setCsvRows(validateRows(raw, suppliers.map((s) => s.name), lite, methodByName));
+      setCsvRows(validateRows(raw, suppliers.map((s) => s.name), lite));
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -648,9 +632,8 @@ export default function ProductsPage() {
                 {!lite && <p><span className="font-mono bg-muted px-1 rounded">type</span> — required. One of: <span className="font-mono">purchased_part</span>, <span className="font-mono">manufactured_part</span>, <span className="font-mono">final_product</span></p>}
                 <p><span className="font-mono bg-muted px-1 rounded">category</span> — optional. Groups items (e.g. Fasteners, Hydraulics).</p>
                 {!lite && <p><span className="font-mono bg-muted px-1 rounded">min_stock</span>, <span className="font-mono bg-muted px-1 rounded">target_stock</span> — optional whole numbers (integers).</p>}
-                <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly (create suppliers first, with their order method).</p>
-                <p><span className="font-mono bg-muted px-1 rounded">supplier_sku</span> — for suppliers that take orders by <span className="font-semibold">email</span>.</p>
-                <p><span className="font-mono bg-muted px-1 rounded">product_link</span> — for suppliers that order via their <span className="font-semibold">web store</span> (paste the item's page/cart URL). The importer uses whichever matches the supplier.</p>
+                <p><span className="font-mono bg-muted px-1 rounded">supplier_name</span> — optional. Must match an existing supplier name exactly (create suppliers first).</p>
+                <p><span className="font-mono bg-muted px-1 rounded">supplier_sku</span> — optional. Included in the order email to the supplier.</p>
               </div>
             </div>
           ) : (
@@ -718,7 +701,7 @@ export default function ProductsPage() {
                           </td>
                           {lite && (
                             <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[160px]">
-                              {row.product_link ? <span className="text-purple-700">link</span> : row.supplier_sku || "—"}
+                              {row.supplier_sku || "—"}
                             </td>
                           )}
                         </tr>

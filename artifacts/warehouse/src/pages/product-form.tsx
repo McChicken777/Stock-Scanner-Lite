@@ -49,7 +49,6 @@ const formSchema = z.object({
   supplierId: z.coerce.number().optional().or(z.literal("")),
   supplierProductName: z.string().optional().or(z.literal("")),
   supplierSku: z.string().optional().or(z.literal("")),
-  storeProductUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -57,8 +56,6 @@ type FormValues = z.infer<typeof formSchema>;
 interface Supplier {
   id: number;
   name: string;
-  orderMethod?: string;
-  storePlatform?: string | null;
 }
 
 async function fetchSuppliers(): Promise<Supplier[]> {
@@ -206,15 +203,11 @@ export default function ProductFormPage() {
       supplierId: "",
       supplierProductName: "",
       supplierSku: "",
-      storeProductUrl: "",
     },
   });
 
   const watchedItemType = form.watch("itemType");
   const isPurchased = watchedItemType === "purchased_part";
-  const watchedSupplierId = form.watch("supplierId");
-  const selectedSupplier = suppliers.find((s) => s.id === Number(watchedSupplierId));
-  const isWebStoreSupplier = selectedSupplier?.orderMethod === "web_store";
 
   useEffect(() => {
     if (product && isEdit) {
@@ -226,7 +219,6 @@ export default function ProductFormPage() {
         supplierId: p.supplierId ?? "",
         supplierProductName: p.supplierProductName || "",
         supplierSku: p.supplierSku || "",
-        storeProductUrl: (p as Product & { storeProductUrl?: string | null }).storeProductUrl || "",
       });
     }
   }, [product, isEdit, form]);
@@ -238,11 +230,8 @@ export default function ProductFormPage() {
       category: data.category || "",
       itemType: data.itemType,
       supplierId: linkedSupplier,
-      // For email suppliers we keep the SKU + supplier product name; for web-store
-      // suppliers we keep the per-product link instead.
-      supplierProductName: linkedSupplier && !isWebStoreSupplier ? (data.supplierProductName || null) : null,
-      supplierSku: linkedSupplier && !isWebStoreSupplier ? (data.supplierSku || null) : null,
-      storeProductUrl: linkedSupplier && isWebStoreSupplier ? (data.storeProductUrl || null) : null,
+      supplierProductName: linkedSupplier ? (data.supplierProductName || null) : null,
+      supplierSku: linkedSupplier ? (data.supplierSku || null) : null,
     };
 
     setIsSaving(true);
@@ -402,62 +391,36 @@ export default function ProductFormPage() {
                   )}
                 />
 
-                {isWebStoreSupplier ? (
-                  <FormField
-                    control={form.control}
-                    name="storeProductUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-bold text-muted-foreground">Product Link</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="url"
-                            placeholder="Paste the item's product or add-to-cart URL"
-                            className="h-12 border-2"
-                            {...field}
-                          />
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          This supplier takes orders via their web store — reordering opens this link.
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ) : (
-                  <>
-                    <FormField
-                      control={form.control}
-                      name="supplierProductName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                <FormField
+                  control={form.control}
+                  name="supplierProductName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier Product Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. M10 Stainless Steel Hex Bolt" className="h-12 border-2" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                    <FormField
-                      control={form.control}
-                      name="supplierSku"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Included when emailing this supplier an order.
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </>
-                )}
+                <FormField
+                  control={form.control}
+                  name="supplierSku"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-bold text-muted-foreground">Supplier SKU</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. MB-2024-001" className="h-12 border-2 font-mono" {...field} />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Included when emailing this supplier an order.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             )}
 

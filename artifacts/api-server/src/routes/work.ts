@@ -3801,33 +3801,11 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
           id: suppliersTable.id,
           name: suppliersTable.name,
           email: suppliersTable.email,
-          orderMethod: suppliersTable.orderMethod,
-          storeUrl: suppliersTable.storeUrl,
-          storePlatform: suppliersTable.storePlatform,
         })
           .from(suppliersTable)
           .where(inArray(suppliersTable.id, supplierIds))
       : [];
     const supplierById = new Map(supplierRows.map((s) => [s.id, s]));
-
-    // Resolve store link (id + direct url) per (supplierId, productId) pair from supplier_products
-    const productIds2 = lowStockProducts.map((p) => p.id);
-    const spRows = supplierIds.length > 0 && productIds2.length > 0
-      ? await db.select({
-          supplierId: supplierProductsTable.supplierId,
-          productId: supplierProductsTable.productId,
-          storeProductId: supplierProductsTable.storeProductId,
-          storeProductUrl: supplierProductsTable.storeProductUrl,
-        })
-          .from(supplierProductsTable)
-          .where(and(
-            inArray(supplierProductsTable.supplierId, supplierIds),
-            inArray(supplierProductsTable.productId, productIds2),
-            eq(supplierProductsTable.companyId, companyId),
-          ))
-      : [];
-    const storeProductIdMap = new Map(spRows.map((r) => [`${r.supplierId}:${r.productId}`, r.storeProductId]));
-    const storeProductUrlMap = new Map(spRows.map((r) => [`${r.supplierId}:${r.productId}`, r.storeProductUrl]));
 
     res.json(lowStockProducts.map((p) => {
       const supplier = p.supplierId ? supplierById.get(p.supplierId) : null;
@@ -3835,11 +3813,6 @@ router.get("/reorder-queue", requireAdmin, async (req, res) => {
         ...p,
         supplierName: supplier?.name ?? null,
         supplierEmail: supplier?.email ?? null,
-        supplierOrderMethod: supplier?.orderMethod ?? "email",
-        supplierStoreUrl: supplier?.storeUrl ?? null,
-        supplierStorePlatform: supplier?.storePlatform ?? null,
-        storeProductId: p.supplierId ? (storeProductIdMap.get(`${p.supplierId}:${p.id}`) ?? null) : null,
-        storeProductUrl: p.supplierId ? (storeProductUrlMap.get(`${p.supplierId}:${p.id}`) ?? null) : null,
         pendingPo: pendingPoByProduct.get(p.id) ?? null,
       };
     }));
@@ -3887,9 +3860,6 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
           id: suppliersTable.id,
           name: suppliersTable.name,
           email: suppliersTable.email,
-          orderMethod: suppliersTable.orderMethod,
-          storeUrl: suppliersTable.storeUrl,
-          storePlatform: suppliersTable.storePlatform,
           language: suppliersTable.language,
         }).from(suppliersTable).where(inArray(suppliersTable.id, supplierIds))
       : [];
@@ -3898,14 +3868,14 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
     const items = [...agg.values()]
       .map((a) => {
         const p = productById.get(a.productId);
-        if (!p) return null; // product deleted since flagging
+        if (!p) return null;
         const supplier = p.supplierId != null ? supplierById.get(p.supplierId) : null;
         return {
           id: p.id,
           name: p.name,
           category: p.category,
           quantityNeeded: a.qty,
-          shortfall: a.qty, // default order quantity in the UI
+          shortfall: a.qty,
           available: 0,
           minStock: 0,
           unitCost: Number(p.unitCost ?? 0),
@@ -3913,12 +3883,7 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
           supplierSku: p.supplierSku ?? null,
           supplierName: supplier?.name ?? null,
           supplierEmail: supplier?.email ?? null,
-          supplierOrderMethod: supplier?.orderMethod ?? "email",
-          supplierStoreUrl: supplier?.storeUrl ?? null,
-          supplierStorePlatform: supplier?.storePlatform ?? null,
           supplierLanguage: supplier?.language ?? "en",
-          storeProductId: null,
-          storeProductUrl: p.storeProductUrl ?? null,
           flagIds: a.flagIds,
           pendingPo: null,
         };
