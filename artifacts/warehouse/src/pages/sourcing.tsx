@@ -11,7 +11,7 @@ import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
-  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+  if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.message || d.error || "Failed"); }
   return res.json();
 }
 
@@ -59,6 +59,7 @@ const T = {
     orderNow: "Order now", confirmOrder: "Confirm order?", yesOrder: "Yes, order", cancel: "Cancel",
     ordering: "Ordering…", orderPlaced: "Order placed", viewPo: "View purchase order",
     sendToConfirm: "Send request to confirm",
+    needQuote: "Need every price to order instantly", getQuote: "Get a quote",
   },
   sl: {
     title: "Nabava", subtitle: "Vprašajte dobavitelje za cene, primerjajte in naročite najboljše.",
@@ -80,6 +81,7 @@ const T = {
     orderNow: "Naroči zdaj", confirmOrder: "Potrdi naročilo?", yesOrder: "Da, naroči", cancel: "Prekliči",
     ordering: "Naročanje…", orderPlaced: "Naročilo oddano", viewPo: "Ogled naročilnice",
     sendToConfirm: "Pošlji povpraševanje za potrditev",
+    needQuote: "Za takojšnje naročilo so potrebne vse cene", getQuote: "Pridobi ponudbo",
   },
 };
 
@@ -327,7 +329,14 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
                   {best && <span className="text-primary font-semibold">{L.predBest}</span>}
                 </div>
                 <div className="flex items-center gap-2 mt-2">
-                  {confirmId === s.supplierId ? (
+                  {!s.complete ? (
+                    <>
+                      <span className="text-[11px] text-amber-600 flex-1 min-w-0">{L.needQuote}</span>
+                      <Button size="sm" variant="outline" className="gap-1.5" onClick={onSendRfq}>
+                        <FileText className="h-3.5 w-3.5" /> {L.getQuote}
+                      </Button>
+                    </>
+                  ) : confirmId === s.supplierId ? (
                     <>
                       <span className="text-xs font-semibold flex-1">{L.confirmOrder}</span>
                       <Button size="sm" variant="outline" onClick={() => setConfirmId(null)} disabled={orderMutation.isPending}>{L.cancel}</Button>

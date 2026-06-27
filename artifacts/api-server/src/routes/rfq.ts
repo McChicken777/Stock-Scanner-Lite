@@ -507,6 +507,18 @@ router.post("/order-now", requireAdmin, async (req, res) => {
       if (!priceByProduct.has(r.productId)) priceByProduct.set(r.productId, r.unitPrice);
     }
 
+    // Only order without a quote when we know this supplier's price for EVERY item.
+    // If any price is missing, force an RFQ — which also refreshes all prices for next time.
+    const missing = items.filter((i) => !priceByProduct.has(i.productId));
+    if (missing.length > 0) {
+      res.status(409).json({
+        error: "incomplete_prices",
+        message: "No known price for every item from this supplier — send a quote request instead.",
+        missingCount: missing.length,
+      });
+      return;
+    }
+
     const [po] = await db.insert(purchaseOrdersTable).values({
       supplierId, companyId, status: "ordered", notes: note ?? null,
     }).returning();
