@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, AlertTriangle, ShoppingCart, CheckCircle2, Building2, HelpCircle, Mail } from "lucide-react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, CheckCircle2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { buildMailtoLink } from "@/lib/ordering";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -86,7 +85,7 @@ const T = {
   },
 };
 
-// ─── Low-stock ordering (moved from admin-suppliers) ──────────────────────────
+// ─── Low-stock summary ────────────────────────────────────────────────────────
 
 interface ReorderQueueItem {
   id: number;
@@ -106,319 +105,12 @@ interface ReorderQueueItem {
   pendingPo: { poId: number; quantity: number; status: string } | null;
 }
 
-interface OrderGroup {
-  supplierId: number | null;
-  supplierName: string | null;
-  supplierEmail: string | null;
-  language: string;
-  items: ReorderQueueItem[];
-}
-
-interface OrderLine {
-  id: number;
-  name: string;
-  qty: number;
-  unitCost: number;
-  supplierSku: string | null;
-  flagIds: number[];
-}
-
-function SupplierOrderCard({ group }: { group: OrderGroup }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [quantities, setQuantities] = useState<Record<number, number>>(
-    Object.fromEntries(group.items.map((i) => [i.id, Math.max(1, i.shortfall)]))
-  );
-  const [open, setOpen] = useState(false);
-  const [phase, setPhase] = useState<"review" | "done">("review");
-  const [resultPoId, setResultPoId] = useState<number | null>(null);
-  const [mailtoUrl, setMailtoUrl] = useState<string | null>(null);
-  const [orderedLines, setOrderedLines] = useState<OrderLine[]>([]);
-  const [emailStatus, setEmailStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
-
-  async function sendOrderEmail(poId: number) {
-    setEmailStatus("sending");
-    try {
-      const r = await apiFetch(`/api/purchase-orders/${poId}/send-email`, { method: "POST" });
-      setEmailStatus(r?.sent ? "sent" : "failed");
-    } catch {
-      setEmailStatus("failed");
-    }
-  }
-
-  const hasSupplier = group.supplierId != null;
-  const itemsToOrder = group.items.filter((i) => !i.pendingPo);
-  const allPending = itemsToOrder.length === 0;
-  const liveTotal = itemsToOrder.reduce(
-    (s, i) => s + (i.unitCost > 0 ? (quantities[i.id] ?? i.shortfall) * i.unitCost : 0),
-    0
-  );
-
-  const reviewLines: OrderLine[] = itemsToOrder.map((i) => ({
-    id: i.id,
-    name: i.name,
-    qty: Math.max(1, quantities[i.id] ?? i.shortfall),
-    unitCost: i.unitCost,
-    supplierSku: i.supplierSku,
-    flagIds: i.flagIds ?? [],
-  }));
-  const dialogLines = phase === "review" ? reviewLines : orderedLines;
-  const dialogTotal = dialogLines.reduce((s, l) => s + (l.unitCost > 0 ? l.qty * l.unitCost : 0), 0);
-
-  const markOrderedMutation = useMutation({
-    mutationFn: async (poId: number) => {
-      await apiFetch(`/api/purchase-orders/${poId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "ordered" }),
-      });
-      const flagIds = orderedLines.flatMap((l) => l.flagIds);
-      await Promise.allSettled(
-        flagIds.map((fid) => apiFetch(`/api/work/shortage-flags/${fid}/resolve`, { method: "PUT" }))
-      );
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work/shortage-flags"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
-      toast({ title: "Order marked as placed" });
-      setOpen(false);
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
-
-  const batchMutation = useMutation({
-    mutationFn: (lines: OrderLine[]) =>
-      apiFetch("/api/purchase-orders/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId: group.supplierId,
-          items: lines.map((l) => ({
-            productId: l.id,
-            quantityOrdered: Math.max(1, l.qty),
-            unitPrice: l.unitCost > 0 ? l.unitCost : null,
-          })),
-        }),
-      }),
-    onSuccess: (po: { id: number }, lines) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
-      setResultPoId(po.id);
-      if (group.supplierEmail && group.supplierName) {
-        setMailtoUrl(
-          buildMailtoLink(
-            group.supplierEmail,
-            group.supplierName,
-            po.id,
-            lines.map((l) => ({ name: l.name, supplierSku: l.supplierSku, quantity: l.qty, unitCost: l.unitCost })),
-            group.language === "sl" ? "sl" : "en"
-          )
-        );
-        sendOrderEmail(po.id);
-      }
-      setPhase("done");
-      toast({ title: `PO #${po.id} created` });
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
-
-  function confirmOrder() {
-    setOrderedLines(reviewLines);
-    batchMutation.mutate(reviewLines);
-  }
-
-  function openReview() {
-    setPhase("review");
-    setResultPoId(null);
-    setMailtoUrl(null);
-    setOrderedLines([]);
-    setEmailStatus("idle");
-    setOpen(true);
-  }
-
-  return (
-    <div className="border-2 border-border rounded-xl overflow-hidden bg-card">
-      <div className="flex items-center gap-3 px-4 py-3">
-        <div className={`flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 ${hasSupplier ? "bg-blue-100" : "bg-muted"}`}>
-          {hasSupplier
-            ? <Building2 className="h-4 w-4 text-blue-700" />
-            : <HelpCircle className="h-4 w-4 text-muted-foreground" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm truncate">{group.supplierName ?? "No supplier assigned"}</p>
-          <p className="text-xs text-muted-foreground">
-            {group.items.length} item{group.items.length !== 1 ? "s" : ""} low
-            {liveTotal > 0 && ` · est. $${liveTotal.toFixed(2)}`}
-          </p>
-        </div>
-        <span className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 flex-shrink-0">
-          <Mail className="h-3 w-3" /> email
-        </span>
-      </div>
-
-      <div className="border-t border-border divide-y divide-border/60">
-        {group.items.map((item) => (
-          <div key={item.id} className="px-4 py-2 flex items-center gap-3 text-sm">
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{item.name}</p>
-              <p className="text-xs text-amber-600 font-semibold">
-                flagged low{item.quantityNeeded > 1 ? ` · qty ${item.quantityNeeded}` : ""}
-                {item.pendingPo && <span className="text-blue-600 ml-1">· PO #{item.pendingPo.poId} pending</span>}
-              </p>
-            </div>
-            {item.unitCost > 0 && <span className="text-xs text-muted-foreground">${Number(item.unitCost).toFixed(2)} ea</span>}
-          </div>
-        ))}
-      </div>
-
-      <div className="border-t border-border bg-muted/20 px-4 py-3">
-        {allPending ? (
-          <div className="flex items-center gap-2 text-sm text-green-700 font-semibold">
-            <CheckCircle2 className="h-4 w-4" /> All items already on order
-          </div>
-        ) : (
-          <Button size="sm" className="h-9 font-bold gap-1.5" onClick={openReview}>
-            <ShoppingCart className="h-3.5 w-3.5" /> Review & order {itemsToOrder.length} item{itemsToOrder.length !== 1 ? "s" : ""}
-          </Button>
-        )}
-      </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-0">
-          <DialogHeader className="p-4 border-b">
-            <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5 text-blue-600" />
-              {phase === "review" ? "Review order" : `PO #${resultPoId} created`}
-            </DialogTitle>
-            <p className="text-sm text-muted-foreground pt-1">
-              {phase === "review"
-                ? <>Ordering from <span className="font-semibold">{group.supplierName ?? "no supplier"}</span> by email. Adjust quantities, then confirm.</>
-                : "Open your email app to send the order, then it's tracked as a draft PO."}
-            </p>
-          </DialogHeader>
-
-          <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
-            {dialogLines.map((line) => {
-              const lineTotal = line.unitCost > 0 ? line.qty * line.unitCost : 0;
-              return (
-                <div key={line.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{line.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {line.unitCost > 0 ? `$${Number(line.unitCost).toFixed(2)} ea` : "no price"}
-                      {lineTotal > 0 && ` · $${lineTotal.toFixed(2)}`}
-                    </p>
-                  </div>
-                  {phase === "review" ? (
-                    <input
-                      type="number"
-                      min={1}
-                      value={line.qty}
-                      onChange={(e) => setQuantities((q) => ({ ...q, [line.id]: Math.max(1, Number(e.target.value)) }))}
-                      className="w-16 h-9 text-sm text-center border-2 border-border rounded-lg font-bold outline-none focus:border-primary"
-                    />
-                  ) : (
-                    <span className="text-sm font-bold w-16 text-center">×{line.qty}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="p-4 border-t bg-background space-y-2">
-            {dialogTotal > 0 && (
-              <div className="flex items-center justify-between text-sm font-bold">
-                <span>Estimated total</span>
-                <span>${dialogTotal.toFixed(2)}</span>
-              </div>
-            )}
-            {phase === "review" ? (
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button
-                  className="flex-1 font-bold gap-1.5"
-                  disabled={batchMutation.isPending || reviewLines.length === 0}
-                  onClick={confirmOrder}
-                >
-                  {batchMutation.isPending
-                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
-                    : <><CheckCircle2 className="h-4 w-4" /> Confirm order</>}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {emailStatus === "sending" && (
-                  <div className="flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Sending order to {group.supplierEmail}…
-                  </div>
-                )}
-                {emailStatus === "sent" && (
-                  <div className="flex items-center justify-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-semibold text-green-700">
-                    <CheckCircle2 className="h-4 w-4" /> Order emailed to {group.supplierEmail}
-                  </div>
-                )}
-                {(emailStatus === "failed" || emailStatus === "idle") && (
-                  <>
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      <AlertTriangle className="h-3.5 w-3.5 inline mr-1" />
-                      Couldn't send automatically (email isn't set up on the server). Open it in your own mail app instead:
-                    </div>
-                    {mailtoUrl && (
-                      <a href={mailtoUrl} className="block">
-                        <Button className="w-full font-bold gap-1.5 bg-blue-600 hover:bg-blue-700">
-                          <Mail className="h-4 w-4" /> Open email to {group.supplierName ?? "supplier"}
-                        </Button>
-                      </a>
-                    )}
-                  </>
-                )}
-                <Button
-                  variant={emailStatus === "sent" ? "default" : "outline"}
-                  className="w-full font-semibold gap-1.5"
-                  disabled={markOrderedMutation.isPending || resultPoId == null}
-                  onClick={() => resultPoId != null && markOrderedMutation.mutate(resultPoId)}
-                >
-                  {markOrderedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  {emailStatus === "sent" ? "Mark as ordered" : "Mark as ordered anyway"}
-                </Button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function LowStockOrdering() {
+function LowStockOrdering({ onCreateRfq }: { onCreateRfq: () => void }) {
   const { t } = useLang();
   const { data: queue = [], isLoading } = useQuery<ReorderQueueItem[]>({
     queryKey: ["/api/work/reorder-from-flags"],
     queryFn: () => apiFetch("/api/work/reorder-from-flags"),
     refetchInterval: 60000,
-  });
-
-  const groups: OrderGroup[] = [];
-  const map = new Map<string, OrderGroup>();
-  for (const item of queue) {
-    const key = item.supplierId != null ? String(item.supplierId) : "__none__";
-    if (!map.has(key)) {
-      const g: OrderGroup = {
-        supplierId: item.supplierId,
-        supplierName: item.supplierName,
-        supplierEmail: item.supplierEmail,
-        language: item.supplierLanguage ?? "en",
-        items: [],
-      };
-      map.set(key, g);
-      groups.push(g);
-    }
-    map.get(key)!.items.push(item);
-  }
-  groups.sort((a, b) => {
-    if (a.supplierId == null && b.supplierId != null) return 1;
-    if (a.supplierId != null && b.supplierId == null) return -1;
-    return (a.supplierName ?? "").localeCompare(b.supplierName ?? "");
   });
 
   if (isLoading) return <Skeleton className="h-28 w-full rounded-xl" />;
@@ -430,24 +122,46 @@ function LowStockOrdering() {
     );
   }
 
+  const byCategory = queue.reduce<Record<string, ReorderQueueItem[]>>((acc, item) => {
+    const cat = item.category || "Uncategorised";
+    (acc[cat] ??= []).push(item);
+    return acc;
+  }, {});
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-        <TrendingDown className="h-4 w-4" /> {t("reorderNeeds")}
-        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">{queue.length}</span>
-      </h2>
-      {groups.map((g, idx) => (
-        <SupplierOrderCard key={g.supplierId ?? `__none__${idx}`} group={g} />
-      ))}
+    <div className="border-2 border-amber-200 rounded-xl overflow-hidden bg-card">
+      <div className="px-4 py-3 bg-amber-50 flex items-center gap-2">
+        <TrendingDown className="h-4 w-4 text-amber-700" />
+        <h2 className="text-sm font-bold text-amber-800 flex-1">{t("reorderNeeds")}</h2>
+        <span className="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold">{queue.length}</span>
+      </div>
+      <div className="divide-y divide-border/60">
+        {Object.entries(byCategory).map(([cat, items]) => (
+          <div key={cat} className="px-4 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{cat}</p>
+            {items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between py-0.5 text-sm">
+                <span className="font-medium truncate flex-1 min-w-0">{item.name}</span>
+                <span className="text-xs text-amber-600 font-semibold ml-2 flex-shrink-0">need {item.quantityNeeded || item.shortfall}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-border bg-muted/20 px-4 py-3">
+        <Button className="gap-1.5 font-bold" onClick={onCreateRfq}>
+          <FileText className="h-3.5 w-3.5" /> Create RFQ for these items
+        </Button>
+      </div>
     </div>
   );
 }
 
-// ─── End of Low-stock ordering ─────────────────────────────────────────────────
+// ─── New request dialog ────────────────────────────────────────────────────────
 
 interface DraftItem { key: string; productId: number | null; productName: string; quantity: number; flagId: number | null; category?: string }
 
-// Phase 1 — show what suppliers last charged for this product, inline under each row.
+// Inline price hints — shows what suppliers last charged for a product.
 function PriceHints({ productId, label }: { productId: number; label: string }) {
   const { data } = useQuery<PriceHistoryResp>({
     queryKey: [`/api/quote-requests/price-history/${productId}`],
@@ -794,7 +508,7 @@ export default function SourcingPage() {
 
       <PredictedCard L={L} onSendRfq={() => setShowNew(true)} />
 
-      <LowStockOrdering />
+      <LowStockOrdering onCreateRfq={() => setShowNew(true)} />
 
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
