@@ -1,4 +1,5 @@
 import { pgTable, text, timestamp, integer, serial, pgEnum, numeric } from "drizzle-orm/pg-core";
+// price history relies on quote_request_supplier_lines.createdAt (added in migration 0039)
 import { companiesTable } from "./companies";
 import { productsTable } from "./products";
 import { suppliersTable } from "./suppliers";
@@ -54,6 +55,7 @@ export const quoteRequestSupplierLinesTable = pgTable("quote_request_supplier_li
   unitPrice: numeric("unit_price", { precision: 12, scale: 2, mode: "number" }),
   supplierSku: text("supplier_sku"),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const quoteRequestsRelations = relations(quoteRequestsTable, ({ many, one }) => ({

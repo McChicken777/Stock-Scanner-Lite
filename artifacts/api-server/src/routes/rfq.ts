@@ -141,6 +141,121 @@ router.get("/", requireAdmin, async (req, res) => {
   }
 });
 
+// ─── PRICE HISTORY for one product (Phase 1) ───────────────────────────────────
+// Every quote line is a timestamped price per supplier — this reads it back so the
+// boss can see what each supplier last charged for an item.
+router.get("/price-history/:productId", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const productId = Number(req.params.productId);
+
+    const rows = await db.select({
+      supplierId: quoteRequestSuppliersTable.supplierId,
+      supplierName: suppliersTable.name,
+      unitPrice: quoteRequestSupplierLinesTable.unitPrice,
+      supplierSku: quoteRequestSupplierLinesTable.supplierSku,
+      date: quoteRequestSupplierLinesTable.createdAt,
+    })
+      .from(quoteRequestSupplierLinesTable)
+      .innerJoin(quoteRequestItemsTable, eq(quoteRequestSupplierLinesTable.rfqItemId, quoteRequestItemsTable.id))
+      .innerJoin(quoteRequestSuppliersTable, eq(quoteRequestSupplierLinesTable.rfqSupplierId, quoteRequestSuppliersTable.id))
+      .leftJoin(suppliersTable, eq(quoteRequestSuppliersTable.supplierId, suppliersTable.id))
+      .where(and(
+        eq(quoteRequestSupplierLinesTable.companyId, companyId),
+        eq(quoteRequestItemsTable.productId, productId),
+      ))
+      .orderBy(desc(quoteRequestSupplierLinesTable.createdAt));
+
+    const priced = rows.filter((r) => r.unitPrice != null);
+    // Latest price per supplier (rows already sorted newest-first).
+    const latest = new Map<number, typeof priced[number]>();
+    for (const r of priced) if (!latest.has(r.supplierId)) latest.set(r.supplierId, r);
+
+    res.json({
+      latestPerSupplier: Array.from(latest.values())
+        .sort((a, b) => (a.unitPrice ?? 0) - (b.unitPrice ?? 0)),
+      history: priced,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to load price history");
+    res.status(500).json({ error: "Failed to load price history" });
+  }
+});
+
+// ─── PREDICT cheapest supplier for a basket (Phase 2) ──────────────────────────
+// Deterministic estimate from each supplier's most recent quoted price per item.
+// Returns coverage (how many items priced) + staleness so the UI can predict-then-verify.
+router.post("/predict", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      items: z.array(z.object({
+        productId: z.number().int(),
+        quantity: z.number().int().min(1),
+      })).min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+    const productIds = parsed.data.items.map((i) => i.productId);
+    const qtyByProduct = new Map(parsed.data.items.map((i) => [i.productId, i.quantity]));
+
+    const rows = await db.select({
+      productId: quoteRequestItemsTable.productId,
+      supplierId: quoteRequestSuppliersTable.supplierId,
+      supplierName: suppliersTable.name,
+      unitPrice: quoteRequestSupplierLinesTable.unitPrice,
+      date: quoteRequestSupplierLinesTable.createdAt,
+    })
+      .from(quoteRequestSupplierLinesTable)
+      .innerJoin(quoteRequestItemsTable, eq(quoteRequestSupplierLinesTable.rfqItemId, quoteRequestItemsTable.id))
+      .innerJoin(quoteRequestSuppliersTable, eq(quoteRequestSupplierLinesTable.rfqSupplierId, quoteRequestSuppliersTable.id))
+      .leftJoin(suppliersTable, eq(quoteRequestSuppliersTable.supplierId, suppliersTable.id))
+      .where(and(
+        eq(quoteRequestSupplierLinesTable.companyId, companyId),
+        inArray(quoteRequestItemsTable.productId, productIds),
+      ))
+      .orderBy(desc(quoteRequestSupplierLinesTable.createdAt));
+
+    // Latest priced quote per (supplier, product).
+    type Latest = { unitPrice: number; date: Date };
+    const bySupplier = new Map<number, { name: string | null; prices: Map<number, Latest> }>();
+    for (const r of rows) {
+      if (r.unitPrice == null || r.productId == null) continue;
+      let s = bySupplier.get(r.supplierId);
+      if (!s) { s = { name: r.supplierName, prices: new Map() }; bySupplier.set(r.supplierId, s); }
+      if (!s.prices.has(r.productId)) s.prices.set(r.productId, { unitPrice: r.unitPrice, date: r.date });
+    }
+
+    const totalItems = productIds.length;
+    const suppliers = Array.from(bySupplier.entries()).map(([supplierId, s]) => {
+      let total = 0;
+      let oldest: Date | null = null;
+      const missing: number[] = [];
+      for (const pid of productIds) {
+        const p = s.prices.get(pid);
+        if (!p) { missing.push(pid); continue; }
+        total += p.unitPrice * (qtyByProduct.get(pid) ?? 1);
+        if (!oldest || p.date < oldest) oldest = p.date;
+      }
+      const covered = totalItems - missing.length;
+      return {
+        supplierId, supplierName: s.name,
+        covered, totalItems, missing,
+        estimatedTotal: total,
+        complete: missing.length === 0,
+        oldestPriceDate: oldest,
+      };
+    })
+      // Best = covers the most items, then cheapest.
+      .sort((a, b) => (b.covered - a.covered) || (a.estimatedTotal - b.estimatedTotal));
+
+    res.json({ totalItems, suppliers });
+  } catch (err) {
+    req.log.error({ err }, "Failed to predict supplier");
+    res.status(500).json({ error: "Failed to estimate" });
+  }
+});
+
 // ─── GET RFQ DETAIL (comparison data) ──────────────────────────────────────────
 router.get("/:id", requireAdmin, async (req, res) => {
   try {
@@ -343,6 +458,98 @@ router.post("/:id/remind", requireAdmin, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to send reminders");
     res.status(500).json({ error: "Failed to send reminders" });
+  }
+});
+
+// ─── ORDER NOW from predicted prices (Phase 2) ─────────────────────────────────
+// Skip the RFQ wait: build a PO straight from this supplier's most recent quoted
+// prices for the chosen products. Items without a known price are still ordered
+// (unitPrice null) so nothing is dropped. Resolves source flags + emails the order.
+router.post("/order-now", requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const parsed = z.object({
+      supplierId: z.number().int(),
+      items: z.array(z.object({
+        productId: z.number().int(),
+        quantity: z.number().int().min(1),
+        flagId: z.number().int().nullable().optional(),
+      })).min(1),
+      note: z.string().trim().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+    const { supplierId, items, note } = parsed.data;
+
+    const [supplier] = await db.select()
+      .from(suppliersTable)
+      .where(and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)));
+    if (!supplier) { res.status(400).json({ error: "Unknown supplier" }); return; }
+
+    // Latest known price per product from this supplier's past quotes.
+    const productIds = items.map((i) => i.productId);
+    const rows = await db.select({
+      productId: quoteRequestItemsTable.productId,
+      unitPrice: quoteRequestSupplierLinesTable.unitPrice,
+      date: quoteRequestSupplierLinesTable.createdAt,
+    })
+      .from(quoteRequestSupplierLinesTable)
+      .innerJoin(quoteRequestItemsTable, eq(quoteRequestSupplierLinesTable.rfqItemId, quoteRequestItemsTable.id))
+      .innerJoin(quoteRequestSuppliersTable, eq(quoteRequestSupplierLinesTable.rfqSupplierId, quoteRequestSuppliersTable.id))
+      .where(and(
+        eq(quoteRequestSupplierLinesTable.companyId, companyId),
+        eq(quoteRequestSuppliersTable.supplierId, supplierId),
+        inArray(quoteRequestItemsTable.productId, productIds),
+      ))
+      .orderBy(desc(quoteRequestSupplierLinesTable.createdAt));
+    const priceByProduct = new Map<number, number>();
+    for (const r of rows) {
+      if (r.unitPrice == null || r.productId == null) continue;
+      if (!priceByProduct.has(r.productId)) priceByProduct.set(r.productId, r.unitPrice);
+    }
+
+    const [po] = await db.insert(purchaseOrdersTable).values({
+      supplierId, companyId, status: "ordered", notes: note ?? null,
+    }).returning();
+
+    await db.insert(purchaseOrderItemsTable).values(
+      items.map((i) => ({
+        poId: po.id, productId: i.productId, quantityOrdered: i.quantity,
+        quantityArrived: 0, unitPrice: priceByProduct.get(i.productId) ?? null, companyId,
+      }))
+    );
+
+    const flagIds = items.map((i) => i.flagId).filter((f): f is number => f != null);
+    if (flagIds.length > 0) {
+      await db.update(shortageFlagsTable)
+        .set({ resolvedAt: new Date() })
+        .where(and(inArray(shortageFlagsTable.id, flagIds), eq(shortageFlagsTable.companyId, companyId)));
+    }
+
+    const { company, smtp } = await getSmtp(companyId);
+    let emailSent = false;
+    if (smtp && supplier.email) {
+      const named = await db.select({
+        name: productsTable.name, sku: productsTable.supplierSku, quantity: purchaseOrderItemsTable.quantityOrdered,
+        unitCost: purchaseOrderItemsTable.unitPrice,
+      })
+        .from(purchaseOrderItemsTable)
+        .innerJoin(productsTable, eq(purchaseOrderItemsTable.productId, productsTable.id))
+        .where(eq(purchaseOrderItemsTable.poId, po.id));
+      emailSent = await sendSupplierOrderEmail({
+        smtp,
+        supplierName: supplier.name,
+        supplierEmail: supplier.email,
+        poId: po.id,
+        companyName: company?.name ?? null,
+        lang: supplier.language === "sl" ? "sl" : "en",
+        items: named.map((i) => ({ name: i.name, sku: i.sku, quantity: i.quantity, unitCost: i.unitCost })),
+      });
+    }
+
+    res.json({ ok: true, poId: po.id, emailSent, pricedCount: priceByProduct.size, totalItems: items.length });
+  } catch (err) {
+    req.log.error({ err }, "Failed to order from prediction");
+    res.status(500).json({ error: "Failed to create order" });
   }
 });
 

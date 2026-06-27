@@ -4,7 +4,7 @@ import { useLang } from "@/contexts/lang";
 import type { Lang } from "@/i18n/translations";
 import {
   HelpCircle, MapPin, Package2, ScanLine, AlertTriangle, Truck,
-  History, Building2, FileText, ClipboardList, ArrowLeftRight, PackageCheck,
+  History, Building2, FileText, ClipboardList, ArrowLeftRight, PackageCheck, Scale,
 } from "lucide-react";
 
 // IMPORTANT: keep this page in sync with the app's features. Whenever a feature
@@ -39,6 +39,10 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "In Suppliers, set how each supplier takes orders (email or their web store) and the language of their order emails. The \"Needs reorder\" section groups every flagged item by supplier.",
           "Email supplier: the app emails the order straight to them (set up your sending email in Company settings first). Web-store supplier: it opens a checklist — open each item, add it to the store cart, then mark the order placed.",
         ]},
+        { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
+          "When you're not sure who's cheapest, open Sourcing and send one quote request to several suppliers at once. They fill in prices on a no-login link (their SKUs are pre-filled), and the app lays every response side by side — highlighting the cheapest total and the fastest delivery.",
+          "Pick the winner and it becomes a purchase order in one tap. Every quote is remembered, so the \"Predicted cheapest supplier\" card can estimate the best supplier for what you're low on — order straight away, or send a fresh request to confirm.",
+        ]},
         { icon: Building2, title: "Company settings", paras: [
           "Set your company name and logo, your default currency, and — important for ordering by email — your \"Order email\" (the address orders are sent from). Use Send test to confirm it works.",
         ]},
@@ -68,6 +72,10 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: AlertTriangle, title: "Flag and reorder", paras: [
           "Flag items that are running low (from a bin, or the shortage form). The Suppliers tab's \"Needs reorder\" groups flagged items by supplier; order by emailed purchase order or the supplier's web-store cart, then mark them ordered/arrived.",
           "Set each supplier's order method and order-email language; configure your sending email in Company settings.",
+        ]},
+        { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
+          "Open Sourcing to send one quote request to several suppliers at once. They enter prices on a no-login link (SKUs pre-filled), and the app compares every response — flagging the cheapest total and the fastest delivery; the winner becomes a purchase order in one tap.",
+          "Every quote is stored, so the \"Predicted cheapest supplier\" card estimates the best supplier for your current shortages — order straight away from known prices, or send a fresh request to confirm.",
         ]},
         { icon: ArrowLeftRight, title: "Work orders & production", paras: [
           "Build job templates, run projects through station queues, and track progress and attendance (Pro adds time tracking).",
@@ -101,6 +109,10 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Pri vsakem dobavitelju nastavi način naročanja (po e-pošti ali prek spletne trgovine) in jezik naročil. Razdelek »Za naročilo« združi vse označene izdelke po dobaviteljih.",
           "Dobavitelj po e-pošti: aplikacija mu naročilo pošlje neposredno (najprej nastavi svojo e-pošto v Podjetje in paket). Dobavitelj s spletno trgovino: odpre se kontrolni seznam — odpri vsak izdelek, ga dodaj v košarico trgovine, nato označi naročilo kot oddano.",
         ]},
+        { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
+          "Ko nisi prepričan, kdo je najcenejši, odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (njihove šifre so že izpolnjene), aplikacija pa vse odgovore postavi enega ob drugega — označi najnižji skupni znesek in najhitrejšo dobavo.",
+          "Izberi zmagovalca in z enim dotikom nastane naročilnica. Vsaka ponudba se shrani, zato lahko kartica »Predvideni najcenejši dobavitelj« oceni najboljšega dobavitelja za izdelke, ki ti zmanjkujejo — naroči takoj ali pošlji novo povpraševanje za potrditev.",
+        ]},
         { icon: Building2, title: "Nastavitve podjetja", paras: [
           "Nastavi ime in logotip podjetja, privzeto valuto in — pomembno za naročanje po e-pošti — »E-pošto za naročila« (naslov, s katerega se pošiljajo naročila). S Pošlji test preveri delovanje.",
         ]},
@@ -130,6 +142,10 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: AlertTriangle, title: "Označevanje in naročanje", paras: [
           "Označi izdelke, ki jih zmanjkuje (na lokaciji ali prek obrazca). Razdelek »Za naročilo« v Dobaviteljih združi označene izdelke po dobaviteljih; naroči po e-pošti ali prek spletne košarice in označi kot naročeno/prispelo.",
           "Pri vsakem dobavitelju nastavi način naročanja in jezik e-pošte; pošiljateljsko e-pošto nastavi v Podjetje in paket.",
+        ]},
+        { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
+          "Odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (šifre so že izpolnjene), aplikacija pa primerja vse odgovore — označi najnižji skupni znesek in najhitrejšo dobavo; zmagovalec z enim dotikom postane naročilnica.",
+          "Vsaka ponudba se shrani, zato kartica »Predvideni najcenejši dobavitelj« oceni najboljšega dobavitelja za trenutne primanjkljaje — naroči takoj po znanih cenah ali pošlji novo povpraševanje za potrditev.",
         ]},
         { icon: ArrowLeftRight, title: "Delovni nalogi in proizvodnja", paras: [
           "Sestavi predloge nalogov, vodi projekte skozi čakalne vrste postaj ter spremljaj napredek in prisotnost (Pro doda beleženje časa).",
