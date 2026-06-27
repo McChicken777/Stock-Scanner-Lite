@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, AlertTriangle, ShoppingCart, CheckCircle2, Building2, HelpCircle, Mail } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { buildMailtoLink } from "@/lib/ordering";
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -26,9 +26,9 @@ interface Rfq {
   respondedCount: number;
 }
 interface ReorderItem {
-  id: number; name: string; shortfall: number; quantityNeeded: number; flagIds: number[];
+  id: number; name: string; category: string; shortfall: number; quantityNeeded: number; flagIds: number[];
 }
-interface Supplier { id: number; name: string; email: string | null }
+interface Supplier { id: number; name: string; email: string | null; categories?: string[] }
 
 interface PriceHint { supplierId: number; supplierName: string | null; unitPrice: number; date: string }
 interface PriceHistoryResp { latestPerSupplier: PriceHint[]; history: PriceHint[] }
@@ -445,7 +445,7 @@ function LowStockOrdering() {
 
 // ─── End of Low-stock ordering ─────────────────────────────────────────────────
 
-interface DraftItem { key: string; productId: number | null; productName: string; quantity: number; flagId: number | null }
+interface DraftItem { key: string; productId: number | null; productName: string; quantity: number; flagId: number | null; category?: string }
 
 // Phase 1 — show what suppliers last charged for this product, inline under each row.
 function PriceHints({ productId, label }: { productId: number; label: string }) {
@@ -495,9 +495,36 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
     setItems(reorder.map((r) => ({
       key: `flag-${r.id}`, productId: r.id, productName: r.name,
       quantity: Math.max(1, r.quantityNeeded || r.shortfall || 1), flagId: r.flagIds?.[0] ?? null,
+      category: r.category,
     })));
     setSeeded(true);
   }
+
+  // Derive unique categories from current items for supplier suggestion.
+  const categories = [...new Set(items.map((i) => i.category).filter(Boolean) as string[])];
+  const catKey = categories.sort().join(",");
+
+  const { data: categorySuggestions = [] } = useQuery<Supplier[]>({
+    queryKey: ["/api/suppliers/by-categories", catKey],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      categories.forEach((c) => params.append("cats[]", c));
+      return apiFetch(`/api/suppliers/by-categories?${params.toString()}`);
+    },
+    enabled: categories.length > 0,
+  });
+
+  // Apply category suggestions to the supplier selection exactly once after seeding.
+  const suggestionsApplied = useRef(false);
+  useEffect(() => {
+    if (suggestionsApplied.current || !seeded || categorySuggestions.length === 0) return;
+    suggestionsApplied.current = true;
+    setSelectedSuppliers((prev) => {
+      const next = new Set(prev);
+      categorySuggestions.forEach((s) => next.add(s.id));
+      return next;
+    });
+  }, [seeded, categorySuggestions]);
 
   const createMutation = useMutation({
     mutationFn: () => apiFetch("/api/quote-requests", {
@@ -563,7 +590,14 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.suppliers}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.suppliers}</p>
+              {categorySuggestions.length > 0 && (
+                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5">
+                  {categorySuggestions.length} suggested from item categories
+                </span>
+              )}
+            </div>
             {suppliers.length === 0 ? (
               <p className="text-xs text-muted-foreground">{L.noSuppliers}</p>
             ) : suppliers.map((s) => {

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, uniqueIndex } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 
 export const suppliersTable = pgTable("suppliers", {
@@ -19,3 +19,12 @@ export const suppliersTable = pgTable("suppliers", {
 });
 
 export type Supplier = typeof suppliersTable.$inferSelect;
+
+export const supplierCategoriesTable = pgTable("supplier_categories", {
+  id: serial("id").primaryKey(),
+  supplierId: integer("supplier_id").notNull().references(() => suppliersTable.id, { onDelete: "cascade" }),
+  category: text("category").notNull(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+}, (t) => ({
+  uniq: uniqueIndex("supplier_categories_uniq").on(t.supplierId, t.category, t.companyId),
+}));

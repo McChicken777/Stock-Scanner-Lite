@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, suppliersTable, supplierProductsTable, productsTable, stockTable, purchaseOrdersTable, quoteRequestSuppliersTable, quoteRequestsTable } from "@workspace/db";
-import { eq, and, sql, isNotNull } from "drizzle-orm";
+import { db, suppliersTable, supplierProductsTable, supplierCategoriesTable, productsTable, stockTable, purchaseOrdersTable, quoteRequestSuppliersTable, quoteRequestsTable } from "@workspace/db";
+import { eq, and, sql, isNotNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 
@@ -152,6 +152,117 @@ router.get("/stats", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to load supplier stats");
     res.status(500).json({ error: "Failed to load supplier stats" });
+  }
+});
+
+// ─── SUPPLIERS BY CATEGORY ────────────────────────────────────────────────────
+// GET /api/suppliers/by-categories?cats[]=Screws&cats[]=Welding
+// Returns suppliers that handle any of the given category names.
+// Must be registered before /:id routes.
+
+router.get("/by-categories", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const raw = req.query["cats[]"];
+    const cats: string[] = Array.isArray(raw)
+      ? (raw as string[]).filter(Boolean)
+      : raw ? [raw as string] : [];
+
+    if (cats.length === 0) { res.json([]); return; }
+
+    const rows = await db.select({
+      supplierId: supplierCategoriesTable.supplierId,
+      category: supplierCategoriesTable.category,
+      name: suppliersTable.name,
+      email: suppliersTable.email,
+      language: suppliersTable.language,
+    })
+      .from(supplierCategoriesTable)
+      .innerJoin(suppliersTable, eq(supplierCategoriesTable.supplierId, suppliersTable.id))
+      .where(and(
+        eq(supplierCategoriesTable.companyId, companyId),
+        inArray(supplierCategoriesTable.category, cats),
+      ));
+
+    const byId = new Map<number, { id: number; name: string; email: string | null; language: string; categories: string[] }>();
+    for (const r of rows) {
+      if (!byId.has(r.supplierId)) {
+        byId.set(r.supplierId, { id: r.supplierId, name: r.name, email: r.email, language: r.language, categories: [] });
+      }
+      byId.get(r.supplierId)!.categories.push(r.category);
+    }
+
+    res.json(Array.from(byId.values()));
+  } catch (err) {
+    req.log.error({ err }, "Failed to get suppliers by category");
+    res.status(500).json({ error: "Failed to get suppliers by category" });
+  }
+});
+
+// ─── SUPPLIER CATEGORY CRUD ───────────────────────────────────────────────────
+
+router.get("/:id/categories", requireAuth, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id as string, 10);
+
+    const supplier = await db.query.suppliersTable.findFirst({
+      where: and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)),
+    });
+    if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+    const rows = await db.select({ category: supplierCategoriesTable.category })
+      .from(supplierCategoriesTable)
+      .where(and(
+        eq(supplierCategoriesTable.supplierId, supplierId),
+        eq(supplierCategoriesTable.companyId, companyId),
+      ));
+
+    res.json(rows.map((r) => r.category));
+  } catch (err) {
+    req.log.error({ err }, "Failed to list supplier categories");
+    res.status(500).json({ error: "Failed to list supplier categories" });
+  }
+});
+
+router.post("/:id/categories", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id as string, 10);
+    const { category } = z.object({ category: z.string().min(1) }).parse(req.body);
+
+    const supplier = await db.query.suppliersTable.findFirst({
+      where: and(eq(suppliersTable.id, supplierId), eq(suppliersTable.companyId, companyId)),
+    });
+    if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+    await db.insert(supplierCategoriesTable).values({ supplierId, category, companyId })
+      .onConflictDoNothing();
+
+    res.status(201).json({ category });
+  } catch (err: any) {
+    if (err.name === "ZodError") { res.status(400).json({ error: err.errors[0].message }); return; }
+    req.log.error({ err }, "Failed to add supplier category");
+    res.status(500).json({ error: "Failed to add supplier category" });
+  }
+});
+
+router.delete("/:id/categories/:category", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const companyId = req.session.companyId!;
+    const supplierId = parseInt(req.params.id as string, 10);
+    const category = decodeURIComponent(req.params.category as string);
+
+    await db.delete(supplierCategoriesTable).where(and(
+      eq(supplierCategoriesTable.supplierId, supplierId),
+      eq(supplierCategoriesTable.category, category),
+      eq(supplierCategoriesTable.companyId, companyId),
+    ));
+
+    res.status(204).send();
+  } catch (err) {
+    req.log.error({ err }, "Failed to remove supplier category");
+    res.status(500).json({ error: "Failed to remove supplier category" });
   }
 });
 

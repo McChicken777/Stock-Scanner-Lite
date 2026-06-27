@@ -2,9 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLang } from "@/contexts/lang";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronUp } from "lucide-react";
+import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronUp, Tag, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 interface Supplier {
   id: number;
@@ -42,6 +42,104 @@ async function apiFetch(url: string, opts?: RequestInit) {
 async function apiFetchVoid(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
   if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed"); }
+}
+
+// ─── Supplier Categories Panel ────────────────────────────────────────────────
+
+function SupplierCategoriesPanel({ supplierId, allCategories }: { supplierId: number; allCategories: string[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: categories = [], isLoading } = useQuery<string[]>({
+    queryKey: [`/api/suppliers/${supplierId}/categories`],
+    queryFn: () => apiFetch(`/api/suppliers/${supplierId}/categories`),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (category: string) => apiFetch(`/api/suppliers/${supplierId}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/categories`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers/by-categories"] });
+      setInput("");
+    },
+    onError: () => toast({ description: "Failed to add category", variant: "destructive" }),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (category: string) => apiFetchVoid(
+      `/api/suppliers/${supplierId}/categories/${encodeURIComponent(category)}`,
+      { method: "DELETE" }
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/suppliers/${supplierId}/categories`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/suppliers/by-categories"] });
+    },
+    onError: () => toast({ description: "Failed to remove category", variant: "destructive" }),
+  });
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if ((e.key === "Enter" || e.key === ",") && input.trim()) {
+      e.preventDefault();
+      const cat = input.trim().replace(/,$/, "");
+      if (cat && !categories.includes(cat)) addMutation.mutate(cat);
+      else setInput("");
+    }
+  }
+
+  const suggestions = allCategories.filter((c) => !categories.includes(c) && c.toLowerCase().includes(input.toLowerCase()));
+
+  return (
+    <div className="border-t pt-2 mt-1 space-y-2">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+        <Tag className="h-3 w-3" /> Categories supplied
+      </p>
+      <p className="text-[10px] text-muted-foreground">Items in these categories will suggest this supplier for RFQs.</p>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {categories.map((cat) => (
+            <span key={cat} className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-semibold px-2 py-0.5">
+              {cat}
+              <button
+                onClick={() => removeMutation.mutate(cat)}
+                disabled={removeMutation.isPending}
+                className="hover:text-red-600 ml-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {categories.length === 0 && (
+            <p className="text-xs text-muted-foreground">No categories assigned yet.</p>
+          )}
+        </div>
+      )}
+
+      <div className="relative">
+        <input
+          ref={inputRef}
+          list={`cats-${supplierId}`}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Add category (Enter to confirm)"
+          className="w-full h-8 px-3 border-2 border-dashed rounded-lg text-xs focus:outline-none focus:border-blue-400"
+          disabled={addMutation.isPending}
+        />
+        <datalist id={`cats-${supplierId}`}>
+          {suggestions.map((c) => <option key={c} value={c} />)}
+        </datalist>
+      </div>
+    </div>
+  );
 }
 
 // ─── Supplier Products Panel ───────────────────────────────────────────────────
@@ -113,6 +211,13 @@ export default function AdminSuppliersPage() {
     queryKey: ["/api/suppliers"],
     queryFn: () => apiFetch("/api/suppliers"),
   });
+
+  const { data: products = [] } = useQuery<{ category: string }[]>({
+    queryKey: ["/api/products"],
+    queryFn: () => apiFetch("/api/products"),
+    select: (data) => data,
+  });
+  const allCategories = [...new Set((products as { category: string }[]).map((p) => p.category).filter(Boolean))].sort();
 
   const { data: stats = {} } = useQuery<Record<number, SupplierStats>>({
     queryKey: ["/api/suppliers/stats"],
@@ -321,7 +426,12 @@ export default function AdminSuppliersPage() {
                   </div>
                 </div>
 
-                {expanded && <SupplierProductsPanel supplierId={supplier.id} />}
+                {expanded && (
+                  <>
+                    <SupplierCategoriesPanel supplierId={supplier.id} allCategories={allCategories} />
+                    <SupplierProductsPanel supplierId={supplier.id} />
+                  </>
+                )}
               </div>
             );
           })}
