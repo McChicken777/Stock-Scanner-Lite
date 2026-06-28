@@ -80,12 +80,34 @@ type ColRole = "name" | "description" | "price" | "ignore";
 function parseEuropeanPrice(raw: string): number | null {
   const s = raw.trim().replace(/[^\d,.-]/g, "");
   if (!s) return null;
-  const hasCommaAndDot = s.includes(",") && s.includes(".");
-  const normalized = hasCommaAndDot
-    ? s.replace(/\./g, "").replace(",", ".")
-    : s.replace(",", ".");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  // Whichever separator appears last is the decimal separator
+  const normalized = lastComma > lastDot
+    ? s.replace(/\./g, "").replace(",", ".")   // EU: "3.600,30" or "1,50"
+    : s.replace(/,/g, "");                     // US: "3,600.30" or "1.50"
   const n = parseFloat(normalized);
   return isNaN(n) ? null : n;
+}
+
+function parseCsvLine(line: string, delimiter: string): string[] {
+  const cells: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === delimiter && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
 }
 
 function parseCsvText(text: string): { headers: string[]; rawRows: string[][] } {
@@ -93,7 +115,7 @@ function parseCsvText(text: string): { headers: string[]; rawRows: string[][] } 
   const allRows = text
     .trim()
     .split(/\r?\n/)
-    .map((line) => line.split(delimiter).map((cell) => cell.trim().replace(/^["']|["']$/g, "")));
+    .map((line) => parseCsvLine(line, delimiter));
   if (allRows.length === 0) return { headers: [], rawRows: [] };
   const firstCell = allRows[0][0] ?? "";
   const looksLikeHeader = isNaN(parseFloat(firstCell.replace(",", "."))) || /^[a-zA-Z]/.test(firstCell);
