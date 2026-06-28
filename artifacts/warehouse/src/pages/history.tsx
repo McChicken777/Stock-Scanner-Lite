@@ -73,7 +73,7 @@ export default function HistoryPage() {
                     <div className="space-y-0.5">
                       <p className="flex items-center gap-1">
                         <Link href={`/location/${entry.locationId}`} className="text-primary font-medium hover:underline">
-                          Loc: {entry.locationId}
+                          {t("dashLoc")}: {entry.locationName || entry.locationId}
                         </Link>
                       </p>
                       <p className="font-mono">{entry.previousQuantity} → {entry.newQuantity}</p>
@@ -84,7 +84,7 @@ export default function HistoryPage() {
                               {entry.reason.replace(/_/g, " ")}
                             </span>
                           )}
-                          {entry.changedBy && <span>by {entry.changedBy}</span>}
+                          {entry.changedBy && <span>{t("historyBy")} {entry.changedBy}</span>}
                         </p>
                       )}
                     </div>

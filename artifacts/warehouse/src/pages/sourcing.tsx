@@ -46,6 +46,14 @@ const T = {
     pickItem: "Add at least one item.", pickSupplier: "Select at least one supplier.",
     sent: "Request sent", delete: "Delete",
     pastPrices: "Past prices:",
+    noSuppliersCatPre: "No suppliers assigned to ",
+    noSuppliersCatPost: " — go to the Suppliers tab to assign some.",
+    quoteHash: "Quote #",
+    sentAwaiting: "sent — awaiting replies",
+    viewArrow: "View →",
+    cancelling: "Cancelling…",
+    cancelBtn: "Cancel",
+    sendQuotes: "Send quotes",
   },
   sl: {
     title: "Nabava", subtitle: "Vprašajte dobavitelje za cene, primerjajte in naročite najboljše.",
@@ -60,6 +68,14 @@ const T = {
     pickItem: "Dodajte vsaj en izdelek.", pickSupplier: "Izberite vsaj enega dobavitelja.",
     sent: "Povpraševanje poslano", delete: "Izbriši",
     pastPrices: "Pretekle cene:",
+    noSuppliersCatPre: "Ni dobaviteljev za ",
+    noSuppliersCatPost: " — pojdite na zavihek Dobavitelji in jih dodajte.",
+    quoteHash: "Ponudba #",
+    sentAwaiting: "poslano — čakanje na odgovore",
+    viewArrow: "Ogled →",
+    cancelling: "Preklic…",
+    cancelBtn: "Prekliči",
+    sendQuotes: "Pošlji povpraševanja",
   },
 };
 
@@ -92,6 +108,8 @@ function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
   suppliers: Supplier[];
   pendingRfqId: number | null;
 }) {
+  const { lang } = useLang();
+  const L = T[lang === "sl" ? "sl" : "en"];
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -173,7 +191,7 @@ function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
           <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <span className="text-xs text-amber-700">
-              No suppliers assigned to "{categoryName}" — go to the Suppliers tab to assign some.
+              {L.noSuppliersCatPre}"{categoryName}"{L.noSuppliersCatPost}
             </span>
           </div>
         ) : (
@@ -208,17 +226,17 @@ function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
             <div className="flex items-center gap-1.5 min-w-0">
               <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
               <span className="text-xs text-muted-foreground font-medium truncate">
-                Quote #{pendingRfqId} sent — awaiting replies
+                {L.quoteHash}{pendingRfqId} {L.sentAwaiting}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Link href={`/sourcing/${pendingRfqId}`} className="text-xs font-bold text-primary hover:underline">View →</Link>
+              <Link href={`/sourcing/${pendingRfqId}`} className="text-xs font-bold text-primary hover:underline">{L.viewArrow}</Link>
               <button
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                 disabled={cancelMutation.isPending}
                 onClick={() => cancelMutation.mutate(pendingRfqId)}
               >
-                {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+                {cancelMutation.isPending ? L.cancelling : L.cancelBtn}
               </button>
             </div>
           </div>
@@ -230,7 +248,7 @@ function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
             onClick={() => createMutation.mutate()}
           >
             {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-            Send quotes
+            {L.sendQuotes}
           </Button>
         )}
       </div>

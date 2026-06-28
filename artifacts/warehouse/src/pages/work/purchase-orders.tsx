@@ -122,8 +122,9 @@ const statusIcons: Record<string, React.ReactNode> = {
   cancelled: <X className="h-3 w-3" />,
 };
 
-function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: POItem[]) {
+function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: POItem[], currency: string) {
   const subject = encodeURIComponent(`Purchase Order #${poId} — ${supplierName}`);
+  const priceFmt = new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const lines = [
     `Hi ${supplierName},`,
     ``,
@@ -131,7 +132,7 @@ function buildMailtoLink(supplierEmail: string, supplierName: string, poId: numb
     ``,
     ...items.map((item) => {
       const sku = item.supplierSku ? ` (SKU: ${item.supplierSku})` : "";
-      const price = item.unitPrice != null ? ` @ $${Number(item.unitPrice).toFixed(2)} each` : "";
+      const price = item.unitPrice != null ? ` @ ${priceFmt.format(Number(item.unitPrice))} each` : "";
       return `• ${item.productName}${sku}  —  Qty: ${item.quantityOrdered}${price}`;
     }),
     ``,
@@ -271,7 +272,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
   const currentItem = arriveItemId ? po.items.find((i) => i.id === arriveItemId) : null;
   const supplierEmail = po.supplierId ? (suppliers.find((s) => s.id === po.supplierId)?.email ?? null) : null;
   const mailtoUrl = supplierEmail && po.items.length > 0
-    ? buildMailtoLink(supplierEmail, po.supplierName ?? "Supplier", po.id, po.items)
+    ? buildMailtoLink(supplierEmail, po.supplierName ?? "Supplier", po.id, po.items, currency)
     : null;
 
   return (
@@ -315,7 +316,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
         )}
         {!canEdit && po.status !== "cancelled" && (
           <div className="flex items-center gap-2 text-green-700 text-sm font-semibold">
-            <CheckCircle2 className="h-4 w-4" /> All items received
+            <CheckCircle2 className="h-4 w-4" /> {t("posAllReceived")}
           </div>
         )}
 
@@ -323,13 +324,13 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
         {mailtoUrl && (
           <a href={mailtoUrl} className="block">
             <Button size="sm" variant="outline" className="w-full h-9 font-bold text-blue-700 border-blue-300 hover:bg-blue-50">
-              <Mail className="h-3.5 w-3.5 mr-1.5" /> Send by email to {po.supplierName}
+              <Mail className="h-3.5 w-3.5 mr-1.5" /> {t("posSendEmailTo")} {po.supplierName}
             </Button>
           </a>
         )}
         {po.supplierId && !supplierEmail && (
           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-            <Mail className="h-3 w-3" /> No email on file for this supplier — add one in Settings to enable emailing.
+            <Mail className="h-3 w-3" /> {t("posNoEmailHint")}
           </p>
         )}
       </div>
@@ -352,7 +353,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
               onChange={(e) => setAddProductId(e.target.value)}
               className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm"
             >
-              <option value="">Select product…</option>
+              <option value="">{t("posSelectProduct")}</option>
               {purchasedProducts.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}{p.category ? ` (${p.category})` : ""}</option>
               ))}
@@ -363,7 +364,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                 min={1}
                 value={addQty}
                 onChange={(e) => setAddQty(e.target.value)}
-                placeholder="Qty"
+                placeholder={t("posQty")}
                 className="w-20 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
               />
               <input
@@ -372,7 +373,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                 step="0.01"
                 value={addPrice}
                 onChange={(e) => setAddPrice(e.target.value)}
-                placeholder="Unit price"
+                placeholder={t("posUnitPrice")}
                 className="w-28 h-10 px-3 rounded-lg border-2 border-input bg-background text-sm font-mono"
               />
               <Button
@@ -409,7 +410,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="font-black text-base">{item.quantityArrived}<span className="text-muted-foreground font-normal text-sm">/{item.quantityOrdered}</span></p>
-                      <p className="text-[10px] text-muted-foreground">{pct}% arrived</p>
+                      <p className="text-[10px] text-muted-foreground">{pct}% {t("posArrived")}</p>
                     </div>
                   </div>
 
@@ -417,7 +418,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                   <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-lg p-2">
                     {editPriceItemId === item.id ? (
                       <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-[10px] font-bold uppercase text-muted-foreground">Unit price</span>
+                        <span className="text-[10px] font-bold uppercase text-muted-foreground">{t("posUnitPrice")}</span>
                         <input
                           type="number"
                           min={0}
@@ -441,9 +442,9 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                     ) : (
                       <>
                         <div className="flex items-center gap-3 text-xs">
-                          <span className="text-muted-foreground">Unit price: <span className="font-bold font-mono text-foreground">{item.unitPrice != null ? fmt(Number(item.unitPrice)) : "—"}</span></span>
+                          <span className="text-muted-foreground">{t("posUnitPrice")}: <span className="font-bold font-mono text-foreground">{item.unitPrice != null ? fmt(Number(item.unitPrice)) : "—"}</span></span>
                           {item.unitPrice != null && (
-                            <span className="text-muted-foreground">Line total: <span className="font-bold font-mono text-foreground">{fmt(Number(item.unitPrice) * item.quantityOrdered)}</span></span>
+                            <span className="text-muted-foreground">{t("posLineTotal")}: <span className="font-bold font-mono text-foreground">{fmt(Number(item.unitPrice) * item.quantityOrdered)}</span></span>
                           )}
                         </div>
                         <Button
@@ -452,7 +453,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                           className="h-7 text-[10px] font-bold"
                           onClick={() => { setEditPriceItemId(item.id); setEditPriceValue(item.unitPrice != null ? String(item.unitPrice) : ""); }}
                         >
-                          <Edit2 className="h-3 w-3 mr-1" /> Edit
+                          <Edit2 className="h-3 w-3 mr-1" /> {t("edit")}
                         </Button>
                       </>
                     )}
@@ -469,11 +470,11 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                   {/* Waiting projects — which work orders need this product */}
                   {item.waitingProjects.length > 0 && (
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700">Waiting Work Orders ({item.waitingProjects.length})</p>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-purple-700">{t("posWaitingWorkOrders")} ({item.waitingProjects.length})</p>
                       {item.waitingProjects.map((wp) => (
                         <div key={wp.projectId} className="flex items-center justify-between text-xs">
                           <span className="font-semibold text-purple-900 truncate">{wp.projectName}</span>
-                          <span className="text-purple-600 font-mono ml-2 flex-shrink-0">need {wp.quantity}</span>
+                          <span className="text-purple-600 font-mono ml-2 flex-shrink-0">{t("posNeed")} {wp.quantity}</span>
                         </div>
                       ))}
                     </div>
@@ -490,7 +491,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                               max={item.quantityOrdered - item.quantityArrived}
                               value={arriveQty}
                               onChange={(e) => setArriveQty(e.target.value)}
-                              placeholder="Qty arriving"
+                              placeholder={t("posQtyArriving")}
                               className="w-24 h-9 px-2 rounded-lg border-2 border-input bg-background text-sm font-mono"
                             />
                             <select
@@ -498,7 +499,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
                               onChange={(e) => setArriveLocationId(e.target.value)}
                               className="flex-1 h-9 px-2 rounded-lg border-2 border-input bg-background text-sm"
                             >
-                              <option value="">Select location…</option>
+                              <option value="">{t("posSelectLocation")}</option>
                               {locations.map((l) => (
                                 <option key={l.id} value={l.id}>{l.id}{l.description ? ` — ${l.description}` : ""}</option>
                               ))}
@@ -573,6 +574,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
 
 function RestockRequestsSection() {
   const { toast } = useToast();
+  const { t } = useLang();
   const queryClient = useQueryClient();
 
   const { data: groups = [], isLoading } = useQuery<RestockGroup[]>({
@@ -602,8 +604,8 @@ function RestockRequestsSection() {
   if (total === 0) return (
     <div className="text-center py-16 px-4 bg-muted/30 rounded-xl border border-dashed">
       <Bell className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-      <p className="font-semibold text-muted-foreground">No pending restock requests</p>
-      <p className="text-sm text-muted-foreground mt-1">Workers can request consumables from their task view.</p>
+      <p className="font-semibold text-muted-foreground">{t("posNoRestockRequests")}</p>
+      <p className="text-sm text-muted-foreground mt-1">{t("posRestockHint")}</p>
     </div>
   );
 
@@ -614,9 +616,9 @@ function RestockRequestsSection() {
           <div className="bg-muted/60 px-3 py-2 flex items-center gap-2">
             <Truck className="h-4 w-4 text-muted-foreground" />
             <p className="font-bold text-sm">
-              {group.supplierName ?? "No supplier linked"}
+              {group.supplierName ?? t("posNoSupplierLinked")}
             </p>
-            <span className="ml-auto text-xs font-bold text-muted-foreground">{group.requests.length} request{group.requests.length !== 1 ? "s" : ""}</span>
+            <span className="ml-auto text-xs font-bold text-muted-foreground">{group.requests.length} {group.requests.length === 1 ? t("posRequestOne") : t("posRequestMany")}</span>
           </div>
           <div className="divide-y">
             {group.requests.map((req) => (
@@ -643,7 +645,7 @@ function RestockRequestsSection() {
                     disabled={resolveMutation.isPending}
                     onClick={() => resolveMutation.mutate({ id: req.id, status: "ordered" })}
                   >
-                    <Check className="h-3 w-3 mr-1" /> Mark Ordered
+                    <Check className="h-3 w-3 mr-1" /> {t("posMarkOrdered")}
                   </Button>
                   <Button
                     size="sm"
@@ -652,7 +654,7 @@ function RestockRequestsSection() {
                     disabled={resolveMutation.isPending}
                     onClick={() => resolveMutation.mutate({ id: req.id, status: "dismissed" })}
                   >
-                    <XCircle className="h-3 w-3 mr-1" /> Dismiss
+                    <XCircle className="h-3 w-3 mr-1" /> {t("posDismiss")}
                   </Button>
                 </div>
               </div>
@@ -822,7 +824,7 @@ export default function PurchaseOrdersPage() {
           <Link href={backHref} className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
             <ArrowLeft className="h-6 w-6" />
           </Link>
-          <h1 className="text-xl font-bold">Purchase Order #{detailId}</h1>
+          <h1 className="text-xl font-bold">{t("posOrderNo")}{detailId}</h1>
         </div>
         <PODetailPage poId={detailId} backHref={backHref} />
       </div>
@@ -840,7 +842,7 @@ export default function PurchaseOrdersPage() {
         </div>
         {tab === "orders" && (
           <Button size="sm" className="font-bold h-9" onClick={() => setShowCreate((v) => !v)}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> New PO
+            <Plus className="h-3.5 w-3.5 mr-1" /> {t("posNew")}
           </Button>
         )}
       </div>
@@ -852,13 +854,13 @@ export default function PurchaseOrdersPage() {
             onClick={() => setTab("orders")}
             className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all ${tab === "orders" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
-            Orders
+            {t("posOrdersTab")}
           </button>
           <button
             onClick={() => setTab("requests")}
             className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 ${tab === "requests" ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
-            Worker Requests
+            {t("posRequestsTab")}
             {restockCount > 0 && (
               <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
                 {restockCount}
@@ -873,13 +875,13 @@ export default function PurchaseOrdersPage() {
 
         {showCreate && (
           <div className="border-2 border-primary/30 bg-primary/5 rounded-xl p-4 space-y-3">
-            <p className="font-bold text-sm">New Purchase Order</p>
+            <p className="font-bold text-sm">{t("posNewTitle")}</p>
 
             {prefillProduct && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center gap-2">
                 <Package2 className="h-4 w-4 text-amber-600 flex-shrink-0" />
                 <span className="text-xs font-semibold text-amber-800">
-                  Will include: <span className="font-bold">{prefillProduct.name}</span>
+                  {t("posWillInclude")} <span className="font-bold">{prefillProduct.name}</span>
                 </span>
               </div>
             )}
@@ -890,18 +892,18 @@ export default function PurchaseOrdersPage() {
               onChange={(e) => { setNewSupplierId(e.target.value); setItemQtys({}); setItemPrices({}); }}
               className="w-full h-11 px-3 rounded-lg border-2 border-input bg-background text-sm"
             >
-              <option value="">No supplier (or add later)</option>
+              <option value="">{t("posNoSupplier")}</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
 
             {/* Step 2 — Item picker (only when supplier has linked products) */}
             {newSupplierId && (
               loadingSupplierProducts ? (
-                <div className="text-xs text-muted-foreground py-1">Loading products…</div>
+                <div className="text-xs text-muted-foreground py-1">{t("posLoadingProducts")}</div>
               ) : supplierProducts.length === 0 ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
-                  No products linked to this supplier yet. You can link them in{" "}
-                  <span className="font-bold">Settings → Suppliers</span>, or add items to the PO after creating it.
+                  {t("posNoProductsLinked")}{" "}
+                  <span className="font-bold">{t("posSettingsSuppliers")}</span>{t("posNoProductsLinked2")}
                 </div>
               ) : (
                 <div className="border-2 border-border rounded-xl overflow-hidden">

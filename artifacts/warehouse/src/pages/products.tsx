@@ -596,7 +596,7 @@ export default function ProductsPage() {
                 className="w-full"
                 onClick={() => { setShowImport(false); setImportResult(null); }}
               >
-                Done
+                {t("prodImpDone")}
               </Button>
             </div>
           ) : !csvRows ? (
@@ -604,9 +604,9 @@ export default function ProductsPage() {
               <div className="rounded-lg border-2 border-dashed border-border p-6 text-center space-y-3">
                 <FileText className="h-10 w-10 mx-auto text-muted-foreground" />
                 <div>
-                  <p className="font-semibold">Select your CSV file</p>
+                  <p className="font-semibold">{t("prodImpSelectFile")}</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Use the template (download it from the Products page) to prepare your data.
+                    {t("prodImpTemplateHint")}
                   </p>
                 </div>
                 <input
@@ -621,7 +621,7 @@ export default function ProductsPage() {
                     <Download className="h-4 w-4 mr-1" /> {t("productsTemplate")}
                   </Button>
                   <Button onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="h-4 w-4 mr-1" /> Choose File
+                    <Upload className="h-4 w-4 mr-1" /> {t("prodImpChooseFile")}
                   </Button>
                 </div>
               </div>
@@ -641,11 +641,11 @@ export default function ProductsPage() {
               <div className="flex items-center justify-between flex-shrink-0">
                 <div className="flex items-center gap-3 text-sm">
                   <span className="flex items-center gap-1 text-green-700 font-semibold">
-                    <CheckCircle2 className="h-4 w-4" /> {validCsvRows.length} ready
+                    <CheckCircle2 className="h-4 w-4" /> {validCsvRows.length} {t("prodImpReady")}
                   </span>
                   {invalidCsvRows.length > 0 && (
                     <span className="flex items-center gap-1 text-destructive font-semibold">
-                      <X className="h-4 w-4" /> {invalidCsvRows.length} invalid (will be skipped)
+                      <X className="h-4 w-4" /> {invalidCsvRows.length} {t("prodImpInvalid")}
                     </span>
                   )}
                 </div>
@@ -653,7 +653,7 @@ export default function ProductsPage() {
                   className="text-xs text-muted-foreground underline"
                   onClick={() => { setCsvRows(null); fileInputRef.current?.click(); }}
                 >
-                  Change file
+                  {t("prodImpChangeFile")}
                 </button>
               </div>
 

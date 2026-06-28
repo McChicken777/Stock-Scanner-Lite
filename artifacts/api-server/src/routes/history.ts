@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, historyTable, productsTable } from "@workspace/db";
+import { db, historyTable, productsTable, locationsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 
@@ -25,6 +25,7 @@ router.get("/", async (req, res) => {
       .select({
         id: historyTable.id,
         locationId: historyTable.locationId,
+        locationName: locationsTable.description,
         productId: historyTable.productId,
         productName: productsTable.name,
         previousQuantity: historyTable.previousQuantity,
@@ -36,6 +37,7 @@ router.get("/", async (req, res) => {
       })
       .from(historyTable)
       .innerJoin(productsTable, eq(historyTable.productId, productsTable.id))
+      .leftJoin(locationsTable, eq(historyTable.locationId, locationsTable.id))
       .where(and(
         eq(historyTable.companyId, companyId),
         ...(productId ? [eq(historyTable.productId, productId)] : []),

@@ -114,7 +114,7 @@ export default function QuoteFormPage() {
     queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
     staleTime: 60_000,
   });
-  const currency = company?.currency ?? "USD";
+  const currency = company?.currency ?? "EUR";
   const fmt = (amount: number) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
 

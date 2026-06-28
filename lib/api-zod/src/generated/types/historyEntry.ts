@@ -9,6 +9,7 @@
 export interface HistoryEntry {
   id: number;
   locationId: string;
+  locationName?: string | null;
   productId: number;
   productName: string;
   previousQuantity: number;

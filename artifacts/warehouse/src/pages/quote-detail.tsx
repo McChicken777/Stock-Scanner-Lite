@@ -98,7 +98,7 @@ export default function QuoteDetailPage() {
     queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
     staleTime: 60_000,
   });
-  const currency = company?.currency ?? "USD";
+  const currency = company?.currency ?? "EUR";
   const fmt = (amount: number | string) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(amount));
 
@@ -235,7 +235,7 @@ export default function QuoteDetailPage() {
         {/* Issuer */}
         {quote.issuer && (
           <div className="bg-card border-2 border-border rounded-xl p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Issued by</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{t("quoteIssuedBy")}</p>
             <p className="text-sm font-semibold">{quote.issuer.name}</p>
             <div className="text-xs text-muted-foreground space-y-0.5 mt-0.5">
               {quote.issuer.email && <p>{quote.issuer.email}</p>}
@@ -287,9 +287,9 @@ export default function QuoteDetailPage() {
         {atLeast("standard") && quote.status === "sent" && quote.publicToken && (
           <div className="bg-card border-2 border-primary/30 rounded-xl p-3 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Link2 className="h-3.5 w-3.5" /> Customer link
+              <Link2 className="h-3.5 w-3.5" /> {t("quoteCustomerLink")}
             </p>
-            <p className="text-xs text-muted-foreground">Share this link so the customer can accept or decline online.</p>
+            <p className="text-xs text-muted-foreground">{t("quoteCustomerLinkHelp")}</p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-muted rounded px-2 py-1.5 truncate font-mono">
                 {`${window.location.origin}/q/${quote.publicToken}`}
@@ -298,10 +298,10 @@ export default function QuoteDetailPage() {
                 size="sm" variant="outline"
                 onClick={() => {
                   navigator.clipboard.writeText(`${window.location.origin}/q/${quote.publicToken}`);
-                  toast({ title: "Link copied!" });
+                  toast({ title: t("quoteLinkCopied") });
                 }}
               >
-                Copy
+                {t("quoteCopy")}
               </Button>
             </div>
           </div>

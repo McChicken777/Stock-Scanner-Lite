@@ -141,7 +141,7 @@ function BulkCreateDialog() {
         }
         setImportRows(rows);
       } catch {
-        toast({ title: "Could not read file", variant: "destructive" });
+        toast({ title: t("locationsFileReadError"), variant: "destructive" });
       }
     };
     reader.readAsArrayBuffer(file);
@@ -159,7 +159,7 @@ function BulkCreateDialog() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed");
-      toast({ title: `Created ${json.created}${json.skipped ? `, skipped ${json.skipped} (already exist)` : ""}` });
+      toast({ title: `${t("locationsCreated")} ${json.created}${json.skipped ? `, ${t("locationsSkipped")} ${json.skipped}` : ""}` });
       queryClient.invalidateQueries({ queryKey: ["/api/locations"] });
       setOpen(false);
       setImportRows([]);
@@ -167,14 +167,21 @@ function BulkCreateDialog() {
       if (fileRef.current) fileRef.current.value = "";
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed";
-      toast({ title: `Import failed: ${msg}`, variant: "destructive" });
+      toast({ title: `${t("locationsImportFailed")}: ${msg}`, variant: "destructive" });
     } finally {
       setIsPending(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => {
+      setOpen(next);
+      if (!next) {
+        setImportRows([]);
+        setFileName("");
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    }}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline" className="font-bold gap-1.5">
           <Grid2X2 className="h-4 w-4" /> {t("locationsBulkCreate")}
@@ -186,15 +193,15 @@ function BulkCreateDialog() {
         </DialogHeader>
         <Tabs defaultValue="pattern" className="mt-2">
           <TabsList className="w-full">
-            <TabsTrigger value="pattern" className="flex-1">Pattern</TabsTrigger>
-            <TabsTrigger value="excel" className="flex-1">Excel / CSV</TabsTrigger>
+            <TabsTrigger value="pattern" className="flex-1">{t("locationsPatternTab")}</TabsTrigger>
+            <TabsTrigger value="excel" className="flex-1">{t("locationsExcelTab")}</TabsTrigger>
           </TabsList>
 
           {/* Pattern tab */}
           <TabsContent value="pattern" className="space-y-4 pt-2">
             <div className="flex gap-2">
               <div className="flex-1">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">Prefix</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">{t("locationsPrefix")}</label>
                 <Input
                   placeholder="e.g. W1-A"
                   value={prefix}
@@ -203,17 +210,17 @@ function BulkCreateDialog() {
                 />
               </div>
               <div className="w-20">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">From</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">{t("locationsFrom")}</label>
                 <Input type="number" min={1} value={from} onChange={(e) => setFrom(Number(e.target.value))} className="h-10 border-2" />
               </div>
               <div className="w-20">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">To</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">{t("locationsTo")}</label>
                 <Input type="number" min={from} value={to} onChange={(e) => setTo(Number(e.target.value))} className="h-10 border-2" />
               </div>
             </div>
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-1">
-                Description template <span className="normal-case font-normal">(optional, use <code className="bg-muted px-1 rounded">{"{n}"}</code> for number)</span>
+                {t("locationsDescTpl")} <span className="normal-case font-normal">({t("locationsDescTplHint")} <code className="bg-muted px-1 rounded">{"{n}"}</code>)</span>
               </label>
               <Input
                 placeholder='e.g. Warehouse 1, shelf {n}'
@@ -227,7 +234,7 @@ function BulkCreateDialog() {
             {patternRows.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Preview: <strong>{patternRows.length} locations</strong>
+                  {t("locationsPreview")}: <strong>{patternRows.length} {t("locationsLocations")}</strong>
                 </p>
                 <div className="border rounded-lg max-h-36 overflow-y-auto divide-y text-sm">
                   {patternRows.slice(0, 20).map((r) => (
@@ -237,7 +244,7 @@ function BulkCreateDialog() {
                     </div>
                   ))}
                   {patternRows.length > 20 && (
-                    <div className="px-3 py-1.5 text-muted-foreground text-xs">…and {patternRows.length - 20} more</div>
+                    <div className="px-3 py-1.5 text-muted-foreground text-xs">…{t("locationsAndMore").replace("{n}", String(patternRows.length - 20))}</div>
                   )}
                 </div>
               </div>
@@ -248,7 +255,7 @@ function BulkCreateDialog() {
               disabled={patternRows.length === 0 || isPending}
               onClick={() => bulkCreate(patternRows)}
             >
-              {isPending ? "Creating…" : `Create ${patternRows.length} locations`}
+              {isPending ? t("locationsCreating") : `${t("locationsCreateBtn")} ${patternRows.length} ${t("locationsLocations")}`}
             </Button>
           </TabsContent>
 
@@ -256,10 +263,10 @@ function BulkCreateDialog() {
           <TabsContent value="excel" className="space-y-4 pt-2">
             <div className="border-2 border-dashed rounded-xl p-6 text-center">
               <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm font-semibold mb-1">Upload Excel or CSV</p>
-              <p className="text-xs text-muted-foreground mb-3">Column A: location code · Column B: description (optional)</p>
+              <p className="text-sm font-semibold mb-1">{t("locationsUploadFile")}</p>
+              <p className="text-xs text-muted-foreground mb-3">{t("locationsUploadHint")}</p>
               <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-                Choose file
+                {t("locationsChooseFile")}
               </Button>
               <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
               {fileName && <p className="text-xs text-muted-foreground mt-2 truncate">{fileName}</p>}
@@ -268,7 +275,7 @@ function BulkCreateDialog() {
             {importRows.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">
-                  Preview: <strong>{importRows.length} rows</strong>
+                  {t("locationsPreview")}: <strong>{importRows.length} {t("locationsRows")}</strong>
                 </p>
                 <div className="border rounded-lg max-h-40 overflow-y-auto divide-y text-sm">
                   {importRows.slice(0, 10).map((r, i) => (
@@ -278,7 +285,7 @@ function BulkCreateDialog() {
                     </div>
                   ))}
                   {importRows.length > 10 && (
-                    <div className="px-3 py-1.5 text-muted-foreground text-xs">…and {importRows.length - 10} more</div>
+                    <div className="px-3 py-1.5 text-muted-foreground text-xs">…{t("locationsAndMore").replace("{n}", String(importRows.length - 10))}</div>
                   )}
                 </div>
               </div>
@@ -289,7 +296,7 @@ function BulkCreateDialog() {
               disabled={importRows.length === 0 || isPending}
               onClick={() => bulkCreate(importRows)}
             >
-              {isPending ? "Importing…" : importRows.length > 0 ? `Import ${importRows.length} locations` : "Import"}
+              {isPending ? t("locationsImporting") : importRows.length > 0 ? `${t("locationsImportBtn")} ${importRows.length} ${t("locationsLocations")}` : t("locationsImportBtn")}
             </Button>
           </TabsContent>
         </Tabs>
@@ -326,10 +333,10 @@ export default function LocationsPage() {
     deleteLocation.mutate({ locationId: id }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["/api/locations"] });
-        toast({ title: "Location deleted" });
+        toast({ title: t("locationsDeleted") });
       },
       onError: () => {
-        toast({ title: "Cannot delete location", description: "Ensure it is empty first", variant: "destructive" });
+        toast({ title: t("locationsDeleteError"), description: t("locationsDeleteErrorDesc"), variant: "destructive" });
       }
     });
   };
@@ -340,11 +347,11 @@ export default function LocationsPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/locations"] });
-          toast({ title: "Location created" });
+          toast({ title: t("locationsCreatedOne") });
           setIsCreateOpen(false);
           form.reset();
         },
-        onError: () => toast({ title: "Failed to create location", variant: "destructive" })
+        onError: () => toast({ title: t("locationsCreateError"), variant: "destructive" })
       }
     );
   };

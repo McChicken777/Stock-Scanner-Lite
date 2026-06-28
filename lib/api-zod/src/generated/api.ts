@@ -303,6 +303,7 @@ export const ListHistoryQueryParams = zod.object({
 export const ListHistoryResponseItem = zod.object({
   id: zod.number(),
   locationId: zod.string(),
+  locationName: zod.string().nullish(),
   productId: zod.number(),
   productName: zod.string(),
   previousQuantity: zod.number(),
@@ -765,6 +766,7 @@ export const GetDashboardSummaryResponse = zod.object({
     zod.object({
       id: zod.number(),
       locationId: zod.string(),
+      locationName: zod.string().nullish(),
       productId: zod.number(),
       productName: zod.string(),
       previousQuantity: zod.number(),

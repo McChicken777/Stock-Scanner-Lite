@@ -56,6 +56,16 @@ export default function CustomerDetailPage() {
 
   const [form, setForm] = useState({ name: "", contactPerson: "", email: "", phone: "", address: "", notes: "" });
 
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+  const fmt = new Intl.NumberFormat(undefined, {
+    style: "currency", currency: company?.currency ?? "EUR",
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  });
+
   const { data: customer, isLoading } = useQuery<Customer>({
     queryKey: ["/api/customers", id],
     queryFn: async () => {
@@ -113,14 +123,14 @@ export default function CustomerDetailPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customers"] });
-      toast({ title: "Customer deleted" });
+      toast({ title: t("customerDeleted") });
       setLocation("/customers");
     },
-    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+    onError: () => toast({ title: t("customerDeleteFailed"), variant: "destructive" }),
   });
 
   if (isLoading) return <div className="p-4 space-y-3"><Skeleton className="h-32 w-full rounded-xl" /></div>;
-  if (!customer) return <div className="p-6 text-center text-muted-foreground">Customer not found</div>;
+  if (!customer) return <div className="p-6 text-center text-muted-foreground">{t("customerNotFound")}</div>;
 
   return (
     <div className="flex flex-col min-h-full">
@@ -131,7 +141,7 @@ export default function CustomerDetailPage() {
         <h1 className="text-xl font-bold flex-1 truncate">{customer.name}</h1>
         <Link href={`/quotes/new?customerId=${customer.id}`}>
           <Button size="sm" variant="secondary" className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-1">
-            <Plus className="h-4 w-4" /> Quote
+            <Plus className="h-4 w-4" /> {t("customerNewQuote")}
           </Button>
         </Link>
       </div>
@@ -196,17 +206,17 @@ export default function CustomerDetailPage() {
         <div className="grid grid-cols-3 gap-2">
           {customer.email && (
             <a href={`mailto:${customer.email}`} className="bg-muted/30 border-2 border-border rounded-lg p-3 text-center hover:bg-muted">
-              <Mail className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">Email</span>
+              <Mail className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">{t("customerEmail")}</span>
             </a>
           )}
           {customer.phone && (
             <a href={`tel:${customer.phone}`} className="bg-muted/30 border-2 border-border rounded-lg p-3 text-center hover:bg-muted">
-              <Phone className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">Call</span>
+              <Phone className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">{t("customerCall")}</span>
             </a>
           )}
           {customer.address && (
             <div className="bg-muted/30 border-2 border-border rounded-lg p-3 text-center">
-              <MapPin className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">Located</span>
+              <MapPin className="h-4 w-4 mx-auto mb-1" /><span className="text-[10px] font-bold uppercase">{t("customerLocated")}</span>
             </div>
           )}
         </div>
@@ -215,7 +225,7 @@ export default function CustomerDetailPage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground px-1">{t("customersQuoteHistory")}</p>
-            <span className="text-xs text-muted-foreground">{quotes.length} quote{quotes.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-muted-foreground">{quotes.length} {quotes.length === 1 ? t("customerQuoteOne") : t("customerQuoteMany")}</span>
           </div>
           {quotes.length === 0 ? (
             <div className="text-center py-8 bg-muted/30 rounded-xl border border-dashed">
@@ -235,7 +245,7 @@ export default function CustomerDetailPage() {
                       <p className="text-xs text-muted-foreground">{format(new Date(q.createdAt), "dd MMM yyyy")}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono font-bold text-sm">${Number(q.total).toFixed(2)}</p>
+                      <p className="font-mono font-bold text-sm">{fmt.format(Number(q.total))}</p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>

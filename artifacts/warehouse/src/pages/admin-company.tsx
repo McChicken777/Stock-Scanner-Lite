@@ -677,7 +677,7 @@ export default function AdminCompanyPage() {
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-muted-foreground">{t("companyDefaultCurrency")}</label>
             <select
-              value={company.currency ?? "USD"}
+              value={company.currency ?? "EUR"}
               onChange={(e) => updateBrandingMutation.mutate({ currency: e.target.value })}
               className="w-full h-10 px-3 rounded-lg border-2 border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             >

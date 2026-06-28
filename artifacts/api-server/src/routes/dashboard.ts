@@ -61,6 +61,7 @@ router.get("/summary", async (req, res) => {
       .select({
         id: historyTable.id,
         locationId: historyTable.locationId,
+        locationName: locationsTable.description,
         productId: historyTable.productId,
         productName: productsTable.name,
         previousQuantity: historyTable.previousQuantity,
@@ -71,6 +72,7 @@ router.get("/summary", async (req, res) => {
       })
       .from(historyTable)
       .innerJoin(productsTable, eq(historyTable.productId, productsTable.id))
+      .leftJoin(locationsTable, eq(historyTable.locationId, locationsTable.id))
       .where(and(eq(historyTable.companyId, companyId), eq(productsTable.companyId, companyId)))
       .orderBy(desc(historyTable.changedAt))
       .limit(10);

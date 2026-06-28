@@ -296,7 +296,19 @@ function StockItem({
           </div>
         </div>
 
-        {!lite && (
+        {lite ? (
+        <div className="flex h-20 items-center justify-between gap-3 px-4 bg-background">
+          <div className="flex items-baseline gap-2 font-mono">
+            <span className="text-4xl font-black">{optimisticQty}</span>
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">{t("locationInStock")}</span>
+          </div>
+          {isAdmin && (
+            <span className="text-xs text-muted-foreground text-right max-w-[55%] leading-snug">
+              {t("locationLiteMoveHint")}
+            </span>
+          )}
+        </div>
+        ) : (
         <div className="flex h-20 items-stretch bg-background">
           <button
             onClick={() => optimisticQty > 0 && handleUpdate(optimisticQty - 1)}

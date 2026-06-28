@@ -1065,6 +1065,9 @@ components:
           type: integer
         locationId:
           type: string
+        locationName:
+          type: string
+          nullable: true
         productId:
           type: integer
         productName:

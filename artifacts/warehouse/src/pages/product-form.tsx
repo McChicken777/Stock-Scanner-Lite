@@ -68,6 +68,7 @@ function normalizeItemType(raw: string | undefined | null): ItemType {
 interface SupplierSkuRow { supplierId: number; supplierName: string | null; supplierSku: string | null }
 
 function SupplierSkuPanel({ productId, category }: { productId: number; category: string }) {
+  const { t } = useLang();
   const { data: categorySuppliers = [] } = useQuery<{ id: number; name: string; categories?: string[] }[]>({
     queryKey: ["/api/suppliers/by-categories", category],
     queryFn: () => {
@@ -106,15 +107,15 @@ function SupplierSkuPanel({ productId, category }: { productId: number; category
   return (
     <div className="space-y-3 p-4 bg-muted/30 border-2 border-border/60 rounded-xl">
       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-        SKUs per supplier
+        {t("prodSkusPerSupplier")}
       </p>
       <p className="text-xs text-muted-foreground -mt-1">
-        Set your SKU for each supplier once — it pre-fills their quote form automatically.
+        {t("prodSkusPerSupplierHint")}
       </p>
       {!category ? (
-        <p className="text-xs text-muted-foreground italic">Select a category above to see supplier SKU fields.</p>
+        <p className="text-xs text-muted-foreground italic">{t("prodSkusSelectCategory")}</p>
       ) : categorySuppliers.length === 0 ? (
-        <p className="text-xs text-amber-600">No suppliers assigned to "{category}" yet — go to the Suppliers tab to assign some.</p>
+        <p className="text-xs text-amber-600">{t("prodSkusNoSuppliersPre")}"{category}"{t("prodSkusNoSuppliersPost")}</p>
       ) : (
         <div className="space-y-2">
           {categorySuppliers.map((s) => {
@@ -139,6 +140,7 @@ function SupplierSkuPanel({ productId, category }: { productId: number; category
 function SupplierSkuField({
   supplierId, supplierName, initialSku, savedFlash, onBlur,
 }: { supplierId: number; supplierName: string; initialSku: string; savedFlash: boolean; onBlur: (id: number, sku: string) => Promise<void> }) {
+  const { t } = useLang();
   const [value, setValue] = useState(initialSku);
   useEffect(() => { setValue(initialSku); }, [initialSku]);
 
@@ -153,7 +155,7 @@ function SupplierSkuField({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onBlur={handleBlur}
-        placeholder="SKU (optional)"
+        placeholder={t("prodSkuOptional")}
         className="h-8 border-2 font-mono text-sm flex-1"
       />
       {savedFlash && <Check className="h-4 w-4 text-green-500 flex-shrink-0" />}
@@ -229,10 +231,10 @@ export default function ProductFormPage() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["product-categories"] });
-      toast({ title: isEdit ? "Product updated successfully" : "Product created successfully" });
+      toast({ title: isEdit ? t("prodUpdated") : t("prodCreated") });
       setLocation("/products");
     } catch {
-      toast({ title: isEdit ? "Failed to update product" : "Failed to create product", variant: "destructive" });
+      toast({ title: isEdit ? t("prodUpdateFailed") : t("prodCreateFailed"), variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -298,7 +300,7 @@ export default function ProductFormPage() {
                           <Icon className="h-5 w-5 flex-shrink-0" />
                           <div>
                             <p className="font-bold text-sm">{type.value === "purchased_part" ? t("productsPurchased") : type.value === "manufactured_part" ? t("productsManufactured") : t("productsFinalProduct")}</p>
-                            <p className="text-xs opacity-80">{type.description}</p>
+                            <p className="text-xs opacity-80">{type.value === "purchased_part" ? t("prodTypePurchasedDesc") : type.value === "manufactured_part" ? t("prodTypeManufacturedDesc") : t("prodTypeFinalDesc")}</p>
                           </div>
                         </button>
                       );
@@ -315,9 +317,9 @@ export default function ProductFormPage() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Product Name</FormLabel>
+                  <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("prodName")}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. 10mm Hex Bolts" className="h-14 text-lg border-2 shadow-sm" {...field} />
+                    <Input placeholder={t("prodNamePlaceholder")} className="h-14 text-lg border-2 shadow-sm" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -332,7 +334,7 @@ export default function ProductFormPage() {
                   <FormLabel className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("productsCategory")}</FormLabel>
                   <FormControl>
                     <select className="w-full h-12 px-3 border-2 rounded-lg text-base shadow-sm bg-background" {...field}>
-                      <option value="">— select category —</option>
+                      <option value="">{t("prodSelectCategory")}</option>
                       {field.value && !categories.includes(field.value) && (
                         <option value={field.value}>{field.value}</option>
                       )}
@@ -341,7 +343,7 @@ export default function ProductFormPage() {
                       ))}
                     </select>
                   </FormControl>
-                  <p className="text-xs text-muted-foreground mt-1">Groups items together on the products page</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("prodCategoryHint")}</p>
                   <FormMessage />
                 </FormItem>
               )}

@@ -38,6 +38,7 @@ const T = {
     emailNotSent: "Order created. Email not sent (supplier has no email or SMTP not set up).",
     viewPo: "View purchase order", copyLink: "Copy link", copied: "Copied",
     decided: "Winner", noItems: "—", note: "Note", cancelRfq: "Cancel RFQ",
+    invited: "invited", responded: "responded",
   },
   sl: {
     back: "Nabava", item: "Izdelek", qty: "Kol.", total: "Skupaj (brez DDV)", lead: "Rok dobave",
@@ -48,6 +49,7 @@ const T = {
     emailNotSent: "Naročilo ustvarjeno. E-pošta ni poslana (dobavitelj nima e-naslova ali SMTP ni nastavljen).",
     viewPo: "Odpri naročilo", copyLink: "Kopiraj povezavo", copied: "Kopirano",
     decided: "Zmagovalec", noItems: "—", note: "Opomba", cancelRfq: "Prekliči povpraševanje",
+    invited: "povabljenih", responded: "odgovorilo",
   },
 };
 
@@ -149,7 +151,7 @@ export default function SourcingDetailPage() {
         <div className="rounded-xl border-2 border-dashed border-border p-8 text-center text-muted-foreground flex flex-col items-center gap-2">
           <Clock className="h-8 w-8 opacity-40" />
           <p className="font-semibold">{L.waiting}</p>
-          <p className="text-xs">{data.suppliers.length} invited · 0 responded</p>
+          <p className="text-xs">{data.suppliers.length} {L.invited} · {submitted.length} {L.responded}</p>
         </div>
       ) : (
         <div className="overflow-x-auto border-2 border-border rounded-xl">

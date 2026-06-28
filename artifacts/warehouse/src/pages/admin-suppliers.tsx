@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, Plus, Mail, Phone, Edit2, Package2, ChevronUp, Tag, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useState, useRef } from "react";
 
 interface Supplier {
@@ -380,7 +384,7 @@ export default function AdminSuppliersPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-bold text-sm">{supplier.name}</p>
                       <span className="flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200 rounded-full px-2 py-0.5">
-                        <Mail className="h-2.5 w-2.5" /> Email
+                        <Mail className="h-2.5 w-2.5" /> {t("suppliersEmailBadge")}
                       </span>
                     </div>
                     {supplier.email && (
@@ -398,10 +402,10 @@ export default function AdminSuppliersPage() {
                     )}
                     {s && (s.ordersPlaced > 0 || s.quotesSent > 0) && (
                       <p className="text-[11px] text-muted-foreground mt-1.5">
-                        {s.ordersPlaced > 0 && <span>{s.ordersPlaced} order{s.ordersPlaced !== 1 ? "s" : ""}</span>}
+                        {s.ordersPlaced > 0 && <span>{s.ordersPlaced} {t("suppliersOrdersLabel")}</span>}
                         {s.ordersPlaced > 0 && s.quotesSent > 0 && <span> · </span>}
-                        {s.quotesSent > 0 && <span>{s.quotesSent} quote{s.quotesSent !== 1 ? "s" : ""} sent</span>}
-                        {s.quotesAccepted > 0 && <span> · {s.quotesAccepted} accepted</span>}
+                        {s.quotesSent > 0 && <span>{s.quotesSent} {t("suppliersQuotesSentLabel")}</span>}
+                        {s.quotesAccepted > 0 && <span> · {s.quotesAccepted} {t("suppliersAcceptedLabel")}</span>}
                       </p>
                     )}
                   </div>
@@ -409,20 +413,33 @@ export default function AdminSuppliersPage() {
                     <button
                       onClick={() => setExpandedSupplierId(expanded ? null : supplier.id)}
                       className="p-2 hover:bg-blue-50 rounded text-blue-600"
-                      title="View / manage supplied products"
+                      title={t("suppliersManageProducts")}
                     >
                       {expanded ? <ChevronUp className="h-4 w-4" /> : <Package2 className="h-4 w-4" />}
                     </button>
                     <button onClick={() => startEdit(supplier)} className="p-2 hover:bg-blue-100 rounded text-blue-600">
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={() => deleteMutation.mutate(supplier.id)}
-                      disabled={deleteMutation.isPending}
-                      className="p-2 hover:bg-red-100 rounded text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          disabled={deleteMutation.isPending}
+                          className="p-2 hover:bg-red-100 rounded text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="w-[90vw] max-w-md rounded-xl">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>{t("suppliersDeleteTitle")}</AlertDialogTitle>
+                          <AlertDialogDescription>{t("suppliersDeleteDesc")}</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteMutation.mutate(supplier.id)} className="bg-destructive text-destructive-foreground">{t("delete")}</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
 

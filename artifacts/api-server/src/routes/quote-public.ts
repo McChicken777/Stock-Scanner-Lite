@@ -14,8 +14,10 @@ router.get("/:token", async (req, res) => {
       .where(eq(quotesTable.publicToken, req.params.token));
     if (!quote) { res.status(404).json({ valid: false, reason: "not_found" }); return; }
 
-    const [company] = await db.select({ name: companiesTable.name, plan: companiesTable.plan })
-      .from(companiesTable).where(eq(companiesTable.id, quote.companyId));
+    const [company] = await db.select({
+      name: companiesTable.name, plan: companiesTable.plan,
+      currency: companiesTable.currency, country: companiesTable.country,
+    }).from(companiesTable).where(eq(companiesTable.id, quote.companyId));
 
     if (company?.plan === "lite") {
       res.json({ valid: false, reason: "plan_not_supported" });
@@ -31,6 +33,8 @@ router.get("/:token", async (req, res) => {
       valid: true,
       expired,
       status: quote.status,
+      currency: company?.currency ?? "EUR",
+      language: company?.country === "SI" ? "sl" : "en",
       companyName: company?.name ?? null,
       customerName: quote.customerName,
       quoteNumber: quote.quoteNumber,

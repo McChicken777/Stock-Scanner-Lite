@@ -256,6 +256,7 @@ function CsvMapperPanel({
   onCancel: () => void;
   isImporting: boolean;
 }) {
+  const { t } = useLang();
   const { rawRows, headers, colMap } = preview;
   const sampleRows = rawRows.slice(0, 5);
   const validRowCount = rawRows.filter((r) => {
@@ -264,16 +265,16 @@ function CsvMapperPanel({
   }).length;
 
   const roleLabel: Record<ColRole, string> = {
-    name: "Name",
-    description: "Description",
-    price: "Price",
-    ignore: "— ignore —",
+    name: t("catalogColName"),
+    description: t("catalogColDescription"),
+    price: t("catalogColPrice"),
+    ignore: t("catalogColIgnore"),
   };
 
   return (
     <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-bold uppercase tracking-wider text-primary">Map CSV columns</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-primary">{t("catalogMapColumns")}</p>
         <button onClick={onCancel} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
       </div>
 
@@ -311,7 +312,7 @@ function CsvMapperPanel({
             {rawRows.length > 5 && (
               <tr>
                 <td colSpan={headers.length} className="pt-1 text-[10px] text-muted-foreground italic">
-                  … and {rawRows.length - 5} more rows
+                  … {t("catalogAndMore")} {rawRows.length - 5}
                 </td>
               </tr>
             )}
@@ -321,11 +322,11 @@ function CsvMapperPanel({
 
       <div className="flex items-center gap-2 pt-1">
         <Button size="sm" onClick={onImport} disabled={isImporting || validRowCount === 0} className="gap-1.5">
-          <Upload className="h-3.5 w-3.5" /> Import {validRowCount} row{validRowCount !== 1 ? "s" : ""}
+          <Upload className="h-3.5 w-3.5" /> {t("catalogImport")} {validRowCount}
         </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel}>{`Cancel`}</Button>
+        <Button size="sm" variant="ghost" onClick={onCancel}>{t("cancel")}</Button>
         {!colMap.includes("name") && (
-          <p className="text-[11px] text-amber-600 ml-2">Assign at least one column as "Name"</p>
+          <p className="text-[11px] text-amber-600 ml-2">{t("catalogAssignName")}</p>
         )}
       </div>
     </div>
@@ -335,7 +336,7 @@ function CsvMapperPanel({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminCatalogPage() {
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   const L = T[lang === "sl" ? "sl" : "en"];
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -680,7 +681,7 @@ export default function AdminCatalogPage() {
                   checked={allFilteredSelected}
                   onChange={toggleSelectAll}
                   className="h-4 w-4 rounded border-border cursor-pointer"
-                  title="Select all"
+                  title={t("catalogSelectAll")}
                 />
               )}
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.items}</p>
@@ -689,7 +690,7 @@ export default function AdminCatalogPage() {
               <label className="cursor-pointer">
                 <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvUpload} />
                 <Button type="button" size="sm" variant="outline" className="gap-1.5 pointer-events-none" tabIndex={-1} asChild>
-                  <span><Upload className="h-3.5 w-3.5" /> Import CSV</span>
+                  <span><Upload className="h-3.5 w-3.5" /> {t("catalogImportCsv")}</span>
                 </Button>
               </label>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddingItem(true)}>
@@ -701,7 +702,7 @@ export default function AdminCatalogPage() {
           {/* Bulk action bar */}
           {selectedIds.size > 0 && (
             <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-primary/5 border-2 border-primary/20 rounded-lg">
-              <span className="text-sm font-bold text-primary">{selectedIds.size} selected</span>
+              <span className="text-sm font-bold text-primary">{selectedIds.size} {t("catalogSelected")}</span>
               <div className="flex items-center gap-1.5 ml-auto">
                 <Input
                   type="number"

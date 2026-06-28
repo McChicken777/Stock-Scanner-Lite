@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable, suppliersTable, supplierProductsTable } from "@workspace/db";
+import { db, productsTable, stockTable, insertProductSchema, productComponentsTable, productProceduresTable, suppliersTable, supplierProductsTable, supplierCategoriesTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middlewares/auth";
@@ -53,13 +53,17 @@ router.post("/", requireAdmin, async (req, res) => {
 router.get("/categories", requireAuth, async (req, res) => {
   try {
     const companyId = req.session.companyId!;
-    const rows = await db
-      .selectDistinct({ category: productsTable.category })
-      .from(productsTable)
-      .where(and(eq(productsTable.companyId, companyId), sql`TRIM(${productsTable.category}) != ''`));
-    const trimmed = rows.map((r) => r.category.trim()).filter(Boolean);
+    const [productRows, supplierCatRows] = await Promise.all([
+      db.selectDistinct({ category: productsTable.category })
+        .from(productsTable)
+        .where(and(eq(productsTable.companyId, companyId), sql`TRIM(${productsTable.category}) != ''`)),
+      db.selectDistinct({ category: supplierCategoriesTable.category })
+        .from(supplierCategoriesTable)
+        .where(eq(supplierCategoriesTable.companyId, companyId)),
+    ]);
+    const allCats = [...productRows, ...supplierCatRows].map((r) => r.category.trim()).filter(Boolean);
     const seen = new Map<string, string>();
-    for (const c of trimmed) {
+    for (const c of allCats) {
       const key = c.toLowerCase();
       if (!seen.has(key)) seen.set(key, c);
     }

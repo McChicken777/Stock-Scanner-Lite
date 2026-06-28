@@ -51,12 +51,12 @@ interface WorkProject {
   status: string;
 }
 
-const ATTENDANCE_STYLES: Record<AttendanceLiveRow["status"], { label: string; cls: string }> = {
-  clocked_in: { label: "In", cls: "bg-green-100 text-green-700 border-green-300" },
-  clocked_out: { label: "Out", cls: "bg-gray-100 text-gray-700 border-gray-300" },
-  sick: { label: "Sick", cls: "bg-orange-100 text-orange-700 border-orange-300" },
-  vacation: { label: "Vacation", cls: "bg-blue-100 text-blue-700 border-blue-300" },
-  absent: { label: "Absent", cls: "bg-red-50 text-red-600 border-red-200" },
+const ATTENDANCE_STYLES: Record<AttendanceLiveRow["status"], { cls: string }> = {
+  clocked_in: { cls: "bg-green-100 text-green-700 border-green-300" },
+  clocked_out: { cls: "bg-gray-100 text-gray-700 border-gray-300" },
+  sick: { cls: "bg-orange-100 text-orange-700 border-orange-300" },
+  vacation: { cls: "bg-blue-100 text-blue-700 border-blue-300" },
+  absent: { cls: "bg-red-50 text-red-600 border-red-200" },
 };
 
 function fmtDate(dateStr: string): string {
@@ -69,6 +69,14 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { atLeast } = usePlan();
   const isAdmin = user?.role === "admin";
+
+  const attLabel = (status: AttendanceLiveRow["status"]): string => ({
+    clocked_in: t("attStatusIn"),
+    clocked_out: t("attStatusOut"),
+    sick: t("attStatusSick"),
+    vacation: t("attStatusVac"),
+    absent: t("attStatusAbsent"),
+  }[status]);
 
   const { data: summary, isLoading, isError } = useGetDashboardSummary();
   const { data: quoteCounts } = useQuery<Record<string, number>>({
@@ -143,7 +151,7 @@ export default function Dashboard() {
       <div className="p-4 flex flex-col items-center justify-center h-64 text-center">
         <AlertTriangle className="h-10 w-10 text-destructive mb-4" />
         <h2 className="text-lg font-semibold">{t("dashFailedLoad")}</h2>
-        <p className="text-muted-foreground text-sm">Please try again later</p>
+        <p className="text-muted-foreground text-sm">{t("dashRetryLater")}</p>
       </div>
     );
   }
@@ -250,7 +258,7 @@ export default function Dashboard() {
                 </div>
                 {projects.length > 0 && (
                   <div className="text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground/70">Total</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-foreground/70">{t("dashTotal")}</p>
                     <p className="text-sm font-bold">{projects.length}</p>
                   </div>
                 )}
@@ -320,11 +328,11 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex gap-2 text-[10px] font-bold flex-wrap">
-                    <span className="px-2 py-0.5 rounded border bg-green-100 text-green-700 border-green-300">In {counts.clocked_in ?? 0}</span>
-                    <span className="px-2 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-300">Out {counts.clocked_out ?? 0}</span>
-                    <span className="px-2 py-0.5 rounded border bg-orange-100 text-orange-700 border-orange-300">Sick {counts.sick ?? 0}</span>
-                    <span className="px-2 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-300">Vac {counts.vacation ?? 0}</span>
-                    <span className="px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200">Absent {counts.absent ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-green-100 text-green-700 border-green-300">{t("attStatusIn")} {counts.clocked_in ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-gray-100 text-gray-700 border-gray-300">{t("attStatusOut")} {counts.clocked_out ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-orange-100 text-orange-700 border-orange-300">{t("attStatusSick")} {counts.sick ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-blue-100 text-blue-700 border-blue-300">{t("attStatusVac")} {counts.vacation ?? 0}</span>
+                    <span className="px-2 py-0.5 rounded border bg-red-50 text-red-600 border-red-200">{t("attStatusAbsent")} {counts.absent ?? 0}</span>
                   </div>
                   <div className="space-y-1 max-h-[180px] overflow-y-auto">
                     {live.map((r) => {
@@ -332,7 +340,7 @@ export default function Dashboard() {
                       return (
                         <div key={r.userId} className="flex items-center justify-between py-1 px-2 rounded bg-muted/40 border text-[12px]">
                           <span className="font-bold truncate">{r.username}</span>
-                          <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${s.cls}`}>{s.label}</span>
+                          <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${s.cls}`}>{attLabel(r.status)}</span>
                         </div>
                       );
                     })}
@@ -352,8 +360,8 @@ export default function Dashboard() {
                       <Inbox className="h-4 w-4 text-amber-700" />
                     </div>
                     <div>
-                      <p className="font-bold text-amber-900 text-sm">Leave Requests</p>
-                      <p className="text-xs text-amber-700">{pendingLeave.length} pending approval</p>
+                      <p className="font-bold text-amber-900 text-sm">{t("dashLeaveRequests")}</p>
+                      <p className="text-xs text-amber-700">{pendingLeave.length} {t("dashPendingApproval")}</p>
                     </div>
                   </div>
                   <div className="space-y-0.5 text-right max-w-[160px]">
@@ -468,7 +476,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center mt-0.5 text-xs text-muted-foreground">
-                    <span>Loc: {entry.locationId}</span>
+                    <span>{t("dashLoc")}: {entry.locationName || entry.locationId}</span>
                     <span>{new Date(entry.changedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 </div>
