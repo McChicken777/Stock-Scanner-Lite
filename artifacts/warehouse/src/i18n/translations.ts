@@ -416,6 +416,8 @@ const KEYS = [
   "posOrderNo", "posOrdersTab", "posRequestsTab", "posWillInclude", "posNoSupplier",
   "posLoadingProducts", "posNoProductsLinked", "posNoProductsLinked2", "posSettingsSuppliers",
   "posNoRestockRequests", "posRestockHint", "posNoSupplierLinked", "posRequestOne", "posRequestMany",
+  "posStatusDraft", "posStatusOrdered", "posStatusPartial", "posStatusDelivered", "posStatusCancelled",
+  "posSupplierContact",
 
   // ── Audit pass: suppliers / catalog ─────────────────────────────────────────
   "suppliersEmailBadge", "suppliersOrdersLabel", "suppliersQuotesSentLabel", "suppliersAcceptedLabel",
@@ -1470,6 +1472,12 @@ const en: Dict = {
   posNoSupplierLinked: "No supplier linked",
   posRequestOne: "request",
   posRequestMany: "requests",
+  posStatusDraft: "Draft",
+  posStatusOrdered: "Ordered",
+  posStatusPartial: "Partially arrived",
+  posStatusDelivered: "Delivered",
+  posStatusCancelled: "Cancelled",
+  posSupplierContact: "Supplier contact",
 
   // ── Audit pass: suppliers / catalog ─────────────────────────────────────────
   suppliersEmailBadge: "Email",
@@ -2575,6 +2583,12 @@ const sl: Dict = {
   posNoSupplierLinked: "Brez povezanega dobavitelja",
   posRequestOne: "zahtevek",
   posRequestMany: "zahtevkov",
+  posStatusDraft: "Osnutek",
+  posStatusOrdered: "Naročeno",
+  posStatusPartial: "Delno prispelo",
+  posStatusDelivered: "Dostavljeno",
+  posStatusCancelled: "Preklicano",
+  posSupplierContact: "Kontakt dobavitelja",
 
   // ── Audit pass: suppliers / catalog ─────────────────────────────────────────
   suppliersEmailBadge: "E-pošta",

@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Plus, ShoppingCart, Package2, CheckCircle2,
   Truck, AlertCircle, ChevronRight, Trash2, Edit2, X, Mail,
-  Bell, User, Check, XCircle,
+  Bell, User, Check, XCircle, Phone,
 } from "lucide-react";
 
 interface PurchaseOrder {
@@ -66,6 +66,8 @@ interface Supplier {
   id: number;
   name: string;
   email: string | null;
+  phone: string | null;
+  notes: string | null;
 }
 
 interface SupplierProductLink {
@@ -109,7 +111,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700 border-gray-200",
   ordered: "bg-blue-100 text-blue-700 border-blue-200",
-  partially_arrived: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  partially_arrived: "bg-amber-100 text-amber-800 border-amber-200",
   arrived: "bg-green-100 text-green-700 border-green-200",
   cancelled: "bg-red-100 text-red-600 border-red-200",
 };
@@ -121,6 +123,19 @@ const statusIcons: Record<string, React.ReactNode> = {
   arrived: <CheckCircle2 className="h-3 w-3" />,
   cancelled: <X className="h-3 w-3" />,
 };
+
+// Localized status label. Note: the terminal "arrived" status is surfaced to
+// users as "Delivered" (green) — green is reserved for a fully received order.
+function statusLabel(status: string, t: (key: any) => string): string {
+  const map: Record<string, string> = {
+    draft: t("posStatusDraft"),
+    ordered: t("posStatusOrdered"),
+    partially_arrived: t("posStatusPartial"),
+    arrived: t("posStatusDelivered"),
+    cancelled: t("posStatusCancelled"),
+  };
+  return map[status] ?? status.replace("_", " ");
+}
 
 function buildMailtoLink(supplierEmail: string, supplierName: string, poId: number, items: POItem[], currency: string) {
   const subject = encodeURIComponent(`Purchase Order #${poId} — ${supplierName}`);
@@ -270,7 +285,8 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
   const purchasedProducts = products.filter((p) => p.itemType === "purchased_part" || p.itemType === "purchase");
   const canEdit = po.status !== "arrived" && po.status !== "cancelled";
   const currentItem = arriveItemId ? po.items.find((i) => i.id === arriveItemId) : null;
-  const supplierEmail = po.supplierId ? (suppliers.find((s) => s.id === po.supplierId)?.email ?? null) : null;
+  const supplier = po.supplierId ? (suppliers.find((s) => s.id === po.supplierId) ?? null) : null;
+  const supplierEmail = supplier?.email ?? null;
   const mailtoUrl = supplierEmail && po.items.length > 0
     ? buildMailtoLink(supplierEmail, po.supplierName ?? "Supplier", po.id, po.items, currency)
     : null;
@@ -286,7 +302,7 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
           </div>
           <Badge className={`${statusColors[po.status] ?? ""} flex items-center gap-1 font-bold`}>
             {statusIcons[po.status]}
-            {po.status.replace("_", " ")}
+            {statusLabel(po.status, t)}
           </Badge>
         </div>
         {po.expectedDate && (
@@ -320,20 +336,41 @@ function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
           </div>
         )}
 
-        {/* Email supplier */}
-        {mailtoUrl && (
+        {/* Email the PO to the supplier — only while the order is still open */}
+        {mailtoUrl && canEdit && (
           <a href={mailtoUrl} className="block">
             <Button size="sm" variant="outline" className="w-full h-9 font-bold text-blue-700 border-blue-300 hover:bg-blue-50">
               <Mail className="h-3.5 w-3.5 mr-1.5" /> {t("posSendEmailTo")} {po.supplierName}
             </Button>
           </a>
         )}
-        {po.supplierId && !supplierEmail && (
+        {po.supplierId && !supplierEmail && canEdit && (
           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
             <Mail className="h-3 w-3" /> {t("posNoEmailHint")}
           </p>
         )}
       </div>
+
+      {/* Supplier contact — for calling/emailing about the delivery */}
+      {supplier && (supplier.phone || supplier.email || supplier.notes) && (
+        <div className="border-2 border-border rounded-xl p-4 space-y-2.5">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{t("posSupplierContact")}</p>
+          <p className="font-bold text-sm">{supplier.name}</p>
+          <div className="grid grid-cols-1 gap-2">
+            {supplier.phone && (
+              <a href={`tel:${supplier.phone}`} className="flex items-center gap-2 text-sm font-semibold text-primary hover:underline">
+                <Phone className="h-4 w-4 flex-shrink-0" /> {supplier.phone}
+              </a>
+            )}
+            {supplier.email && (
+              <a href={`mailto:${supplier.email}`} className="flex items-center gap-2 text-sm font-semibold text-primary hover:underline break-all">
+                <Mail className="h-4 w-4 flex-shrink-0" /> {supplier.email}
+              </a>
+            )}
+          </div>
+          {supplier.notes && <p className="text-xs text-muted-foreground border-t pt-2 whitespace-pre-wrap">{supplier.notes}</p>}
+        </div>
+      )}
 
       {/* Items */}
       <div className="space-y-2">
@@ -1036,7 +1073,7 @@ export default function PurchaseOrdersPage() {
                   <div className="flex flex-col items-end gap-1">
                     <Badge className={`${statusColors[po.status] ?? ""} text-[10px] font-bold flex items-center gap-1`}>
                       {statusIcons[po.status]}
-                      {po.status.replace("_", " ")}
+                      {statusLabel(po.status, t)}
                     </Badge>
                     {po.expectedDate && OPEN_STATUSES.includes(po.status) && new Date(po.expectedDate) < new Date() && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 rounded-full px-2 py-0.5">
