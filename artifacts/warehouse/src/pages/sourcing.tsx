@@ -125,6 +125,7 @@ function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
           flagId: i.flagIds?.[0] ?? null,
         })),
         supplierIds: Array.from(checkedSupplierIds),
+        note: categoryName,
         origin: window.location.origin,
       }),
     }),
@@ -275,20 +276,21 @@ function LowStockOrdering() {
     return acc;
   }, {});
 
+  // Only show cards for categories that haven't had quotes sent yet
+  const toShow = Object.entries(byCategory).filter(([, items]) => (items[0]?.pendingRfqId ?? null) == null);
+  if (toShow.length === 0) return null;
+
   return (
     <div className="space-y-3">
-      {Object.entries(byCategory).map(([cat, items]) => {
-        const pendingRfqId = items[0]?.pendingRfqId ?? null;
-        return (
-          <CategoryRfqCard
-            key={cat}
-            categoryName={cat}
-            items={items}
-            suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
-            pendingRfqId={pendingRfqId}
-          />
-        );
-      })}
+      {toShow.map(([cat, items]) => (
+        <CategoryRfqCard
+          key={cat}
+          categoryName={cat}
+          items={items}
+          suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
+          pendingRfqId={null}
+        />
+      ))}
     </div>
   );
 }
@@ -503,9 +505,10 @@ export default function SourcingPage() {
             <div key={r.id} className="flex items-center gap-2 border-2 border-border rounded-xl bg-card overflow-hidden">
               <Link href={`/sourcing/${r.id}`} className="flex items-center gap-3 px-4 py-3 flex-1 min-w-0 hover:bg-muted/40">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 border ${statusClass(r.status)}`}>{statusLabel(r.status)}</span>
                     <span className="text-sm font-semibold">#{r.id}</span>
+                    {r.note && <span className="text-sm font-semibold truncate">{r.note}</span>}
                     {r.status === "open" && r.respondedCount > 0 && (
                       <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" title="Supplier responded — decide now" />
                     )}

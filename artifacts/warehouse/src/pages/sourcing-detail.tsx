@@ -249,7 +249,7 @@ export default function SourcingDetailPage() {
             })()}
           </div>
           {data.poId != null && (
-            <Button variant="outline" size="sm" onClick={() => setLocation(`/work/purchase-orders/${data.poId}`)}>
+            <Button variant="outline" size="sm" onClick={() => setLocation(`/work/purchase-orders/${data.poId}?from=sourcing`)}>
               {L.viewPo}
             </Button>
           )}

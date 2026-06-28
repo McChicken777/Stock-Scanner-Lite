@@ -144,7 +144,7 @@ function buildMailtoLink(supplierEmail: string, supplierName: string, poId: numb
 
 // ─── PO Detail View ────────────────────────────────────────────────────────────
 
-function PODetailPage({ poId }: { poId: number }) {
+function PODetailPage({ poId, backHref }: { poId: number; backHref: string }) {
   const { t } = useLang();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -163,6 +163,15 @@ function PODetailPage({ poId }: { poId: number }) {
     queryKey: [`/api/purchase-orders/${poId}`],
     queryFn: () => apiFetch(`/api/purchase-orders/${poId}`),
   });
+
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => apiFetch("/api/company"),
+    staleTime: 60_000,
+  });
+  const currency = company?.currency ?? "EUR";
+  const fmt = (n: number) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -247,7 +256,7 @@ function PODetailPage({ poId }: { poId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/purchase-orders"] });
       toast({ title: "PO deleted" });
-      setLocation("/work/purchase-orders");
+      setLocation(backHref);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
@@ -432,9 +441,9 @@ function PODetailPage({ poId }: { poId: number }) {
                     ) : (
                       <>
                         <div className="flex items-center gap-3 text-xs">
-                          <span className="text-muted-foreground">Unit price: <span className="font-bold font-mono text-foreground">{item.unitPrice != null ? `$${Number(item.unitPrice).toFixed(2)}` : "—"}</span></span>
+                          <span className="text-muted-foreground">Unit price: <span className="font-bold font-mono text-foreground">{item.unitPrice != null ? fmt(Number(item.unitPrice)) : "—"}</span></span>
                           {item.unitPrice != null && (
-                            <span className="text-muted-foreground">Line total: <span className="font-bold font-mono text-foreground">${(Number(item.unitPrice) * item.quantityOrdered).toFixed(2)}</span></span>
+                            <span className="text-muted-foreground">Line total: <span className="font-bold font-mono text-foreground">{fmt(Number(item.unitPrice) * item.quantityOrdered)}</span></span>
                           )}
                         </div>
                         <Button
@@ -805,15 +814,17 @@ export default function PurchaseOrdersPage() {
 
   // Show detail view if navigated to /work/purchase-orders/:id
   if (matchDetail && detailId) {
+    const fromParam = new URLSearchParams(window.location.search).get("from");
+    const backHref = fromParam === "sourcing" ? "/sourcing" : "/work/purchase-orders";
     return (
       <div className="flex flex-col min-h-full">
         <div className="bg-secondary text-secondary-foreground p-4 sticky top-0 z-20 shadow-sm flex items-center gap-3">
-          <Link href="/work/purchase-orders" className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
+          <Link href={backHref} className="p-2 -ml-2 rounded-full hover:bg-secondary-foreground/10 transition-colors">
             <ArrowLeft className="h-6 w-6" />
           </Link>
           <h1 className="text-xl font-bold">Purchase Order #{detailId}</h1>
         </div>
-        <PODetailPage poId={detailId} />
+        <PODetailPage poId={detailId} backHref={backHref} />
       </div>
     );
   }
