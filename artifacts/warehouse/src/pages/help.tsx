@@ -5,6 +5,7 @@ import type { Lang } from "@/i18n/translations";
 import {
   HelpCircle, MapPin, Package2, ScanLine, AlertTriangle, Truck,
   History, Building2, FileText, ClipboardList, ArrowLeftRight, PackageCheck, Scale,
+  LayoutGrid,
 } from "lucide-react";
 
 // IMPORTANT: keep this page in sync with the app's features. Whenever a feature
@@ -46,8 +47,13 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: Building2, title: "Company settings", paras: [
           "Set your company name and logo, your default currency, and — important for ordering by email — your \"Order email\" (the address orders are sent from). Use Send test to confirm it works.",
         ]},
+        { icon: LayoutGrid, title: "Product catalog — line items for quotes", paras: [
+          "Admin → Catalog is where you build the library of items you sell to customers. Organise them into categories and sub-categories, set a unit price for each, and they'll be pre-filled when you add a line to a customer quote.",
+          "To add many items at once, import a CSV. The importer shows a column-mapping preview so you can tell it which column holds the name, price, and description before anything is saved — no more prices landing in the wrong field.",
+          "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or raise/lower all their prices by a percentage (handy at the start of each year).",
+        ]},
         { icon: FileText, title: "Customers & quotes", paras: [
-          "Keep your customers and create quotes for them. The quotes overview on the dashboard tracks draft → sent → approved → converted.",
+          "Keep your customers and create quotes for them. Pick items straight from the catalog so prices are already filled in. The quotes overview on the dashboard tracks draft → sent → approved → converted.",
         ]},
         { icon: History, title: "History", paras: [
           "Every change is recorded in History with who did it and when — your audit trail.",
@@ -116,8 +122,13 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: Building2, title: "Nastavitve podjetja", paras: [
           "Nastavi ime in logotip podjetja, privzeto valuto in — pomembno za naročanje po e-pošti — »E-pošto za naročila« (naslov, s katerega se pošiljajo naročila). S Pošlji test preveri delovanje.",
         ]},
+        { icon: LayoutGrid, title: "Katalog izdelkov — postavke za ponudbe", paras: [
+          "Admin → Katalog je knjižnica izdelkov, ki jih prodajaš strankam. Razvrsti jih v kategorije in podkategorije, nastavi enoto ceno, in ob ustvarjanju ponudbe se cene samodejno izpolnijo.",
+          "Za množični uvoz uvozi CSV datoteko. Predogled preslikave stolpcev ti omogoča, da vsakemu stolpcu določiš vlogo (Ime / Cena / Opis), preden karkoli shranišs — cene nikoli ne pristanejo v napačnem polju.",
+          "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali prilagodi vse cene za odstotek naenkrat (praktično ob začetku vsakega leta).",
+        ]},
         { icon: FileText, title: "Stranke in ponudbe", paras: [
-          "Vodi stranke in jim ustvarjaj ponudbe. Pregled ponudb na nadzorni plošči sledi: osnutek → poslano → odobreno → pretvorjeno.",
+          "Vodi stranke in jim ustvarjaj ponudbe. Postavke dodaj iz kataloga, da so cene že izpolnjene. Pregled ponudb na nadzorni plošči sledi: osnutek → poslano → odobreno → pretvorjeno.",
         ]},
         { icon: History, title: "Zgodovina", paras: [
           "Vsaka sprememba je zabeležena v Zgodovini — kdo jo je naredil in kdaj.",
