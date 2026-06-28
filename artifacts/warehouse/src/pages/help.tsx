@@ -36,9 +36,17 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Tap Scan and scan a bin's label to open it and see the items kept there. When something is running low, tap its flag, enter how many you need, and it goes onto the reorder list.",
           "Lite doesn't track exact counts — you simply flag what needs buying and how much.",
         ]},
+        { icon: FileText, title: "Customers & quotes", paras: [
+          "Keep your customers and create quotes for them. Pick items straight from the catalog so prices are already filled in. The quotes overview on the dashboard tracks draft → sent → approved → converted.",
+        ]},
         { icon: Truck, title: "Order from suppliers", paras: [
           "In Suppliers, set how each supplier takes orders (email or their web store) and the language of their order emails. The \"Needs reorder\" section groups every flagged item by supplier.",
           "Email supplier: the app emails the order straight to them (set up your sending email in Company settings first). Web-store supplier: it opens a checklist — open each item, add it to the store cart, then mark the order placed.",
+        ]},
+        { icon: LayoutGrid, title: "Product catalog — line items for quotes", paras: [
+          "Admin → Catalog is where you build the library of items you sell to customers. Organise them into categories and sub-categories, set a unit price for each, and they'll be pre-filled when you add a line to a customer quote.",
+          "To add many items at once, import a CSV. The importer shows a column-mapping preview so you can tell it which column holds the name, price, and description before anything is saved — no more prices landing in the wrong field.",
+          "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or raise/lower all their prices by a percentage (handy at the start of each year).",
         ]},
         { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
           "When you're not sure who's cheapest, open Sourcing and send one quote request to several suppliers at once. They fill in prices on a no-login link (their SKUs are pre-filled), and the app lays every response side by side — highlighting the cheapest total and the fastest delivery.",
@@ -46,14 +54,6 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
         { icon: Building2, title: "Company settings", paras: [
           "Set your company name and logo, your default currency, and — important for ordering by email — your \"Order email\" (the address orders are sent from). Use Send test to confirm it works.",
-        ]},
-        { icon: LayoutGrid, title: "Product catalog — line items for quotes", paras: [
-          "Admin → Catalog is where you build the library of items you sell to customers. Organise them into categories and sub-categories, set a unit price for each, and they'll be pre-filled when you add a line to a customer quote.",
-          "To add many items at once, import a CSV. The importer shows a column-mapping preview so you can tell it which column holds the name, price, and description before anything is saved — no more prices landing in the wrong field.",
-          "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or raise/lower all their prices by a percentage (handy at the start of each year).",
-        ]},
-        { icon: FileText, title: "Customers & quotes", paras: [
-          "Keep your customers and create quotes for them. Pick items straight from the catalog so prices are already filled in. The quotes overview on the dashboard tracks draft → sent → approved → converted.",
         ]},
         { icon: History, title: "History", paras: [
           "Every change is recorded in History with who did it and when — your audit trail.",
@@ -111,9 +111,17 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Pritisni Skeniraj in skeniraj nalepko lokacije, da jo odpreš in vidiš izdelke na njej. Ko česa zmanjkuje, pritisni zastavico, vnesi, koliko potrebuješ, in se doda na seznam za naročilo.",
           "Lite ne sledi natančnim količinam — preprosto označiš, kaj je treba kupiti in koliko.",
         ]},
+        { icon: FileText, title: "Stranke in ponudbe", paras: [
+          "Vodi stranke in jim ustvarjaj ponudbe. Postavke dodaj iz kataloga, da so cene že izpolnjene. Pregled ponudb na nadzorni plošči sledi: osnutek → poslano → odobreno → pretvorjeno.",
+        ]},
         { icon: Truck, title: "Naročanje pri dobaviteljih", paras: [
           "Pri vsakem dobavitelju nastavi način naročanja (po e-pošti ali prek spletne trgovine) in jezik naročil. Razdelek »Za naročilo« združi vse označene izdelke po dobaviteljih.",
           "Dobavitelj po e-pošti: aplikacija mu naročilo pošlje neposredno (najprej nastavi svojo e-pošto v Podjetje in paket). Dobavitelj s spletno trgovino: odpre se kontrolni seznam — odpri vsak izdelek, ga dodaj v košarico trgovine, nato označi naročilo kot oddano.",
+        ]},
+        { icon: LayoutGrid, title: "Katalog izdelkov — postavke za ponudbe", paras: [
+          "Admin → Katalog je knjižnica izdelkov, ki jih prodajaš strankam. Razvrsti jih v kategorije in podkategorije, nastavi enoto ceno, in ob ustvarjanju ponudbe se cene samodejno izpolnijo.",
+          "Za množični uvoz uvozi CSV datoteko. Predogled preslikave stolpcev ti omogoča, da vsakemu stolpcu določiš vlogo (Ime / Cena / Opis), preden karkoli shraniš — cene nikoli ne pristanejo v napačnem polju.",
+          "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali prilagodi vse cene za odstotek naenkrat (praktično ob začetku vsakega leta).",
         ]},
         { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
           "Ko nisi prepričan, kdo je najcenejši, odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (njihove šifre so že izpolnjene), aplikacija pa vse odgovore postavi enega ob drugega — označi najnižji skupni znesek in najhitrejšo dobavo.",
@@ -121,14 +129,6 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
         { icon: Building2, title: "Nastavitve podjetja", paras: [
           "Nastavi ime in logotip podjetja, privzeto valuto in — pomembno za naročanje po e-pošti — »E-pošto za naročila« (naslov, s katerega se pošiljajo naročila). S Pošlji test preveri delovanje.",
-        ]},
-        { icon: LayoutGrid, title: "Katalog izdelkov — postavke za ponudbe", paras: [
-          "Admin → Katalog je knjižnica izdelkov, ki jih prodajaš strankam. Razvrsti jih v kategorije in podkategorije, nastavi enoto ceno, in ob ustvarjanju ponudbe se cene samodejno izpolnijo.",
-          "Za množični uvoz uvozi CSV datoteko. Predogled preslikave stolpcev ti omogoča, da vsakemu stolpcu določiš vlogo (Ime / Cena / Opis), preden karkoli shranišs — cene nikoli ne pristanejo v napačnem polju.",
-          "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali prilagodi vse cene za odstotek naenkrat (praktično ob začetku vsakega leta).",
-        ]},
-        { icon: FileText, title: "Stranke in ponudbe", paras: [
-          "Vodi stranke in jim ustvarjaj ponudbe. Postavke dodaj iz kataloga, da so cene že izpolnjene. Pregled ponudb na nadzorni plošči sledi: osnutek → poslano → odobreno → pretvorjeno.",
         ]},
         { icon: History, title: "Zgodovina", paras: [
           "Vsaka sprememba je zabeležena v Zgodovini — kdo jo je naredil in kdaj.",
