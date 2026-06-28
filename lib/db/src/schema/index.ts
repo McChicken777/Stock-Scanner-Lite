@@ -20,3 +20,4 @@ export * from "./analytics";
 export * from "./kiosk";
 export * from "./company-invites";
 export * from "./rfq";
+export * from "./catalog";

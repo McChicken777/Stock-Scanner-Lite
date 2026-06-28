@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, TrendingDown, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, TrendingDown, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -86,10 +86,11 @@ interface ReorderQueueItem {
 
 // ─── Per-category RFQ card ────────────────────────────────────────────────────
 
-function CategoryRfqCard({ categoryName, items, suppliers }: {
+function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
   categoryName: string;
   items: ReorderQueueItem[];
   suppliers: Supplier[];
+  pendingRfqId: number | null;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -101,6 +102,16 @@ function CategoryRfqCard({ categoryName, items, suppliers }: {
     () => Object.fromEntries(items.map((i) => [i.id, i.quantityNeeded || i.shortfall || 1]))
   );
   const [sent, setSent] = useState(false);
+
+  const cancelMutation = useMutation({
+    mutationFn: (rfqId: number) => apiFetch(`/api/quote-requests/${rfqId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quote-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
+      toast({ title: "Quote cancelled — you can resend." });
+    },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
 
   const createMutation = useMutation({
     mutationFn: () => apiFetch("/api/quote-requests", {
@@ -191,15 +202,36 @@ function CategoryRfqCard({ categoryName, items, suppliers }: {
       </div>
 
       <div className="px-4 py-3 border-t border-border bg-muted/20">
-        <Button
-          size="sm"
-          className="gap-1.5 font-bold"
-          disabled={checkedSupplierIds.size === 0 || suppliers.length === 0 || createMutation.isPending}
-          onClick={() => createMutation.mutate()}
-        >
-          {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-          Send quotes
-        </Button>
+        {pendingRfqId != null ? (
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs text-muted-foreground font-medium truncate">
+                Quote #{pendingRfqId} sent — awaiting replies
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Link href={`/sourcing/${pendingRfqId}`} className="text-xs font-bold text-primary hover:underline">View →</Link>
+              <button
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                disabled={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(pendingRfqId)}
+              >
+                {cancelMutation.isPending ? "Cancelling…" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            className="gap-1.5 font-bold"
+            disabled={checkedSupplierIds.size === 0 || suppliers.length === 0 || createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+          >
+            {createMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            Send quotes
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -245,14 +277,18 @@ function LowStockOrdering() {
 
   return (
     <div className="space-y-3">
-      {Object.entries(byCategory).map(([cat, items]) => (
-        <CategoryRfqCard
-          key={cat}
-          categoryName={cat}
-          items={items}
-          suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
-        />
-      ))}
+      {Object.entries(byCategory).map(([cat, items]) => {
+        const pendingRfqId = items[0]?.pendingRfqId ?? null;
+        return (
+          <CategoryRfqCard
+            key={cat}
+            categoryName={cat}
+            items={items}
+            suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
+            pendingRfqId={pendingRfqId}
+          />
+        );
+      })}
     </div>
   );
 }

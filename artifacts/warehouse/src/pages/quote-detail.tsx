@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Edit2, Send, Check, X, Download, Rocket, Trash2, History, Briefcase, Loader2,
+  ArrowLeft, Edit2, Send, Check, X, Download, Rocket, Trash2, History, Briefcase, Loader2, Link2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -43,6 +43,7 @@ interface QuoteFull {
   total: number | string;
   workProjectId: number | null;
   issuerId: number | null;
+  publicToken: string | null;
   createdAt: string;
   updatedAt: string;
   customer: { id: number; name: string; email: string | null; phone: string | null } | null;
@@ -279,6 +280,30 @@ export default function QuoteDetailPage() {
           <div className="bg-card border-2 border-border rounded-xl p-3">
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">{t("quoteTerms")}</p>
             <p className="text-sm whitespace-pre-line">{quote.terms}</p>
+          </div>
+        )}
+
+        {/* Customer acceptance link — Standard/Pro, status = sent */}
+        {atLeast("standard") && quote.status === "sent" && quote.publicToken && (
+          <div className="bg-card border-2 border-primary/30 rounded-xl p-3 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Link2 className="h-3.5 w-3.5" /> Customer link
+            </p>
+            <p className="text-xs text-muted-foreground">Share this link so the customer can accept or decline online.</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-muted rounded px-2 py-1.5 truncate font-mono">
+                {`${window.location.origin}/q/${quote.publicToken}`}
+              </code>
+              <Button
+                size="sm" variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/q/${quote.publicToken}`);
+                  toast({ title: "Link copied!" });
+                }}
+              >
+                Copy
+              </Button>
+            </div>
           </div>
         )}
 

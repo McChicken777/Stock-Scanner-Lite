@@ -87,6 +87,8 @@ export default function QuoteFormPage() {
 
   const [productSearch, setProductSearch] = useState("");
   const [showProductPicker, setShowProductPicker] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [showCatalogPicker, setShowCatalogPicker] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -96,6 +98,11 @@ export default function QuoteFormPage() {
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: async () => (await fetch("/api/products", { credentials: "include" })).json(),
+  });
+
+  const { data: catalogItems = [] } = useQuery<{ id: number; name: string; description: string | null; unitPrice: number | null }[]>({
+    queryKey: ["/api/catalog/items"],
+    queryFn: async () => (await fetch("/api/catalog/items", { credentials: "include" })).json(),
   });
 
   const { data: issuers = [] } = useQuery<{ id: number; name: string; email: string | null; phone: string | null }[]>({
@@ -160,6 +167,18 @@ export default function QuoteFormPage() {
     }]);
     setShowProductPicker(false);
     setProductSearch("");
+  };
+
+  const addCatalogItem = (item: { name: string; description: string | null; unitPrice: number | null }) => {
+    setItems((prev) => [...prev, {
+      productId: null,
+      name: item.name,
+      description: item.description ?? "",
+      quantity: 1,
+      unitPrice: item.unitPrice ?? 0,
+    }]);
+    setShowCatalogPicker(false);
+    setCatalogSearch("");
   };
 
   const addFreeText = () => {
@@ -418,6 +437,44 @@ export default function QuoteFormPage() {
                   >
                     <p className="text-sm font-medium truncate">{p.name}</p>
                     <span className="text-xs font-mono font-bold text-primary">{fmt(Number(p.salePrice ?? 0))}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sales catalog picker */}
+          <Button type="button" variant="outline" className="h-10 gap-1.5 w-full" onClick={() => { setShowCatalogPicker((v) => !v); setShowProductPicker(false); }}>
+            <Plus className="h-3.5 w-3.5" /> {showCatalogPicker ? "Hide Sales Catalog" : "From Sales Catalog"}
+          </Button>
+          {showCatalogPicker && (
+            <div className="rounded-lg border-2 border-amber-300/60 bg-amber-50/50 p-3 space-y-2">
+              <Input
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+                placeholder="Search catalog…"
+                className="h-9 border-2 text-sm bg-background"
+                autoFocus
+              />
+              <div className="max-h-56 overflow-y-auto space-y-1">
+                {catalogItems.filter((c) => !catalogSearch || c.name.toLowerCase().includes(catalogSearch.toLowerCase())).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">No catalog items found</p>
+                ) : catalogItems
+                    .filter((c) => !catalogSearch || c.name.toLowerCase().includes(catalogSearch.toLowerCase()))
+                    .map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => addCatalogItem(c)}
+                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border bg-background hover:border-amber-400 hover:bg-amber-50 transition-colors"
+                  >
+                    <div className="text-left min-w-0">
+                      <p className="text-sm font-medium truncate">{c.name}</p>
+                      {c.description && <p className="text-xs text-muted-foreground truncate">{c.description}</p>}
+                    </div>
+                    <span className="text-xs font-mono font-bold text-amber-700 flex-shrink-0">
+                      {c.unitPrice != null ? fmt(c.unitPrice) : "—"}
+                    </span>
                   </button>
                 ))}
               </div>

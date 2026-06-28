@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, serial, pgEnum, numeric, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, serial, pgEnum, numeric, jsonb, uuid } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 import { customersTable } from "./customers";
 import { productsTable } from "./products";
@@ -30,6 +30,7 @@ export const quotesTable = pgTable("quotes", {
   issuerId: integer("issuer_id").references(() => quoteIssuersTable.id, { onDelete: "set null" }),
   workProjectId: integer("work_project_id").references(() => workProjectsTable.id, { onDelete: "set null" }),
   companyId: integer("company_id").notNull().references(() => companiesTable.id, { onDelete: "cascade" }),
+  publicToken: uuid("public_token").defaultRandom().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

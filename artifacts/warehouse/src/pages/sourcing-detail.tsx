@@ -4,7 +4,7 @@ import { useRoute, Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Loader2, Trophy, Truck, Bell, CheckCircle2, Clock } from "lucide-react";
+import { ArrowLeft, Loader2, Trophy, Truck, Bell, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -37,7 +37,7 @@ const T = {
     confirmOrder: "Create order from", emailSent: "Order email sent to supplier.",
     emailNotSent: "Order created. Email not sent (supplier has no email or SMTP not set up).",
     viewPo: "View purchase order", copyLink: "Copy link", copied: "Copied",
-    decided: "Winner", noItems: "—", note: "Note",
+    decided: "Winner", noItems: "—", note: "Note", cancelRfq: "Cancel RFQ",
   },
   sl: {
     back: "Nabava", item: "Izdelek", qty: "Kol.", total: "Skupaj (brez DDV)", lead: "Rok dobave",
@@ -47,7 +47,7 @@ const T = {
     confirmOrder: "Ustvari naročilo pri", emailSent: "E-naročilo poslano dobavitelju.",
     emailNotSent: "Naročilo ustvarjeno. E-pošta ni poslana (dobavitelj nima e-naslova ali SMTP ni nastavljen).",
     viewPo: "Odpri naročilo", copyLink: "Kopiraj povezavo", copied: "Kopirano",
-    decided: "Zmagovalec", noItems: "—", note: "Opomba",
+    decided: "Zmagovalec", noItems: "—", note: "Opomba", cancelRfq: "Prekliči povpraševanje",
   },
 };
 
@@ -95,6 +95,16 @@ export default function SourcingDetailPage() {
       body: JSON.stringify({ origin: window.location.origin }),
     }),
     onSuccess: () => { setReminded(true); toast({ title: L.reminded }); },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () => apiFetch(`/api/quote-requests/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quote-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
+      setLocation("/sourcing");
+    },
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
@@ -252,10 +262,20 @@ export default function SourcingDetailPage() {
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.waiting} ({pending.length})</p>
             {!isOrdered && (
-              <Button variant="outline" size="sm" className="gap-1.5" disabled={remindMutation.isPending || reminded} onClick={() => remindMutation.mutate()}>
-                {remindMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
-                {reminded ? L.reminded : L.remind}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={remindMutation.isPending || reminded} onClick={() => remindMutation.mutate()}>
+                  {remindMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bell className="h-3.5 w-3.5" />}
+                  {reminded ? L.reminded : L.remind}
+                </Button>
+                <Button
+                  variant="outline" size="sm"
+                  className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                  disabled={cancelMutation.isPending}
+                  onClick={() => cancelMutation.mutate()}
+                >
+                  <XCircle className="h-3.5 w-3.5" /> {L.cancelRfq}
+                </Button>
+              </div>
             )}
           </div>
           <div className="flex flex-wrap gap-2">

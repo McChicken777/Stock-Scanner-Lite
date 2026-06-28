@@ -1025,6 +1025,11 @@ export default function PurchaseOrdersPage() {
                       {statusIcons[po.status]}
                       {po.status.replace("_", " ")}
                     </Badge>
+                    {po.expectedDate && OPEN_STATUSES.includes(po.status) && new Date(po.expectedDate) < new Date() && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-100 rounded-full px-2 py-0.5">
+                        <AlertCircle className="h-3 w-3" /> Overdue
+                      </span>
+                    )}
                     <p className="text-xs text-muted-foreground">{po.itemCount} item{po.itemCount !== 1 ? "s" : ""} · {po.totalOrdered} units</p>
                   </div>
                 </div>

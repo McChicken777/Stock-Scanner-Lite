@@ -28,6 +28,8 @@ import rawMaterialsRouter from "./raw-materials";
 import joinRouter from "./join";
 import rfqRouter from "./rfq";
 import rfqPublicRouter from "./rfq-public";
+import catalogRouter from "./catalog";
+import quotePublicRouter from "./quote-public";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -61,5 +63,7 @@ router.use("/raw-materials", requireAuth, rawMaterialsRouter);
 router.use("/join", joinRouter); // public — no requireAuth
 router.use("/quote-requests", requireAuth, rfqRouter);
 router.use("/rfq", rfqPublicRouter); // public — no requireAuth (supplier self-service quotes)
+router.use("/catalog", requireAuth, catalogRouter);
+router.use("/quote-public", quotePublicRouter); // public — no requireAuth (customer quote acceptance)
 
 export default router;

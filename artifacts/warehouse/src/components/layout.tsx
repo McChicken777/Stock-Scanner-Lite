@@ -7,7 +7,7 @@ import {
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
-  PanelLeft, PanelLeftClose, Scale,
+  PanelLeft, PanelLeftClose, Scale, BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
@@ -41,6 +41,7 @@ function useSidebar() { return useContext(SidebarCtx); }
 
 function SidebarBrand() {
   const { collapsed } = useSidebar();
+  const { plan } = usePlan();
   return (
     <div className={cn(
       "flex items-center h-14 border-b border-border flex-shrink-0",
@@ -49,7 +50,12 @@ function SidebarBrand() {
       <div className="h-7 w-7 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
         <FabriflowMark className="h-4 w-4 text-primary-foreground" />
       </div>
-      {!collapsed && <span className="font-bold text-base">Fabriflow</span>}
+      {!collapsed && (
+        <div className="flex flex-col leading-none">
+          <span className="font-bold text-base">Fabriflow</span>
+          <span className="text-[10px] font-medium text-muted-foreground capitalize">{plan}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -309,6 +315,7 @@ function AdminDesktopSidebar() {
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/admin/catalog" icon={BookOpen} label={t("navCatalog")} active={location.startsWith("/admin/catalog")} />
             <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
@@ -360,6 +367,7 @@ function AdminDesktopSidebar() {
 
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
+            <SideNavItem href="/admin/catalog" icon={BookOpen} label={t("navCatalog")} active={location.startsWith("/admin/catalog")} />
             <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />

@@ -71,6 +71,8 @@ import StockImportPage from "@/pages/stock-import";
 import SourcingPage from "@/pages/sourcing";
 import SourcingDetailPage from "@/pages/sourcing-detail";
 import RfqQuotePage from "@/pages/rfq-quote";
+import AdminCatalogPage from "@/pages/admin-catalog";
+import QuotePublicPage from "@/pages/quote-public";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -238,6 +240,9 @@ function ProtectedRoutes() {
         <Route path="/admin/ai-wizard" component={AdminAiWizardPage} />
         <Route path="/admin/stock-import" component={StockImportPage} />
 
+        {/* Admin catalog */}
+        <Route path="/admin/catalog" component={AdminCatalogPage} />
+
         {/* Customers & Quotes */}
         <Route path="/customers" component={CustomersPage} />
         <Route path="/customers/:id" component={CustomerDetailPage} />
@@ -318,6 +323,7 @@ function App() {
                 <Route path="/kiosk" component={KioskPage} />
                 <Route path="/join/:token" component={JoinPage} />
                 <Route path="/rfq/:token" component={RfqQuotePage} />
+                <Route path="/q/:token" component={QuotePublicPage} />
                 <Route component={ProtectedRoutes} />
               </Switch>
             </WouterRouter>
