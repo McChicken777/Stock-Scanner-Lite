@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, ExternalLink, Zap, TrendingDown, CheckCircle2, AlertTriangle, Truck } from "lucide-react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, TrendingDown, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -31,13 +31,6 @@ interface Supplier { id: number; name: string; email: string | null; categories?
 
 interface PriceHint { supplierId: number; supplierName: string | null; unitPrice: number; date: string }
 interface PriceHistoryResp { latestPerSupplier: PriceHint[]; history: PriceHint[] }
-interface PredictSupplier {
-  supplierId: number; supplierName: string | null;
-  covered: number; totalItems: number; missing: number[];
-  estimatedTotal: number; complete: boolean; oldestPriceDate: string | null;
-  latestLeadDays: number | null;
-}
-interface PredictResp { totalItems: number; suppliers: PredictSupplier[] }
 
 const T = {
   en: {
@@ -53,14 +46,6 @@ const T = {
     pickItem: "Add at least one item.", pickSupplier: "Select at least one supplier.",
     sent: "Request sent", delete: "Delete",
     pastPrices: "Past prices:",
-    predTitle: "Predicted cheapest supplier", predSubtitle: "From your past quotes for the items you're low on.",
-    predNone: "Not enough price history yet — send a request to start learning supplier prices.",
-    predPriced: "priced", predEst: "Est. total", predBest: "Best match",
-    predOldest: "oldest price", predNoPrice: "items without a known price",
-    orderNow: "Order now", confirmOrder: "Confirm order?", yesOrder: "Yes, order", cancel: "Cancel",
-    ordering: "Ordering…", orderPlaced: "Order placed", viewPo: "View purchase order",
-    sendToConfirm: "Send request to confirm",
-    needQuote: "Need every price to order instantly", getQuote: "Get a quote",
   },
   sl: {
     title: "Nabava", subtitle: "Vprašajte dobavitelje za cene, primerjajte in naročite najboljše.",
@@ -75,14 +60,6 @@ const T = {
     pickItem: "Dodajte vsaj en izdelek.", pickSupplier: "Izberite vsaj enega dobavitelja.",
     sent: "Povpraševanje poslano", delete: "Izbriši",
     pastPrices: "Pretekle cene:",
-    predTitle: "Predvideni najcenejši dobavitelj", predSubtitle: "Iz preteklih ponudb za izdelke z nizko zalogo.",
-    predNone: "Premalo zgodovine cen — pošljite povpraševanje, da začnete spremljati cene dobaviteljev.",
-    predPriced: "s ceno", predEst: "Ocenjeni znesek", predBest: "Najboljša izbira",
-    predOldest: "najstarejša cena", predNoPrice: "izdelkov brez znane cene",
-    orderNow: "Naroči zdaj", confirmOrder: "Potrdi naročilo?", yesOrder: "Da, naroči", cancel: "Prekliči",
-    ordering: "Naročanje…", orderPlaced: "Naročilo oddano", viewPo: "Ogled naročilnice",
-    sendToConfirm: "Pošlji povpraševanje za potrditev",
-    needQuote: "Za takojšnje naročilo so potrebne vse cene", getQuote: "Pridobi ponudbo",
   },
 };
 
@@ -456,137 +433,6 @@ function NewRequestDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Predicted cheapest supplier card ─────────────────────────────────────────
-
-function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => void }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [confirmId, setConfirmId] = useState<number | null>(null);
-  const [placedPoId, setPlacedPoId] = useState<number | null>(null);
-
-  const { data: reorder = [] } = useQuery<ReorderItem[]>({
-    queryKey: ["/api/work/reorder-from-flags"],
-    queryFn: () => apiFetch("/api/work/reorder-from-flags"),
-  });
-
-  const basket = reorder.map((r) => ({
-    productId: r.id,
-    quantity: Math.max(1, r.quantityNeeded || r.shortfall || 1),
-    flagId: r.flagIds?.[0] ?? null,
-  }));
-  const productKey = basket.map((b) => `${b.productId}x${b.quantity}`).join(",");
-
-  const { data: pred, isLoading } = useQuery<PredictResp>({
-    queryKey: ["/api/quote-requests/predict", productKey],
-    queryFn: () => apiFetch("/api/quote-requests/predict", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: basket.map((b) => ({ productId: b.productId, quantity: b.quantity })) }),
-    }),
-    enabled: basket.length > 0,
-  });
-
-  const orderMutation = useMutation({
-    mutationFn: (supplierId: number) => apiFetch("/api/quote-requests/order-now", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ supplierId, items: basket }),
-    }),
-    onSuccess: (res: { poId: number }) => {
-      setPlacedPoId(res.poId);
-      setConfirmId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/quote-requests"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work/reorder-from-flags"] });
-      toast({ title: L.orderPlaced });
-    },
-    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
-  });
-
-  if (basket.length === 0) return null;
-
-  const ranked = (pred?.suppliers ?? []).filter((s) => s.covered > 0);
-  const fastestLeadId = ranked.reduce<number | null>((best, s) => {
-    if (s.latestLeadDays == null) return best;
-    const bestDays = ranked.find((r) => r.supplierId === best)?.latestLeadDays ?? Infinity;
-    return best == null || s.latestLeadDays < bestDays ? s.supplierId : best;
-  }, null);
-
-  return (
-    <div className="border-2 border-primary/30 rounded-xl bg-primary/5 p-4 space-y-3">
-      <div className="flex items-start gap-2">
-        <Sparkles className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <h2 className="font-bold leading-tight">{L.predTitle}</h2>
-          <p className="text-xs text-muted-foreground">{L.predSubtitle}</p>
-        </div>
-      </div>
-
-      {placedPoId != null ? (
-        <div className="flex items-center justify-between gap-2 rounded-lg border-2 border-green-200 bg-green-50 px-3 py-2">
-          <span className="text-sm font-semibold text-green-700">{L.orderPlaced}</span>
-          <Link href={`/work/purchase-orders/${placedPoId}`} className="text-sm font-semibold text-green-700 inline-flex items-center gap-1 hover:underline">
-            {L.viewPo} <ExternalLink className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      ) : isLoading ? (
-        <Skeleton className="h-24 w-full rounded-lg" />
-      ) : ranked.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{L.predNone}</p>
-      ) : (
-        <div className="space-y-2">
-          {ranked.slice(0, 3).map((s, idx) => {
-            const best = idx === 0;
-            return (
-              <div key={s.supplierId} className={`rounded-lg border-2 p-3 ${best ? "border-primary bg-card" : "border-border bg-card/60"}`}>
-                <div className="flex items-center gap-2">
-                  {best && <Crown className="h-4 w-4 text-amber-500 flex-shrink-0" />}
-                  <span className="font-semibold flex-1 min-w-0 truncate">{s.supplierName ?? `#${s.supplierId}`}</span>
-                  <span className="text-lg font-bold tabular-nums">{s.estimatedTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-                  <span className="text-[11px] text-muted-foreground">{s.complete ? "All items quoted" : `${s.covered}/${s.totalItems} items quoted`}</span>
-                  {s.latestLeadDays != null && (
-                    <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
-                      <Truck className="h-3 w-3" /> {s.latestLeadDays}d delivery
-                    </span>
-                  )}
-                  {best && (
-                    <span className="inline-flex items-center gap-1 bg-green-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
-                      <Crown className="h-3 w-3" /> {L.predBest}
-                    </span>
-                  )}
-                  {s.supplierId === fastestLeadId && s.latestLeadDays != null && (
-                    <span className="inline-flex items-center gap-1 bg-blue-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
-                      <Truck className="h-3 w-3" /> Fastest
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  {!s.complete ? (
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={onSendRfq}>
-                      <FileText className="h-3.5 w-3.5" /> {L.getQuote}
-                    </Button>
-                  ) : confirmId === s.supplierId ? (
-                    <>
-                      <span className="text-xs font-semibold flex-1">{L.confirmOrder}</span>
-                      <Button size="sm" variant="outline" onClick={() => setConfirmId(null)} disabled={orderMutation.isPending}>{L.cancel}</Button>
-                      <Button size="sm" onClick={() => orderMutation.mutate(s.supplierId)} disabled={orderMutation.isPending}>
-                        {orderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : L.yesOrder}
-                      </Button>
-                    </>
-                  ) : (
-                    <Button size="sm" className="gap-1.5" variant={best ? "default" : "outline"} onClick={() => setConfirmId(s.supplierId)}>
-                      <Zap className="h-3.5 w-3.5" /> {L.orderNow}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SourcingPage() {
@@ -624,8 +470,6 @@ export default function SourcingPage() {
           <Plus className="h-4 w-4" /> {L.newReq}
         </Button>
       </div>
-
-      <PredictedCard L={L} onSendRfq={() => setShowNew(true)} />
 
       <LowStockOrdering />
 

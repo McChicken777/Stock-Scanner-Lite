@@ -23,7 +23,7 @@ router.get("/:token", async (req, res) => {
       .where(eq(quoteRequestsTable.id, rfqSupplier.rfqId));
     if (!rfq) { res.status(404).json({ valid: false, reason: "not_found" }); return; }
 
-    const [company] = await db.select({ name: companiesTable.name })
+    const [company] = await db.select({ name: companiesTable.name, currency: companiesTable.currency })
       .from(companiesTable).where(eq(companiesTable.id, rfqSupplier.companyId));
     const [supplier] = await db.select({ name: suppliersTable.name, language: suppliersTable.language })
       .from(suppliersTable).where(eq(suppliersTable.id, rfqSupplier.supplierId));
@@ -57,6 +57,7 @@ router.get("/:token", async (req, res) => {
       companyName: company?.name ?? null,
       supplierName: supplier?.name ?? null,
       language: supplier?.language === "sl" ? "sl" : "en",
+      currency: company?.currency ?? "EUR",
       status: rfqSupplier.status,
       leadTimeDays: rfqSupplier.leadTimeDays,
       note: rfqSupplier.note,

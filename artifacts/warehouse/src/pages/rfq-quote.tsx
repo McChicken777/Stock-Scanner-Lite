@@ -15,6 +15,7 @@ const STR = {
     intro: (c: string) => `${c} would like your best price and delivery time for the items below.`,
     yourSku: "Your SKU (optional)",
     unitPrice: "Unit price",
+    exclTax: "excl. tax",
     qty: "Qty",
     leadTime: "Delivery time (days)",
     leadTimePlaceholder: "e.g. 5",
@@ -34,6 +35,7 @@ const STR = {
     intro: (c: string) => `${c} prosi za vašo najboljšo ceno in rok dobave za spodnje izdelke.`,
     yourSku: "Šifra izdelka",
     unitPrice: "Cena na enoto",
+    exclTax: "brez DDV",
     qty: "Količina",
     leadTime: "Rok dobave (dni)",
     leadTimePlaceholder: "npr. 5",
@@ -62,6 +64,7 @@ interface RfqData {
   companyName: string | null;
   supplierName: string | null;
   language: Lang;
+  currency: string;
   status: string;
   leadTimeDays: number | null;
   note: string | null;
@@ -185,7 +188,7 @@ export default function RfqQuotePage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.unitPrice)}</Label>
+                  <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.unitPrice)} ({data.currency}, {tr(L.exclTax)})</Label>
                   <Input
                     type="number" step="0.01" min="0" inputMode="decimal"
                     value={prices[item.rfqItemId] ?? ""}

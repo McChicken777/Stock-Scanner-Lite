@@ -30,24 +30,24 @@ interface RfqDetail {
 
 const T = {
   en: {
-    back: "Sourcing", item: "Item", qty: "Qty", total: "Total", lead: "Lead time",
+    back: "Sourcing", item: "Item", qty: "Qty", total: "Total (excl. tax)", lead: "Lead time",
     days: "days", cheapest: "Cheapest", fastest: "Fastest", waiting: "Waiting for response",
     order: "Order from this supplier", ordered: "Ordered ✓", orderedFrom: "Order placed",
     remind: "Remind pending suppliers", reminded: "Reminders sent", noResp: "No response yet",
     confirmOrder: "Create order from", emailSent: "Order email sent to supplier.",
     emailNotSent: "Order created. Email not sent (supplier has no email or SMTP not set up).",
     viewPo: "View purchase order", copyLink: "Copy link", copied: "Copied",
-    decided: "Winner", noItems: "—",
+    decided: "Winner", noItems: "—", note: "Note",
   },
   sl: {
-    back: "Nabava", item: "Izdelek", qty: "Kol.", total: "Skupaj", lead: "Rok dobave",
+    back: "Nabava", item: "Izdelek", qty: "Kol.", total: "Skupaj (brez DDV)", lead: "Rok dobave",
     days: "dni", cheapest: "Najceneje", fastest: "Najhitreje", waiting: "Čaka odgovor",
     order: "Naroči pri tem dobavitelju", ordered: "Naročeno ✓", orderedFrom: "Naročilo oddano",
     remind: "Opomni čakajoče dobavitelje", reminded: "Opomniki poslani", noResp: "Še ni odgovora",
     confirmOrder: "Ustvari naročilo pri", emailSent: "E-naročilo poslano dobavitelju.",
     emailNotSent: "Naročilo ustvarjeno. E-pošta ni poslana (dobavitelj nima e-naslova ali SMTP ni nastavljen).",
     viewPo: "Odpri naročilo", copyLink: "Kopiraj povezavo", copied: "Kopirano",
-    decided: "Zmagovalec", noItems: "—",
+    decided: "Zmagovalec", noItems: "—", note: "Opomba",
   },
 };
 
@@ -66,6 +66,14 @@ export default function SourcingDetailPage() {
     queryFn: () => apiFetch(`/api/quote-requests/${id}`),
     refetchInterval: 30000,
   });
+
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => apiFetch("/api/company"),
+  });
+  const currency = company?.currency ?? "EUR";
+  const fmt = (n: number) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2 }).format(n);
 
   const decideMutation = useMutation({
     mutationFn: (supplierId: number) => apiFetch(`/api/quote-requests/${id}/decide`, {
@@ -162,7 +170,7 @@ export default function SourcingDetailPage() {
                     const line = s.lines.find((l) => l.rfqItemId === item.id);
                     return (
                       <td key={s.id} className="p-2 text-center">
-                        {line?.unitPrice != null ? `${line.unitPrice.toFixed(2)}` : <span className="text-muted-foreground">{L.noItems}</span>}
+                        {line?.unitPrice != null ? fmt(line.unitPrice) : <span className="text-muted-foreground">{L.noItems}</span>}
                       </td>
                     );
                   })}
@@ -173,7 +181,7 @@ export default function SourcingDetailPage() {
                 <td className="p-2"></td>
                 {submitted.map((s) => (
                   <td key={s.id} className={`p-2 text-center ${s.id === cheapestId ? "text-green-700" : ""}`}>
-                    {(totals.get(s.id) ?? 0).toFixed(2)}
+                    {fmt(totals.get(s.id) ?? 0)}
                   </td>
                 ))}
               </tr>
@@ -186,6 +194,17 @@ export default function SourcingDetailPage() {
                   </td>
                 ))}
               </tr>
+              {submitted.some((s) => s.note) && (
+                <tr className="border-t border-border text-xs">
+                  <td className="p-2 text-muted-foreground sticky left-0 bg-card">{L.note}</td>
+                  <td className="p-2"></td>
+                  {submitted.map((s) => (
+                    <td key={s.id} className="p-2 text-center text-muted-foreground italic">
+                      {s.note ?? "—"}
+                    </td>
+                  ))}
+                </tr>
+              )}
               {!isOrdered && (
                 <tr className="border-t border-border">
                   <td className="p-2 sticky left-0 bg-card"></td>
