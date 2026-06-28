@@ -165,6 +165,13 @@ export default function AdminCatalogPage() {
     queryFn: () => apiFetch("/api/catalog/items"),
   });
 
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: () => fetch("/api/company", { credentials: "include" }).then((r) => r.json()),
+    staleTime: 60_000,
+  });
+  const currency = company?.currency ?? "EUR";
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null | "all">("all");
   const [addingCategory, setAddingCategory] = useState(false);
   const [addingSubOf, setAddingSubOf] = useState<number | null>(null);
@@ -226,7 +233,9 @@ export default function AdminCatalogPage() {
     : allItems.filter((i) => i.categoryId === selectedCategoryId);
 
   const fmt = (price: number | null) =>
-    price != null ? new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price) : "—";
+    price != null
+      ? new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price)
+      : "—";
 
   return (
     <div className="flex flex-col gap-4 p-4 max-w-5xl mx-auto">

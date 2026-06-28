@@ -20,10 +20,10 @@ interface Customer {
   address: string | null;
 }
 
-interface Product {
+interface CatalogCategory {
   id: number;
   name: string;
-  salePrice: number | string;
+  parentId: number | null;
 }
 
 interface LineItem {
@@ -85,8 +85,6 @@ export default function QuoteFormPage() {
   const [issuerId, setIssuerId] = useState<number | null>(null);
   const [items, setItems] = useState<LineItem[]>([]);
 
-  const [productSearch, setProductSearch] = useState("");
-  const [showProductPicker, setShowProductPicker] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [showCatalogPicker, setShowCatalogPicker] = useState(false);
 
@@ -95,14 +93,14 @@ export default function QuoteFormPage() {
     queryFn: async () => (await fetch("/api/customers", { credentials: "include" })).json(),
   });
 
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: async () => (await fetch("/api/products", { credentials: "include" })).json(),
-  });
-
-  const { data: catalogItems = [] } = useQuery<{ id: number; name: string; description: string | null; unitPrice: number | null }[]>({
+  const { data: catalogItems = [] } = useQuery<{ id: number; name: string; description: string | null; unitPrice: number | null; categoryId: number | null }[]>({
     queryKey: ["/api/catalog/items"],
     queryFn: async () => (await fetch("/api/catalog/items", { credentials: "include" })).json(),
+  });
+
+  const { data: catalogCategories = [] } = useQuery<CatalogCategory[]>({
+    queryKey: ["/api/catalog/categories"],
+    queryFn: async () => (await fetch("/api/catalog/categories", { credentials: "include" })).json(),
   });
 
   const { data: issuers = [] } = useQuery<{ id: number; name: string; email: string | null; phone: string | null }[]>({
@@ -157,16 +155,15 @@ export default function QuoteFormPage() {
   const taxAmount = +(afterDiscount * (Number(taxRate || 0) / 100)).toFixed(2);
   const total = +(afterDiscount + taxAmount).toFixed(2);
 
-  const addProduct = (p: Product) => {
-    setItems((prev) => [...prev, {
-      productId: p.id,
-      name: p.name,
-      description: "",
-      quantity: 1,
-      unitPrice: Number(p.salePrice ?? 0),
-    }]);
-    setShowProductPicker(false);
-    setProductSearch("");
+  const categoryPath = (categoryId: number | null): string => {
+    if (categoryId == null) return "";
+    const cat = catalogCategories.find((c) => c.id === categoryId);
+    if (!cat) return "";
+    if (cat.parentId != null) {
+      const parent = catalogCategories.find((c) => c.id === cat.parentId);
+      return parent ? `${parent.name} › ${cat.name}` : cat.name;
+    }
+    return cat.name;
   };
 
   const addCatalogItem = (item: { name: string; description: string | null; unitPrice: number | null }) => {
@@ -249,10 +246,8 @@ export default function QuoteFormPage() {
         ? 'No customers yet — switch to "Enter Manually" above to type a name.'
         : "Select a customer (or switch to Enter Manually)."
       : !hasItems
-        ? 'Add at least one line item using "From Catalog" or "Free Text" above.'
+        ? 'Add at least one line item using "From Sales Catalog" or "Free Text" above.'
         : null;
-
-  const filteredProducts = products.filter((p) => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()));
 
   return (
     <div className="flex flex-col min-h-full">
@@ -409,44 +404,14 @@ export default function QuoteFormPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="h-10 gap-1.5" onClick={() => setShowProductPicker((v) => !v)}>
-              <Plus className="h-3.5 w-3.5" /> {showProductPicker ? t("quoteFormHideProducts") : t("quoteFormFromCatalog")}
+            <Button type="button" variant="outline" className="h-10 gap-1.5" onClick={() => setShowCatalogPicker((v) => !v)}>
+              <Plus className="h-3.5 w-3.5" /> {showCatalogPicker ? "Hide Catalog" : "From Sales Catalog"}
             </Button>
             <Button type="button" variant="outline" className="h-10 gap-1.5" onClick={addFreeText}>
               <FileText className="h-3.5 w-3.5" /> {t("quoteFormFreeText")}
             </Button>
           </div>
 
-          {showProductPicker && (
-            <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
-              <Input
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder={t("quoteFormSearchProducts")}
-                className="h-9 border-2 text-sm bg-background"
-              />
-              <div className="max-h-56 overflow-y-auto space-y-1">
-                {filteredProducts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic text-center py-2">{t("quoteFormNoProducts")}</p>
-                ) : filteredProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => addProduct(p)}
-                    className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded border bg-background hover:border-primary hover:bg-primary/10 transition-colors"
-                  >
-                    <p className="text-sm font-medium truncate">{p.name}</p>
-                    <span className="text-xs font-mono font-bold text-primary">{fmt(Number(p.salePrice ?? 0))}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Sales catalog picker */}
-          <Button type="button" variant="outline" className="h-10 gap-1.5 w-full" onClick={() => { setShowCatalogPicker((v) => !v); setShowProductPicker(false); }}>
-            <Plus className="h-3.5 w-3.5" /> {showCatalogPicker ? "Hide Sales Catalog" : "From Sales Catalog"}
-          </Button>
           {showCatalogPicker && (
             <div className="rounded-lg border-2 border-amber-300/60 bg-amber-50/50 p-3 space-y-2">
               <Input
@@ -470,7 +435,9 @@ export default function QuoteFormPage() {
                   >
                     <div className="text-left min-w-0">
                       <p className="text-sm font-medium truncate">{c.name}</p>
-                      {c.description && <p className="text-xs text-muted-foreground truncate">{c.description}</p>}
+                      {categoryPath(c.categoryId) && (
+                        <p className="text-[11px] text-muted-foreground truncate">{categoryPath(c.categoryId)}</p>
+                      )}
                     </div>
                     <span className="text-xs font-mono font-bold text-amber-700 flex-shrink-0">
                       {c.unitPrice != null ? fmt(c.unitPrice) : "—"}
