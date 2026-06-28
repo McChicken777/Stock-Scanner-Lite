@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable, restockRequestsTable } from "@workspace/db";
-import { eq, and, sql, isNull, ne } from "drizzle-orm";
+import { db, leaveRequestsTable, productsTable, stockTable, attendanceLogsTable, workProjectsTable, restockRequestsTable, quoteRequestsTable, quoteRequestSuppliersTable } from "@workspace/db";
+import { eq, and, sql, isNull, ne, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -54,7 +54,19 @@ router.get("/attention", requireAuth, async (req, res) => {
       ));
     const restockRequests = pendingRestock.length;
 
-    res.json({ total: leaveRequests + lowStock + overdueJobs + restockRequests, leaveRequests, lowStock, overdueJobs, restockRequests });
+    // Count open RFQs with at least one supplier response (need a decision)
+    const rfqsWithResponses = await db
+      .selectDistinct({ rfqId: quoteRequestSuppliersTable.rfqId })
+      .from(quoteRequestSuppliersTable)
+      .innerJoin(quoteRequestsTable, eq(quoteRequestSuppliersTable.rfqId, quoteRequestsTable.id))
+      .where(and(
+        eq(quoteRequestsTable.companyId, companyId),
+        eq(quoteRequestsTable.status, "open"),
+        eq(quoteRequestSuppliersTable.status, "submitted"),
+      ));
+    const openRfqsWithResponses = rfqsWithResponses.length;
+
+    res.json({ total: leaveRequests + lowStock + overdueJobs + restockRequests + openRfqsWithResponses, leaveRequests, lowStock, overdueJobs, restockRequests, openRfqsWithResponses });
   } catch (err: any) {
     console.error("attention endpoint error:", err?.message ?? err);
     res.status(500).json({ error: "Failed to get attention counts" });

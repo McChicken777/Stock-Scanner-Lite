@@ -13,7 +13,7 @@ const STR = {
     closed: "This request has been closed. Thank you.",
     title: "Request for quote",
     intro: (c: string) => `${c} would like your best price and delivery time for the items below.`,
-    yourSku: "Your reference (optional)",
+    yourSku: "Your SKU (optional)",
     unitPrice: "Unit price",
     qty: "Qty",
     leadTime: "Delivery time (days)",
@@ -32,7 +32,7 @@ const STR = {
     closed: "To povpraševanje je zaprto. Hvala.",
     title: "Povpraševanje po ponudbi",
     intro: (c: string) => `${c} prosi za vašo najboljšo ceno in rok dobave za spodnje izdelke.`,
-    yourSku: "Vaša referenca (neobvezno)",
+    yourSku: "Šifra izdelka",
     unitPrice: "Cena na enoto",
     qty: "Količina",
     leadTime: "Rok dobave (dni)",
@@ -44,7 +44,7 @@ const STR = {
     submitted: "Ponudba oddana — hvala!",
     submittedSub: "To stran lahko zaprete. Oglasili se bomo, če naročimo.",
     resubmit: "Ponudbo ste že oddali. Spodaj jo lahko posodobite.",
-    skuPlaceholder: "Vaša šifra",
+    skuPlaceholder: "Šifra",
   },
 } satisfies Record<Lang, Record<string, string | ((c: string) => string)>>;
 
@@ -179,18 +179,11 @@ export default function RfqQuotePage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {data?.items.map((item) => (
             <div key={item.rfqItemId} className="rounded-xl border-2 border-border p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center justify-between gap-2">
                 <p className="font-bold text-sm">{item.productName}</p>
-                <div className="flex items-center gap-2">
-                  {item.supplierSku && (
-                    <span className="text-[11px] font-mono font-semibold bg-muted px-2 py-0.5 rounded border text-muted-foreground">
-                      SKU: {item.supplierSku}
-                    </span>
-                  )}
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{tr(L.qty)}: <strong>{item.quantity}</strong></span>
-                </div>
+                <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{tr(L.qty)}: <strong>{item.quantity}</strong></span>
               </div>
-              <div className={item.supplierSku ? "w-full" : "grid grid-cols-2 gap-2"}>
+              <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.unitPrice)}</Label>
                   <Input
@@ -202,9 +195,13 @@ export default function RfqQuotePage() {
                     disabled={data?.closed}
                   />
                 </div>
-                {!item.supplierSku && (
-                  <div className="space-y-1">
-                    <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.yourSku)}</Label>
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.yourSku)}</Label>
+                  {item.supplierSku ? (
+                    <div className="h-10 flex items-center px-3 border-2 rounded-lg bg-muted/40">
+                      <span className="text-sm font-mono font-semibold text-muted-foreground truncate">{item.supplierSku}</span>
+                    </div>
+                  ) : (
                     <Input
                       value={skus[item.rfqItemId] ?? ""}
                       onChange={(e) => setSkus((s) => ({ ...s, [item.rfqItemId]: e.target.value }))}
@@ -212,8 +209,8 @@ export default function RfqQuotePage() {
                       className="h-10 border-2"
                       disabled={data?.closed}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           ))}

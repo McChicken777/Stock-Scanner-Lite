@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, Clock, ExternalLink, Zap, TrendingDown, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plus, FileText, Loader2, ChevronRight, Trash2, Check, Sparkles, Crown, ExternalLink, Zap, TrendingDown, CheckCircle2, AlertTriangle, Truck } from "lucide-react";
 import { useState } from "react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -35,6 +35,7 @@ interface PredictSupplier {
   supplierId: number; supplierName: string | null;
   covered: number; totalItems: number; missing: number[];
   estimatedTotal: number; complete: boolean; oldestPriceDate: string | null;
+  latestLeadDays: number | null;
 }
 interface PredictResp { totalItems: number; suppliers: PredictSupplier[] }
 
@@ -102,18 +103,34 @@ interface ReorderQueueItem {
   supplierName: string | null;
   supplierEmail: string | null;
   supplierLanguage: string;
+  pendingRfqId: number | null;
   pendingPo: { poId: number; quantity: number; status: string } | null;
 }
 
 // ─── Per-category RFQ card ────────────────────────────────────────────────────
 
-function CategoryRfqCard({ categoryName, items, suppliers }: {
+function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
   categoryName: string;
   items: ReorderQueueItem[];
   suppliers: Supplier[];
+  pendingRfqId: number | null;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  if (pendingRfqId != null) {
+    return (
+      <div className="border-2 border-blue-200 rounded-xl bg-blue-50 px-4 py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-blue-600" />
+          <span className="text-sm font-semibold text-blue-700">{categoryName} — quote in progress</span>
+        </div>
+        <Link href={`/sourcing/${pendingRfqId}`} className="text-xs font-bold text-blue-600 hover:underline">
+          View RFQ #{pendingRfqId} →
+        </Link>
+      </div>
+    );
+  }
 
   const [checkedSupplierIds, setCheckedSupplierIds] = useState<Set<number>>(
     () => new Set(suppliers.map((s) => s.id))
@@ -266,14 +283,18 @@ function LowStockOrdering() {
 
   return (
     <div className="space-y-3">
-      {Object.entries(byCategory).map(([cat, items]) => (
-        <CategoryRfqCard
-          key={cat}
-          categoryName={cat}
-          items={items}
-          suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
-        />
-      ))}
+      {Object.entries(byCategory).map(([cat, items]) => {
+        const pendingRfqId = items.find((i) => i.pendingRfqId != null)?.pendingRfqId ?? null;
+        return (
+          <CategoryRfqCard
+            key={cat}
+            categoryName={cat}
+            items={items}
+            suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
+            pendingRfqId={pendingRfqId}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -482,6 +503,11 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
   if (basket.length === 0) return null;
 
   const ranked = (pred?.suppliers ?? []).filter((s) => s.covered > 0);
+  const fastestLeadId = ranked.reduce<number | null>((best, s) => {
+    if (s.latestLeadDays == null) return best;
+    const bestDays = ranked.find((r) => r.supplierId === best)?.latestLeadDays ?? Infinity;
+    return best == null || s.latestLeadDays < bestDays ? s.supplierId : best;
+  }, null);
 
   return (
     <div className="border-2 border-primary/30 rounded-xl bg-primary/5 p-4 space-y-3">
@@ -508,7 +534,6 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
         <div className="space-y-2">
           {ranked.slice(0, 3).map((s, idx) => {
             const best = idx === 0;
-            const oldest = s.oldestPriceDate ? new Date(s.oldestPriceDate).toLocaleDateString() : null;
             return (
               <div key={s.supplierId} className={`rounded-lg border-2 p-3 ${best ? "border-primary bg-card" : "border-border bg-card/60"}`}>
                 <div className="flex items-center gap-2">
@@ -516,20 +541,29 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
                   <span className="font-semibold flex-1 min-w-0 truncate">{s.supplierName ?? `#${s.supplierId}`}</span>
                   <span className="text-lg font-bold tabular-nums">{s.estimatedTotal.toFixed(2)}</span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-muted-foreground">
-                  <span>{s.covered}/{s.totalItems} {L.predPriced}</span>
-                  {!s.complete && <span className="text-amber-600">{s.missing.length} {L.predNoPrice}</span>}
-                  {oldest && <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {L.predOldest} {oldest}</span>}
-                  {best && <span className="text-primary font-semibold">{L.predBest}</span>}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                  <span className="text-[11px] text-muted-foreground">{s.complete ? "All items quoted" : `${s.covered}/${s.totalItems} items quoted`}</span>
+                  {s.latestLeadDays != null && (
+                    <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                      <Truck className="h-3 w-3" /> {s.latestLeadDays}d delivery
+                    </span>
+                  )}
+                  {best && (
+                    <span className="inline-flex items-center gap-1 bg-green-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
+                      <Crown className="h-3 w-3" /> {L.predBest}
+                    </span>
+                  )}
+                  {s.supplierId === fastestLeadId && s.latestLeadDays != null && (
+                    <span className="inline-flex items-center gap-1 bg-blue-500 text-white rounded-full px-2 py-0.5 text-[10px] font-bold">
+                      <Truck className="h-3 w-3" /> Fastest
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   {!s.complete ? (
-                    <>
-                      <span className="text-[11px] text-amber-600 flex-1 min-w-0">{L.needQuote}</span>
-                      <Button size="sm" variant="outline" className="gap-1.5" onClick={onSendRfq}>
-                        <FileText className="h-3.5 w-3.5" /> {L.getQuote}
-                      </Button>
-                    </>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={onSendRfq}>
+                      <FileText className="h-3.5 w-3.5" /> {L.getQuote}
+                    </Button>
                   ) : confirmId === s.supplierId ? (
                     <>
                       <span className="text-xs font-semibold flex-1">{L.confirmOrder}</span>
@@ -547,9 +581,6 @@ function PredictedCard({ L, onSendRfq }: { L: typeof T["en"]; onSendRfq: () => v
               </div>
             );
           })}
-          <button onClick={onSendRfq} className="text-xs font-semibold text-primary hover:underline">
-            {L.sendToConfirm} →
-          </button>
         </div>
       )}
     </div>
@@ -614,6 +645,9 @@ export default function SourcingPage() {
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold rounded-full px-2 py-0.5 border ${statusClass(r.status)}`}>{statusLabel(r.status)}</span>
                     <span className="text-sm font-semibold">#{r.id}</span>
+                    {r.status === "open" && r.respondedCount > 0 && (
+                      <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" title="Supplier responded — decide now" />
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {r.itemCount} {L.items} · {r.respondedCount} {L.of} {r.invitedCount} {L.responded}

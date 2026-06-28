@@ -4,7 +4,7 @@ import {
   quoteRequestSupplierLinesTable, suppliersTable, companiesTable, productsTable,
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable,
 } from "@workspace/db";
-import { eq, and, inArray, desc, sql } from "drizzle-orm";
+import { eq, and, inArray, desc, sql, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { requireAdmin } from "../middlewares/auth";
@@ -199,22 +199,42 @@ router.post("/predict", requireAdmin, async (req, res) => {
     const productIds = parsed.data.items.map((i) => i.productId);
     const qtyByProduct = new Map(parsed.data.items.map((i) => [i.productId, i.quantity]));
 
-    const rows = await db.select({
-      productId: quoteRequestItemsTable.productId,
-      supplierId: quoteRequestSuppliersTable.supplierId,
-      supplierName: suppliersTable.name,
-      unitPrice: quoteRequestSupplierLinesTable.unitPrice,
-      date: quoteRequestSupplierLinesTable.createdAt,
-    })
-      .from(quoteRequestSupplierLinesTable)
-      .innerJoin(quoteRequestItemsTable, eq(quoteRequestSupplierLinesTable.rfqItemId, quoteRequestItemsTable.id))
-      .innerJoin(quoteRequestSuppliersTable, eq(quoteRequestSupplierLinesTable.rfqSupplierId, quoteRequestSuppliersTable.id))
-      .leftJoin(suppliersTable, eq(quoteRequestSuppliersTable.supplierId, suppliersTable.id))
-      .where(and(
-        eq(quoteRequestSupplierLinesTable.companyId, companyId),
-        inArray(quoteRequestItemsTable.productId, productIds),
-      ))
-      .orderBy(desc(quoteRequestSupplierLinesTable.createdAt));
+    const [rows, leadRows] = await Promise.all([
+      db.select({
+        productId: quoteRequestItemsTable.productId,
+        supplierId: quoteRequestSuppliersTable.supplierId,
+        supplierName: suppliersTable.name,
+        unitPrice: quoteRequestSupplierLinesTable.unitPrice,
+        date: quoteRequestSupplierLinesTable.createdAt,
+      })
+        .from(quoteRequestSupplierLinesTable)
+        .innerJoin(quoteRequestItemsTable, eq(quoteRequestSupplierLinesTable.rfqItemId, quoteRequestItemsTable.id))
+        .innerJoin(quoteRequestSuppliersTable, eq(quoteRequestSupplierLinesTable.rfqSupplierId, quoteRequestSuppliersTable.id))
+        .leftJoin(suppliersTable, eq(quoteRequestSuppliersTable.supplierId, suppliersTable.id))
+        .where(and(
+          eq(quoteRequestSupplierLinesTable.companyId, companyId),
+          inArray(quoteRequestItemsTable.productId, productIds),
+        ))
+        .orderBy(desc(quoteRequestSupplierLinesTable.createdAt)),
+      db.select({
+        supplierId: quoteRequestSuppliersTable.supplierId,
+        leadTimeDays: quoteRequestSuppliersTable.leadTimeDays,
+      })
+        .from(quoteRequestSuppliersTable)
+        .where(and(
+          eq(quoteRequestSuppliersTable.companyId, companyId),
+          eq(quoteRequestSuppliersTable.status, "submitted"),
+          isNotNull(quoteRequestSuppliersTable.leadTimeDays),
+        ))
+        .orderBy(desc(quoteRequestSuppliersTable.submittedAt)),
+    ]);
+
+    const leadMap = new Map<number, number>();
+    for (const r of leadRows) {
+      if (r.supplierId != null && r.leadTimeDays != null && !leadMap.has(r.supplierId)) {
+        leadMap.set(r.supplierId, r.leadTimeDays);
+      }
+    }
 
     // Latest priced quote per (supplier, product).
     type Latest = { unitPrice: number; date: Date };
@@ -244,6 +264,7 @@ router.post("/predict", requireAdmin, async (req, res) => {
         estimatedTotal: total,
         complete: missing.length === 0,
         oldestPriceDate: oldest,
+        latestLeadDays: leadMap.get(supplierId) ?? null,
       };
     })
       // Best = covers the most items, then cheapest.

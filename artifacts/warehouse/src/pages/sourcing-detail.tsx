@@ -33,7 +33,7 @@ const T = {
     back: "Sourcing", item: "Item", qty: "Qty", total: "Total", lead: "Lead time",
     days: "days", cheapest: "Cheapest", fastest: "Fastest", waiting: "Waiting for response",
     order: "Order from this supplier", ordered: "Ordered ✓", orderedFrom: "Order placed",
-    remind: "Remind non-responders", reminded: "Reminders sent", noResp: "No response yet",
+    remind: "Remind pending suppliers", reminded: "Reminders sent", noResp: "No response yet",
     confirmOrder: "Create order from", emailSent: "Order email sent to supplier.",
     emailNotSent: "Order created. Email not sent (supplier has no email or SMTP not set up).",
     viewPo: "View purchase order", copyLink: "Copy link", copied: "Copied",
@@ -43,7 +43,7 @@ const T = {
     back: "Nabava", item: "Izdelek", qty: "Kol.", total: "Skupaj", lead: "Rok dobave",
     days: "dni", cheapest: "Najceneje", fastest: "Najhitreje", waiting: "Čaka odgovor",
     order: "Naroči pri tem dobavitelju", ordered: "Naročeno ✓", orderedFrom: "Naročilo oddano",
-    remind: "Opomni dobavitelje", reminded: "Opomniki poslani", noResp: "Še ni odgovora",
+    remind: "Opomni čakajoče dobavitelje", reminded: "Opomniki poslani", noResp: "Še ni odgovora",
     confirmOrder: "Ustvari naročilo pri", emailSent: "E-naročilo poslano dobavitelju.",
     emailNotSent: "Naročilo ustvarjeno. E-pošta ni poslana (dobavitelj nima e-naslova ali SMTP ni nastavljen).",
     viewPo: "Odpri naročilo", copyLink: "Kopiraj povezavo", copied: "Kopirano",
@@ -145,8 +145,8 @@ export default function SourcingDetailPage() {
                     <div className="flex flex-col items-center gap-1">
                       <span className="truncate max-w-[110px]">{s.supplierName}</span>
                       <div className="flex gap-1">
-                        {s.id === cheapestId && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-green-700 bg-green-100 rounded-full px-1.5 py-0.5"><Trophy className="h-2.5 w-2.5" />{L.cheapest}</span>}
-                        {s.id === fastestId && <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-700 bg-blue-100 rounded-full px-1.5 py-0.5"><Truck className="h-2.5 w-2.5" />{L.fastest}</span>}
+                        {s.id === cheapestId && <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-green-700 bg-green-100 rounded-full px-1.5 py-0.5"><Trophy className="h-3 w-3" />{L.cheapest}</span>}
+                        {s.id === fastestId && <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-blue-700 bg-blue-100 rounded-full px-1.5 py-0.5"><Truck className="h-3 w-3" />{L.fastest}</span>}
                       </div>
                     </div>
                   </th>

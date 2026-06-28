@@ -208,10 +208,10 @@ function SectionSwitcher({ isWorkSection }: { isWorkSection: boolean }) {
 // ─── Shared sidebar nav item ───────────────────────────────────────────────────
 
 function SideNavItem({
-  href, icon: Icon, label, active, badge = 0,
+  href, icon: Icon, label, active, badge = 0, pulse = false,
 }: {
   href: string; icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  label: string; active: boolean; badge?: number;
+  label: string; active: boolean; badge?: number; pulse?: boolean;
 }) {
   const { collapsed } = useSidebar();
   return (
@@ -228,7 +228,12 @@ function SideNavItem({
         <Icon className="h-[18px] w-[18px] flex-shrink-0" strokeWidth={active ? 2.5 : 2} />
         {!collapsed && <span className="flex-1 truncate">{label}</span>}
         {badge > 0 && (
-          collapsed ? (
+          pulse ? (
+            <span className={cn(
+              "h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-background flex-shrink-0",
+              collapsed ? "absolute top-1 right-1.5" : "ml-auto",
+            )} />
+          ) : collapsed ? (
             <span className="absolute top-1 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background" />
           ) : (
             <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center leading-none flex-shrink-0">
@@ -255,7 +260,7 @@ function SidebarSection({ label }: { label: string }) {
 
 // ─── Admin Desktop Sidebar ────────────────────────────────────────────────────
 
-interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; overdueJobs: number; restockRequests: number; }
+interface AttentionCounts { total: number; leaveRequests: number; lowStock: number; overdueJobs: number; restockRequests: number; openRfqsWithResponses: number; }
 
 function AdminDesktopSidebar() {
   const [location] = useLocation();
@@ -304,7 +309,7 @@ function AdminDesktopSidebar() {
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
-            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} />
+            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
           </>
@@ -355,7 +360,7 @@ function AdminDesktopSidebar() {
 
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
-            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} />
+            <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />
             <SideNavItem href="/admin/company" icon={Building2} label={t("navCompanyPlan")} active={location.startsWith("/admin/company")} />
             <SideNavItem href="/help" icon={HelpCircle} label={t("navHelp")} active={location.startsWith("/help")} />
           </>
@@ -687,10 +692,11 @@ function AdminBottomNav() {
             <Link href="/sourcing" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Scale className="h-5 w-5 text-muted-foreground shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-semibold">{t("navSourcing")}</p>
                   <p className="text-xs text-muted-foreground">{t("descSourcing")}</p>
                 </div>
+                <AttentionBadge count={attention?.openRfqsWithResponses ?? 0} />
               </div>
             </Link>
             <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>

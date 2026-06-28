@@ -8,6 +8,7 @@ import {
   purchaseOrdersTable, purchaseOrderItemsTable, shortageFlagsTable, stockReservationsTable,
   suppliersTable, supplierProductsTable, stepDependenciesTable, templateStepDependenciesTable, companiesTable,
   stationTypesTable, rawMaterialsTable,
+  quoteRequestItemsTable, quoteRequestsTable,
 } from "@workspace/db";
 import { eq, and, isNull, or, sql, inArray, ne, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -3850,9 +3851,24 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
     }
 
     const productIds = [...agg.keys()];
-    const products = await db.select().from(productsTable)
-      .where(and(inArray(productsTable.id, productIds), eq(productsTable.companyId, companyId)));
+    const [products, pendingRfqRows] = await Promise.all([
+      db.select().from(productsTable)
+        .where(and(inArray(productsTable.id, productIds), eq(productsTable.companyId, companyId))),
+      db.select({ productId: quoteRequestItemsTable.productId, rfqId: quoteRequestItemsTable.rfqId })
+        .from(quoteRequestItemsTable)
+        .innerJoin(quoteRequestsTable, eq(quoteRequestItemsTable.rfqId, quoteRequestsTable.id))
+        .where(and(
+          inArray(quoteRequestItemsTable.productId, productIds as number[]),
+          eq(quoteRequestsTable.status, "open"),
+          eq(quoteRequestsTable.companyId, companyId),
+        )),
+    ]);
     const productById = new Map(products.map((p) => [p.id, p]));
+
+    const pendingRfqMap = new Map<number, number>();
+    for (const r of pendingRfqRows) {
+      if (r.productId != null && !pendingRfqMap.has(r.productId)) pendingRfqMap.set(r.productId, r.rfqId);
+    }
 
     const supplierIds = [...new Set(products.map((p) => p.supplierId).filter((id): id is number => id != null))];
     const supplierRows = supplierIds.length > 0
@@ -3885,6 +3901,7 @@ router.get("/reorder-from-flags", requireAdmin, async (req, res) => {
           supplierEmail: supplier?.email ?? null,
           supplierLanguage: supplier?.language ?? "en",
           flagIds: a.flagIds,
+          pendingRfqId: pendingRfqMap.get(p.id) ?? null,
           pendingPo: null,
         };
       })
