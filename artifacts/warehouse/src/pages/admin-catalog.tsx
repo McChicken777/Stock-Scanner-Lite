@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Check, X, ChevronRight, BookOpen, Tag } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, X, ChevronRight, BookOpen, Tag, Upload } from "lucide-react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -223,6 +223,31 @@ export default function AdminCatalogPage() {
     onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
   });
 
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const csv = ev.target?.result as string;
+        const result = await apiFetch("/api/catalog/items/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            categoryId: selectedCategoryId === "all" ? null : selectedCategoryId,
+            csv,
+          }),
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
+        toast({ title: `Imported ${result.imported} item${result.imported !== 1 ? "s" : ""}${result.skipped ? `, ${result.skipped} skipped` : ""}` });
+      } catch (err) {
+        toast({ title: err instanceof Error ? err.message : "Import failed", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
   // ── Derived data ────────────────────────────────────────────────────────────
 
   const topCategories = categories.filter((c) => c.parentId == null);
@@ -366,9 +391,17 @@ export default function AdminCatalogPage() {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.items}</p>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddingItem(true)}>
-              <Plus className="h-3.5 w-3.5" /> {L.addItem}
-            </Button>
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer">
+                <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvUpload} />
+                <Button type="button" size="sm" variant="outline" className="gap-1.5 pointer-events-none" tabIndex={-1} asChild>
+                  <span><Upload className="h-3.5 w-3.5" /> Import CSV</span>
+                </Button>
+              </label>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAddingItem(true)}>
+                <Plus className="h-3.5 w-3.5" /> {L.addItem}
+              </Button>
+            </div>
           </div>
 
           {addingItem && (

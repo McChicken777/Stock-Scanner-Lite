@@ -166,11 +166,13 @@ export default function QuoteFormPage() {
     return cat.name;
   };
 
-  const addCatalogItem = (item: { name: string; description: string | null; unitPrice: number | null }) => {
+  const addCatalogItem = (item: { name: string; description: string | null; unitPrice: number | null; categoryId: number | null }) => {
+    const path = categoryPath(item.categoryId);
+    const desc = [path, item.description].filter(Boolean).join(" — ");
     setItems((prev) => [...prev, {
       productId: null,
       name: item.name,
-      description: item.description ?? "",
+      description: desc,
       quantity: 1,
       unitPrice: item.unitPrice ?? 0,
     }]);
