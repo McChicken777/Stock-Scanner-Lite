@@ -86,28 +86,13 @@ interface ReorderQueueItem {
 
 // ─── Per-category RFQ card ────────────────────────────────────────────────────
 
-function CategoryRfqCard({ categoryName, items, suppliers, pendingRfqId }: {
+function CategoryRfqCard({ categoryName, items, suppliers }: {
   categoryName: string;
   items: ReorderQueueItem[];
   suppliers: Supplier[];
-  pendingRfqId: number | null;
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  if (pendingRfqId != null) {
-    return (
-      <div className="border-2 border-blue-200 rounded-xl bg-blue-50 px-4 py-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <FileText className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-semibold text-blue-700">{categoryName} — quote in progress</span>
-        </div>
-        <Link href={`/sourcing/${pendingRfqId}`} className="text-xs font-bold text-blue-600 hover:underline">
-          View RFQ #{pendingRfqId} →
-        </Link>
-      </div>
-    );
-  }
 
   const [checkedSupplierIds, setCheckedSupplierIds] = useState<Set<number>>(
     () => new Set(suppliers.map((s) => s.id))
@@ -260,18 +245,14 @@ function LowStockOrdering() {
 
   return (
     <div className="space-y-3">
-      {Object.entries(byCategory).map(([cat, items]) => {
-        const pendingRfqId = items.find((i) => i.pendingRfqId != null)?.pendingRfqId ?? null;
-        return (
-          <CategoryRfqCard
-            key={cat}
-            categoryName={cat}
-            items={items}
-            suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
-            pendingRfqId={pendingRfqId}
-          />
-        );
-      })}
+      {Object.entries(byCategory).map(([cat, items]) => (
+        <CategoryRfqCard
+          key={cat}
+          categoryName={cat}
+          items={items}
+          suppliers={categorySuppliers.filter((s) => s.categories?.includes(cat))}
+        />
+      ))}
     </div>
   );
 }

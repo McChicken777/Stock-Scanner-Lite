@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useSearch } from "wouter";
 import { useLang } from "@/contexts/lang";
-import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check, ArrowLeftRight } from "lucide-react";
+import { MapPin, Plus, Minus, Search, ArrowLeft, Loader2, Layers, AlertTriangle, Check, ArrowLeftRight, Pencil } from "lucide-react";
 import { useGetLocation, useUpdateStock, useListProducts, useListLocations, getGetLocationQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -223,6 +223,16 @@ function StockItem({
               <span className="text-xs font-bold text-destructive uppercase tracking-wider">
                 {t("locationLowStock")}
               </span>
+            )}
+            {isAdmin && flagState !== "prompt" && (
+              <Link href={`/products/${productId}/edit`}>
+                <button
+                  title="Edit product"
+                  className="h-8 w-8 flex items-center justify-center rounded-full text-muted-foreground/60 hover:text-primary hover:bg-muted transition-colors"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </Link>
             )}
             {lite && isAdmin && flagState !== "prompt" && (
               <button
