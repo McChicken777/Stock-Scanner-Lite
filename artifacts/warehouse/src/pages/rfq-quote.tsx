@@ -186,9 +186,12 @@ export default function RfqQuotePage() {
                 <p className="font-bold text-sm">{item.productName}</p>
                 <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{tr(L.qty)}: <strong>{item.quantity}</strong></span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.unitPrice)} ({data.currency}, {tr(L.exclTax)})</Label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground leading-tight">
+                    {tr(L.unitPrice)}
+                    <span className="font-normal text-muted-foreground/70 ml-1">({data.currency}, {tr(L.exclTax)})</span>
+                  </Label>
                   <Input
                     type="number" step="0.01" min="0" inputMode="decimal"
                     value={prices[item.rfqItemId] ?? ""}
@@ -198,8 +201,8 @@ export default function RfqQuotePage() {
                     disabled={data?.closed}
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-semibold text-muted-foreground">{tr(L.yourSku)}</Label>
+                <div className="flex flex-col gap-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground leading-tight">{tr(L.yourSku)}</Label>
                   {item.supplierSku ? (
                     <div className="h-10 flex items-center px-3 border-2 rounded-lg bg-muted/40">
                       <span className="text-sm font-mono font-semibold text-muted-foreground truncate">{item.supplierSku}</span>
@@ -215,6 +218,7 @@ export default function RfqQuotePage() {
                   )}
                 </div>
               </div>
+
             </div>
           ))}
 
