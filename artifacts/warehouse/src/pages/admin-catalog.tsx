@@ -30,10 +30,14 @@ interface CatalogItem {
   sortOrder: number;
 }
 
-// One reversible bulk action, kept on an in-session undo stack (capped at 10).
+// One reversible catalog action, kept on an in-session undo stack (capped at 10).
 type UndoEntry =
-  | { kind: "price"; label: string; items: { id: number; unitPrice: number | null }[] }
-  | { kind: "delete"; label: string; items: CatalogItem[] };
+  | { kind: "itemFields"; label: string; items: CatalogItem[] }                     // undo edit / price adjust → restore prior fields
+  | { kind: "itemRecreate"; label: string; items: CatalogItem[] }                   // undo delete → re-create items (new IDs)
+  | { kind: "itemRemove"; label: string; ids: number[] }                            // undo create / CSV import → delete created items
+  | { kind: "catRemove"; label: string; id: number }                               // undo category create → delete it
+  | { kind: "catFields"; label: string; id: number; name: string }                 // undo category rename → restore name
+  | { kind: "catRecreate"; label: string; category: CatalogCategory; itemIds: number[] }; // undo category delete → re-create + reassign items
 
 const T = {
   en: {
@@ -490,6 +494,9 @@ export default function AdminCatalogPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
       setCsvPreview(null);
+      if (Array.isArray(result.ids) && result.ids.length > 0) {
+        pushUndo({ kind: "itemRemove", label: `Imported ${result.imported} item${result.imported !== 1 ? "s" : ""}`, ids: result.ids });
+      }
       toast({ title: `Imported ${result.imported} item${result.imported !== 1 ? "s" : ""}` });
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Import failed", variant: "destructive" });
@@ -508,7 +515,7 @@ export default function AdminCatalogPage() {
       await Promise.all(removed.map((it) => apiFetch(`/api/catalog/items/${it.id}`, { method: "DELETE" })));
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
       setSelectedIds(new Set());
-      pushUndo({ kind: "delete", label: `Deleted ${removed.length} item${removed.length !== 1 ? "s" : ""}`, items: removed });
+      pushUndo({ kind: "itemRecreate", label: `Deleted ${removed.length} item${removed.length !== 1 ? "s" : ""}`, items: removed });
       toast({ title: `Deleted ${removed.length} item${removed.length !== 1 ? "s" : ""}` });
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Delete failed", variant: "destructive" });
@@ -521,8 +528,8 @@ export default function AdminCatalogPage() {
     if (isNaN(pct) || pct === 0) return;
     const targets = filteredItems.filter((i) => selectedIds.has(i.id) && i.unitPrice != null);
     if (targets.length === 0) { toast({ title: "No selected items have a price set" }); return; }
-    // Snapshot previous prices so the adjustment can be undone.
-    const snapshot = targets.map((i) => ({ id: i.id, unitPrice: i.unitPrice }));
+    // Snapshot full prior records so the adjustment can be undone.
+    const snapshot = targets.map((i) => ({ ...i }));
     try {
       await Promise.all(
         targets.map((item) =>
@@ -535,7 +542,7 @@ export default function AdminCatalogPage() {
       );
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
       setSelectedIds(new Set());
-      pushUndo({ kind: "price", label: `Price ${pct > 0 ? "+" : ""}${pct}% on ${targets.length} item${targets.length !== 1 ? "s" : ""}`, items: snapshot });
+      pushUndo({ kind: "itemFields", label: `Price ${pct > 0 ? "+" : ""}${pct}% on ${targets.length} item${targets.length !== 1 ? "s" : ""}`, items: snapshot });
       toast({ title: `Price adjusted ${pct > 0 ? "+" : ""}${pct}% on ${targets.length} item${targets.length !== 1 ? "s" : ""}` });
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Price adjust failed", variant: "destructive" });
@@ -545,30 +552,43 @@ export default function AdminCatalogPage() {
   const handleUndo = async () => {
     const entry = undoStack[undoStack.length - 1];
     if (!entry) return;
+    const J = { "Content-Type": "application/json" };
+    const itemBody = (it: CatalogItem) =>
+      JSON.stringify({ name: it.name, description: it.description, unitPrice: it.unitPrice, categoryId: it.categoryId });
     try {
-      if (entry.kind === "price") {
-        await Promise.all(
-          entry.items.map((it) =>
-            apiFetch(`/api/catalog/items/${it.id}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ unitPrice: it.unitPrice }),
-            })
-          )
-        );
-      } else {
-        // Re-create deleted items (they come back with new IDs).
-        await Promise.all(
-          entry.items.map((it) =>
-            apiFetch("/api/catalog/items", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: it.name, description: it.description, unitPrice: it.unitPrice, categoryId: it.categoryId }),
-            })
-          )
-        );
+      switch (entry.kind) {
+        case "itemFields": // restore prior item fields (edit / price adjust)
+          await Promise.all(entry.items.map((it) =>
+            apiFetch(`/api/catalog/items/${it.id}`, { method: "PUT", headers: J, body: itemBody(it) })));
+          break;
+        case "itemRecreate": // re-create deleted items (new IDs)
+          await Promise.all(entry.items.map((it) =>
+            apiFetch("/api/catalog/items", { method: "POST", headers: J, body: itemBody(it) })));
+          break;
+        case "itemRemove": // delete items that were created / imported
+          await Promise.all(entry.ids.map((id) =>
+            apiFetch(`/api/catalog/items/${id}`, { method: "DELETE" })));
+          break;
+        case "catRemove": // delete a created category
+          await apiFetch(`/api/catalog/categories/${entry.id}`, { method: "DELETE" });
+          break;
+        case "catFields": // restore a category's prior name
+          await apiFetch(`/api/catalog/categories/${entry.id}`, { method: "PUT", headers: J, body: JSON.stringify({ name: entry.name }) });
+          break;
+        case "catRecreate": { // re-create a deleted category and reassign its items
+          const created = await apiFetch("/api/catalog/categories", {
+            method: "POST", headers: J,
+            body: JSON.stringify({ name: entry.category.name, parentId: entry.category.parentId }),
+          });
+          if (created?.id && entry.itemIds.length > 0) {
+            await Promise.all(entry.itemIds.map((id) =>
+              apiFetch(`/api/catalog/items/${id}`, { method: "PUT", headers: J, body: JSON.stringify({ categoryId: created.id }) })));
+          }
+          break;
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog/categories"] });
       setUndoStack((s) => s.slice(0, -1));
       toast({ title: `${L.undo}: ${entry.label}` });
     } catch (err) {
@@ -634,7 +654,7 @@ export default function AdminCatalogPage() {
                       <div className="flex-1 p-1">
                         <InlineCategoryForm
                           initial={{ name: cat.name }}
-                          onSave={(name) => name && updateCategory.mutate({ id: cat.id, name })}
+                          onSave={(name) => name && updateCategory.mutate({ id: cat.id, name }, { onSuccess: () => pushUndo({ kind: "catFields", label: `Renamed ${cat.name}`, id: cat.id, name: cat.name }) })}
                           onCancel={() => setEditingCategoryId(null)}
                           L={L}
                         />
@@ -652,7 +672,7 @@ export default function AdminCatalogPage() {
                           </span>
                         </button>
                         <button onClick={() => setEditingCategoryId(cat.id)} className="p-1.5 text-muted-foreground hover:text-foreground flex-shrink-0"><Pencil className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => deleteCategory.mutate(cat.id)} className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0 mr-1"><Trash2 className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => deleteCategory.mutate(cat.id, { onSuccess: () => pushUndo({ kind: "catRecreate", label: `Deleted category ${cat.name}`, category: cat, itemIds: allItems.filter((i) => i.categoryId === cat.id).map((i) => i.id) }) })} className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0 mr-1"><Trash2 className="h-3.5 w-3.5" /></button>
                       </>
                     )}
                   </div>
@@ -664,7 +684,7 @@ export default function AdminCatalogPage() {
                         <div className="flex-1 p-1">
                           <InlineCategoryForm
                             initial={{ name: sub.name }}
-                            onSave={(name) => name && updateCategory.mutate({ id: sub.id, name })}
+                            onSave={(name) => name && updateCategory.mutate({ id: sub.id, name }, { onSuccess: () => pushUndo({ kind: "catFields", label: `Renamed ${sub.name}`, id: sub.id, name: sub.name }) })}
                             onCancel={() => setEditingCategoryId(null)}
                             L={L}
                           />
@@ -681,7 +701,7 @@ export default function AdminCatalogPage() {
                             </span>
                           </button>
                           <button onClick={() => setEditingCategoryId(sub.id)} className="p-1.5 text-muted-foreground hover:text-foreground flex-shrink-0"><Pencil className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => deleteCategory.mutate(sub.id)} className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0 mr-1"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => deleteCategory.mutate(sub.id, { onSuccess: () => pushUndo({ kind: "catRecreate", label: `Deleted category ${sub.name}`, category: sub, itemIds: allItems.filter((i) => i.categoryId === sub.id).map((i) => i.id) }) })} className="p-1.5 text-muted-foreground hover:text-destructive flex-shrink-0 mr-1"><Trash2 className="h-3.5 w-3.5" /></button>
                         </>
                       )}
                     </div>
@@ -691,7 +711,7 @@ export default function AdminCatalogPage() {
                   {addingSubOf === cat.id ? (
                     <div className="ml-4 p-1">
                       <InlineCategoryForm
-                        onSave={(name) => name && createCategory.mutate({ name, parentId: cat.id })}
+                        onSave={(name) => name && createCategory.mutate({ name, parentId: cat.id }, { onSuccess: (created: CatalogCategory) => pushUndo({ kind: "catRemove", label: `Added category ${created.name}`, id: created.id }) })}
                         onCancel={() => setAddingSubOf(null)}
                         L={L}
                       />
@@ -710,7 +730,7 @@ export default function AdminCatalogPage() {
               {addingCategory ? (
                 <div className="p-1">
                   <InlineCategoryForm
-                    onSave={(name) => name && createCategory.mutate({ name, parentId: null })}
+                    onSave={(name) => name && createCategory.mutate({ name, parentId: null }, { onSuccess: (created: CatalogCategory) => pushUndo({ kind: "catRemove", label: `Added category ${created.name}`, id: created.id }) })}
                     onCancel={() => setAddingCategory(false)}
                     L={L}
                   />
@@ -814,7 +834,7 @@ export default function AdminCatalogPage() {
             <InlineItemForm
               initial={selectedCategoryId !== "all" ? { categoryId: selectedCategoryId } : undefined}
               categories={categories}
-              onSave={(data) => createItem.mutate(data)}
+              onSave={(data) => createItem.mutate(data, { onSuccess: (created: CatalogItem) => pushUndo({ kind: "itemRemove", label: `Added ${created.name}`, ids: [created.id] }) })}
               onCancel={() => setAddingItem(false)}
               L={L}
             />
@@ -835,7 +855,7 @@ export default function AdminCatalogPage() {
                     <InlineItemForm
                       initial={item}
                       categories={categories}
-                      onSave={(data) => updateItem.mutate({ id: item.id, ...data })}
+                      onSave={(data) => updateItem.mutate({ id: item.id, ...data }, { onSuccess: () => pushUndo({ kind: "itemFields", label: `Edited ${item.name}`, items: [item] }) })}
                       onCancel={() => setEditingItemId(null)}
                       L={L}
                     />
@@ -856,7 +876,7 @@ export default function AdminCatalogPage() {
                         <button onClick={() => setEditingItemId(item.id)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deleteItem.mutate(item.id)} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
+                        <button onClick={() => deleteItem.mutate(item.id, { onSuccess: () => pushUndo({ kind: "itemRecreate", label: `Deleted ${item.name}`, items: [item] }) })} className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>

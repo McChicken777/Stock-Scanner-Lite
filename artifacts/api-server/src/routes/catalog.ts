@@ -193,8 +193,8 @@ router.post("/items/import", requireAdmin, async (req, res) => {
       unitPrice: item.unitPrice ?? null,
       sortOrder: i,
     }));
-    await db.insert(catalogItemsTable).values(toInsert);
-    res.json({ imported: toInsert.length });
+    const inserted = await db.insert(catalogItemsTable).values(toInsert).returning({ id: catalogItemsTable.id });
+    res.json({ imported: inserted.length, ids: inserted.map((r) => r.id) });
   } catch (err) {
     req.log.error({ err }, "Failed to import catalog items");
     res.status(500).json({ error: "Failed" });
