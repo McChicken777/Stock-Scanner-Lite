@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Check, X, ChevronRight, BookOpen, Tag, Upload, TrendingUp } from "lucide-react";
+import { Plus, Pencil, Trash2, Check, X, ChevronRight, BookOpen, Tag, Upload, TrendingUp, TrendingDown, Undo2 } from "lucide-react";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, { credentials: "include", ...opts });
@@ -30,6 +30,11 @@ interface CatalogItem {
   sortOrder: number;
 }
 
+// One reversible bulk action, kept on an in-session undo stack (capped at 10).
+type UndoEntry =
+  | { kind: "price"; label: string; items: { id: number; unitPrice: number | null }[] }
+  | { kind: "delete"; label: string; items: CatalogItem[] };
+
 const T = {
   en: {
     title: "Sales Catalog",
@@ -50,6 +55,10 @@ const T = {
     cancel: "Cancel",
     delete: "Delete",
     deleteConfirm: "Are you sure?",
+    raise: "Raise",
+    drop: "Drop",
+    undo: "Undo",
+    nothingToUndo: "Nothing to undo",
   },
   sl: {
     title: "Prodajni katalog",
@@ -70,6 +79,10 @@ const T = {
     cancel: "Prekliči",
     delete: "Izbriši",
     deleteConfirm: "Ste prepričani?",
+    raise: "Dvigni",
+    drop: "Znižaj",
+    undo: "Razveljavi",
+    nothingToUndo: "Ni česa razveljaviti",
   },
 };
 
@@ -377,6 +390,10 @@ export default function AdminCatalogPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [priceAdjustPct, setPriceAdjustPct] = useState("10");
 
+  // In-session undo stack for bulk actions (most recent last, capped at 10).
+  const [undoStack, setUndoStack] = useState<UndoEntry[]>([]);
+  const pushUndo = (entry: UndoEntry) => setUndoStack((s) => [...s, entry].slice(-10));
+
   // Clear selection when switching categories
   useEffect(() => {
     setSelectedIds(new Set());
@@ -485,37 +502,77 @@ export default function AdminCatalogPage() {
 
   const handleBulkDelete = async () => {
     if (!window.confirm(`Delete ${selectedIds.size} item${selectedIds.size !== 1 ? "s" : ""}?`)) return;
-    const ids = [...selectedIds];
+    // Snapshot full records first so the delete can be undone (re-created).
+    const removed = allItems.filter((i) => selectedIds.has(i.id));
     try {
-      await Promise.all(ids.map((id) => apiFetch(`/api/catalog/items/${id}`, { method: "DELETE" })));
+      await Promise.all(removed.map((it) => apiFetch(`/api/catalog/items/${it.id}`, { method: "DELETE" })));
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
       setSelectedIds(new Set());
-      toast({ title: `Deleted ${ids.length} item${ids.length !== 1 ? "s" : ""}` });
+      pushUndo({ kind: "delete", label: `Deleted ${removed.length} item${removed.length !== 1 ? "s" : ""}`, items: removed });
+      toast({ title: `Deleted ${removed.length} item${removed.length !== 1 ? "s" : ""}` });
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Delete failed", variant: "destructive" });
     }
   };
 
-  const handlePriceAdjust = async () => {
-    const pct = Number(priceAdjustPct);
+  // direction: +1 raises prices, -1 drops them (input holds a positive magnitude)
+  const handlePriceAdjust = async (direction: 1 | -1) => {
+    const pct = direction * Math.abs(Number(priceAdjustPct));
     if (isNaN(pct) || pct === 0) return;
     const targets = filteredItems.filter((i) => selectedIds.has(i.id) && i.unitPrice != null);
     if (targets.length === 0) { toast({ title: "No selected items have a price set" }); return; }
+    // Snapshot previous prices so the adjustment can be undone.
+    const snapshot = targets.map((i) => ({ id: i.id, unitPrice: i.unitPrice }));
     try {
       await Promise.all(
         targets.map((item) =>
           apiFetch(`/api/catalog/items/${item.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ unitPrice: +(item.unitPrice! * (1 + pct / 100)).toFixed(2) }),
+            body: JSON.stringify({ unitPrice: Math.max(0, +(item.unitPrice! * (1 + pct / 100)).toFixed(2)) }),
           })
         )
       );
       queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
       setSelectedIds(new Set());
+      pushUndo({ kind: "price", label: `Price ${pct > 0 ? "+" : ""}${pct}% on ${targets.length} item${targets.length !== 1 ? "s" : ""}`, items: snapshot });
       toast({ title: `Price adjusted ${pct > 0 ? "+" : ""}${pct}% on ${targets.length} item${targets.length !== 1 ? "s" : ""}` });
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : "Price adjust failed", variant: "destructive" });
+    }
+  };
+
+  const handleUndo = async () => {
+    const entry = undoStack[undoStack.length - 1];
+    if (!entry) return;
+    try {
+      if (entry.kind === "price") {
+        await Promise.all(
+          entry.items.map((it) =>
+            apiFetch(`/api/catalog/items/${it.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ unitPrice: it.unitPrice }),
+            })
+          )
+        );
+      } else {
+        // Re-create deleted items (they come back with new IDs).
+        await Promise.all(
+          entry.items.map((it) =>
+            apiFetch("/api/catalog/items", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: it.name, description: it.description, unitPrice: it.unitPrice, categoryId: it.categoryId }),
+            })
+          )
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog/items"] });
+      setUndoStack((s) => s.slice(0, -1));
+      toast({ title: `${L.undo}: ${entry.label}` });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "Undo failed", variant: "destructive" });
     }
   };
 
@@ -687,6 +744,17 @@ export default function AdminCatalogPage() {
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{L.items}</p>
             </div>
             <div className="flex items-center gap-2">
+              {undoStack.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5"
+                  onClick={handleUndo}
+                  title={undoStack[undoStack.length - 1]?.label}
+                >
+                  <Undo2 className="h-3.5 w-3.5" /> {L.undo}{undoStack.length > 1 ? ` (${undoStack.length})` : ""}
+                </Button>
+              )}
               <label className="cursor-pointer">
                 <input type="file" accept=".csv,.txt" className="hidden" onChange={handleCsvUpload} />
                 <Button type="button" size="sm" variant="outline" className="gap-1.5 pointer-events-none" tabIndex={-1} asChild>
@@ -706,14 +774,18 @@ export default function AdminCatalogPage() {
               <div className="flex items-center gap-1.5 ml-auto">
                 <Input
                   type="number"
+                  min="0"
                   value={priceAdjustPct}
                   onChange={(e) => setPriceAdjustPct(e.target.value)}
                   className="w-16 h-7 text-sm text-center"
                   placeholder="%"
                 />
                 <span className="text-xs text-muted-foreground">%</span>
-                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 px-2" onClick={handlePriceAdjust}>
-                  <TrendingUp className="h-3 w-3" /> Adjust price
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 px-2" onClick={() => handlePriceAdjust(1)}>
+                  <TrendingUp className="h-3 w-3" /> {L.raise}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 px-2" onClick={() => handlePriceAdjust(-1)}>
+                  <TrendingDown className="h-3 w-3" /> {L.drop}
                 </Button>
               </div>
               <Button size="sm" variant="destructive" className="h-7 text-xs gap-1 px-2" onClick={handleBulkDelete}>

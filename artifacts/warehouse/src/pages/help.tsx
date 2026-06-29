@@ -46,7 +46,7 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: LayoutGrid, title: "Product catalog — line items for quotes", paras: [
           "Admin → Catalog is where you build the library of items you sell to customers. Organise them into categories and sub-categories, set a unit price for each, and they'll be pre-filled when you add a line to a customer quote.",
           "To add many items at once, import a CSV. The importer shows a column-mapping preview so you can tell it which column holds the name, price, and description before anything is saved — no more prices landing in the wrong field.",
-          "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or raise/lower all their prices by a percentage (handy at the start of each year).",
+          "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or use Raise / Drop to move all their prices by a percentage (handy at the start of each year). Made a mistake? The Undo button at the top of the items list reverses your recent bulk actions, several steps back.",
         ]},
         { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
           "When you're not sure who's cheapest, open Sourcing and send one quote request to several suppliers at once. They fill in prices on a no-login link (their SKUs are pre-filled), and the app lays every response side by side — highlighting the cheapest total and the fastest delivery.",
@@ -127,7 +127,7 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: LayoutGrid, title: "Katalog izdelkov — postavke za ponudbe", paras: [
           "Admin → Katalog je knjižnica izdelkov, ki jih prodajaš strankam. Razvrsti jih v kategorije in podkategorije, nastavi enoto ceno, in ob ustvarjanju ponudbe se cene samodejno izpolnijo.",
           "Za množični uvoz uvozi CSV datoteko. Predogled preslikave stolpcev ti omogoča, da vsakemu stolpcu določiš vlogo (Ime / Cena / Opis), preden karkoli shraniš — cene nikoli ne pristanejo v napačnem polju.",
-          "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali prilagodi vse cene za odstotek naenkrat (praktično ob začetku vsakega leta).",
+          "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali z gumboma Dvigni / Znižaj premakni vse cene za odstotek naenkrat (praktično ob začetku vsakega leta). Si se zmotil? Gumb Razveljavi na vrhu seznama izdelkov razveljavi zadnja množična dejanja, več korakov nazaj.",
         ]},
         { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
           "Ko nisi prepričan, kdo je najcenejši, odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (njihove šifre so že izpolnjene), aplikacija pa vse odgovore postavi enega ob drugega — označi najnižji skupni znesek in najhitrejšo dobavo.",
