@@ -179,7 +179,7 @@
   --accent: 217 33% 25%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 62.8% 30.6%;
+  --destructive: 0 72% 58%;
   --destructive-foreground: 210 40% 98%;
 
   --border: 217 33% 25%;
@@ -249,11 +249,11 @@
 .dark .border-neutral-300, .dark .border-stone-200 { border-color: hsl(var(--border)); }
 
 /* Colored tints → low-alpha fills + lighter text/borders */
-.dark .bg-red-50{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 10%, transparent)}
-.dark .bg-red-100{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 18%, transparent)}
-.dark .bg-red-200{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 26%, transparent)}
-.dark .text-red-500,.dark .text-red-600,.dark .text-red-700,.dark .text-red-800,.dark .text-red-900{color:oklch(80.8% 0.114 19.571)}
-.dark .border-red-200,.dark .border-red-300{border-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 32%, transparent)}
+.dark .bg-red-50{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 12%, transparent)}
+.dark .bg-red-100{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 22%, transparent)}
+.dark .bg-red-200{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 30%, transparent)}
+.dark .text-red-500,.dark .text-red-600,.dark .text-red-700,.dark .text-red-800,.dark .text-red-900{color:oklch(70.4% 0.191 22.216)}
+.dark .border-red-200,.dark .border-red-300{border-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 44%, transparent)}
 .dark .bg-orange-50{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 10%, transparent)}
 .dark .bg-orange-100{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 18%, transparent)}
 .dark .bg-orange-200{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 26%, transparent)}

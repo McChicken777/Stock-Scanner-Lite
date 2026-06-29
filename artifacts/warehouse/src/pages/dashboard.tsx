@@ -208,7 +208,7 @@ export default function Dashboard() {
       )}
 
       {quoteCounts && (
-        <Card className="border-2 border-purple-200 bg-purple-50/40">
+        <Card className="border-2 border-purple-200 bg-purple-50/40 dark:bg-purple-500/[0.07]">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-purple-800">
               <FileText className="h-4 w-4" /> {t("dashQuotesPipeline")}
@@ -353,7 +353,7 @@ export default function Dashboard() {
           {/* Pending Leave Approvals */}
           {pendingLeave.length > 0 && (
             <Link href="/admin/leave-inbox">
-              <Card className="border-2 border-amber-200 bg-amber-50/50 cursor-pointer hover:border-amber-400 transition-colors active:scale-95">
+              <Card className="border-2 border-amber-200 bg-amber-50/50 dark:bg-amber-500/[0.07] cursor-pointer hover:border-amber-400 transition-colors active:scale-95">
                 <CardContent className="p-4 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center">
@@ -381,7 +381,7 @@ export default function Dashboard() {
 
           {/* Blocked Tasks */}
           {blocked.length > 0 && (
-            <Card className={`border-2 ${blocked.some((t) => t.isOverdue) ? "border-red-400 bg-red-50" : "border-red-200 bg-red-50/50"}`}>
+            <Card className={`border-2 ${blocked.some((t) => t.isOverdue) ? "border-red-400 bg-red-50 dark:bg-red-500/[0.07]" : "border-red-200 bg-red-50/50 dark:bg-red-500/[0.07]"}`}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-bold text-red-700 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4" /> {t("dashBlockedTasks")} ({blocked.length})
