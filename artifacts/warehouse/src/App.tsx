@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/layout";
@@ -315,6 +316,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} storageKey="fabriflow_theme" disableTransitionOnChange>
         <LangProvider>
           <AuthProvider>
             {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
@@ -330,6 +332,7 @@ function App() {
             <Toaster />
           </AuthProvider>
         </LangProvider>
+        </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

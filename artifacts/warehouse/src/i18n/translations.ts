@@ -450,7 +450,7 @@ const KEYS = [
   "locationsDeleted", "locationsDeleteError", "locationsDeleteErrorDesc", "locationsCreateError",
 
   // ── Misc ──────────────────────────────────────────────────────────────────
-  "langLabel",
+  "langLabel", "themeDark", "themeLight",
 ] as const;
 
 export type TranslationKey = (typeof KEYS)[number];
@@ -1317,6 +1317,8 @@ const en: Dict = {
   jobsDeleteOrder: "Delete Work Order",
   jobsDeleteOrderDesc: "This will permanently delete the work order and all its data. This cannot be undone.",
   langLabel: "Language",
+  themeDark: "Dark mode",
+  themeLight: "Light mode",
 
   // ── Newly translated UI ──
   dashScanLocation: "Scan location",
@@ -2428,6 +2430,8 @@ const sl: Dict = {
   jobsDeleteOrder: "Izbriši delovni nalog",
   jobsDeleteOrderDesc: "To bo trajno izbrisalo delovni nalog in vse njegove podatke. Tega ni mogoče razveljaviti.",
   langLabel: "Jezik",
+  themeDark: "Temni način",
+  themeLight: "Svetli način",
 
   // ── Newly translated UI ──
   dashScanLocation: "Skeniraj lokacijo",

@@ -211,6 +211,136 @@
   --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.5);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   DARK-MODE PALETTE ADAPTATION (global)
+
+   Most pages were built with hardcoded Tailwind palette colors (bg-white,
+   bg-gray-50, text-slate-700, bg-green-100/text-green-700 status chips, etc.)
+   instead of theme tokens, so they don't adapt to dark mode on their own.
+   Rather than hand-editing thousands of occurrences, these rules remap the
+   common light utilities to dark-appropriate values *only* under `.dark`.
+
+   - Light mode is untouched (no `.dark` ancestor → these never apply).
+   - Written unlayered, so they override Tailwind's layered utilities.
+   - Neutral surfaces use the app's own tokens (always defined).
+   - Colored tints use literal palette values (self-contained, no dependency
+     on Tailwind emitting unused --color-* vars): low-alpha fills + lighter
+     text so chips/alerts stay legible on the dark surface.
+   - Opacity-suffixed tints (bg-x-50/40, bg-x-500/10) already adapt and are
+     intentionally left alone.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Neutral surfaces → theme tokens */
+.dark .bg-white { background-color: hsl(var(--card)); }
+.dark .bg-slate-50, .dark .bg-slate-100, .dark .bg-gray-50, .dark .bg-gray-100,
+.dark .bg-zinc-50, .dark .bg-zinc-100, .dark .bg-neutral-50, .dark .bg-neutral-100,
+.dark .bg-stone-50, .dark .bg-stone-100 { background-color: hsl(var(--muted)); }
+.dark .text-black, .dark .text-slate-900, .dark .text-slate-800, .dark .text-gray-900,
+.dark .text-gray-800, .dark .text-zinc-900, .dark .text-zinc-800, .dark .text-neutral-900,
+.dark .text-stone-900 { color: hsl(var(--foreground)); }
+.dark .text-slate-700, .dark .text-slate-600, .dark .text-slate-500,
+.dark .text-gray-700, .dark .text-gray-600, .dark .text-gray-500,
+.dark .text-zinc-700, .dark .text-zinc-600, .dark .text-zinc-500,
+.dark .text-neutral-700, .dark .text-neutral-600, .dark .text-neutral-500,
+.dark .text-stone-700, .dark .text-stone-600, .dark .text-stone-500 { color: hsl(var(--muted-foreground)); }
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-300,
+.dark .border-gray-100, .dark .border-gray-200, .dark .border-gray-300,
+.dark .border-zinc-200, .dark .border-zinc-300, .dark .border-neutral-200,
+.dark .border-neutral-300, .dark .border-stone-200 { border-color: hsl(var(--border)); }
+
+/* Colored tints → low-alpha fills + lighter text/borders */
+.dark .bg-red-50{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 10%, transparent)}
+.dark .bg-red-100{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 18%, transparent)}
+.dark .bg-red-200{background-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 26%, transparent)}
+.dark .text-red-500,.dark .text-red-600,.dark .text-red-700,.dark .text-red-800,.dark .text-red-900{color:oklch(80.8% 0.114 19.571)}
+.dark .border-red-200,.dark .border-red-300{border-color:color-mix(in oklab, oklch(63.7% 0.237 25.331) 32%, transparent)}
+.dark .bg-orange-50{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 10%, transparent)}
+.dark .bg-orange-100{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 18%, transparent)}
+.dark .bg-orange-200{background-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 26%, transparent)}
+.dark .text-orange-500,.dark .text-orange-600,.dark .text-orange-700,.dark .text-orange-800,.dark .text-orange-900{color:oklch(83.7% 0.128 66.29)}
+.dark .border-orange-200,.dark .border-orange-300{border-color:color-mix(in oklab, oklch(70.5% 0.213 47.604) 32%, transparent)}
+.dark .bg-amber-50{background-color:color-mix(in oklab, oklch(76.9% 0.188 70.08) 10%, transparent)}
+.dark .bg-amber-100{background-color:color-mix(in oklab, oklch(76.9% 0.188 70.08) 18%, transparent)}
+.dark .bg-amber-200{background-color:color-mix(in oklab, oklch(76.9% 0.188 70.08) 26%, transparent)}
+.dark .text-amber-500,.dark .text-amber-600,.dark .text-amber-700,.dark .text-amber-800,.dark .text-amber-900{color:oklch(87.9% 0.169 91.605)}
+.dark .border-amber-200,.dark .border-amber-300{border-color:color-mix(in oklab, oklch(76.9% 0.188 70.08) 32%, transparent)}
+.dark .bg-yellow-50{background-color:color-mix(in oklab, oklch(79.5% 0.184 86.047) 10%, transparent)}
+.dark .bg-yellow-100{background-color:color-mix(in oklab, oklch(79.5% 0.184 86.047) 18%, transparent)}
+.dark .bg-yellow-200{background-color:color-mix(in oklab, oklch(79.5% 0.184 86.047) 26%, transparent)}
+.dark .text-yellow-500,.dark .text-yellow-600,.dark .text-yellow-700,.dark .text-yellow-800,.dark .text-yellow-900{color:oklch(90.5% 0.182 98.111)}
+.dark .border-yellow-200,.dark .border-yellow-300{border-color:color-mix(in oklab, oklch(79.5% 0.184 86.047) 32%, transparent)}
+.dark .bg-lime-50{background-color:color-mix(in oklab, oklch(76.8% 0.233 130.85) 10%, transparent)}
+.dark .bg-lime-100{background-color:color-mix(in oklab, oklch(76.8% 0.233 130.85) 18%, transparent)}
+.dark .bg-lime-200{background-color:color-mix(in oklab, oklch(76.8% 0.233 130.85) 26%, transparent)}
+.dark .text-lime-500,.dark .text-lime-600,.dark .text-lime-700,.dark .text-lime-800,.dark .text-lime-900{color:oklch(89.7% 0.196 126.665)}
+.dark .border-lime-200,.dark .border-lime-300{border-color:color-mix(in oklab, oklch(76.8% 0.233 130.85) 32%, transparent)}
+.dark .bg-green-50{background-color:color-mix(in oklab, oklch(72.3% 0.219 149.579) 10%, transparent)}
+.dark .bg-green-100{background-color:color-mix(in oklab, oklch(72.3% 0.219 149.579) 18%, transparent)}
+.dark .bg-green-200{background-color:color-mix(in oklab, oklch(72.3% 0.219 149.579) 26%, transparent)}
+.dark .text-green-500,.dark .text-green-600,.dark .text-green-700,.dark .text-green-800,.dark .text-green-900{color:oklch(87.1% 0.15 154.449)}
+.dark .border-green-200,.dark .border-green-300{border-color:color-mix(in oklab, oklch(72.3% 0.219 149.579) 32%, transparent)}
+.dark .bg-emerald-50{background-color:color-mix(in oklab, oklch(69.6% 0.17 162.48) 10%, transparent)}
+.dark .bg-emerald-100{background-color:color-mix(in oklab, oklch(69.6% 0.17 162.48) 18%, transparent)}
+.dark .bg-emerald-200{background-color:color-mix(in oklab, oklch(69.6% 0.17 162.48) 26%, transparent)}
+.dark .text-emerald-500,.dark .text-emerald-600,.dark .text-emerald-700,.dark .text-emerald-800,.dark .text-emerald-900{color:oklch(84.5% 0.143 164.978)}
+.dark .border-emerald-200,.dark .border-emerald-300{border-color:color-mix(in oklab, oklch(69.6% 0.17 162.48) 32%, transparent)}
+.dark .bg-teal-50{background-color:color-mix(in oklab, oklch(70.4% 0.14 182.503) 10%, transparent)}
+.dark .bg-teal-100{background-color:color-mix(in oklab, oklch(70.4% 0.14 182.503) 18%, transparent)}
+.dark .bg-teal-200{background-color:color-mix(in oklab, oklch(70.4% 0.14 182.503) 26%, transparent)}
+.dark .text-teal-500,.dark .text-teal-600,.dark .text-teal-700,.dark .text-teal-800,.dark .text-teal-900{color:oklch(85.5% 0.138 181.071)}
+.dark .border-teal-200,.dark .border-teal-300{border-color:color-mix(in oklab, oklch(70.4% 0.14 182.503) 32%, transparent)}
+.dark .bg-cyan-50{background-color:color-mix(in oklab, oklch(71.5% 0.143 215.221) 10%, transparent)}
+.dark .bg-cyan-100{background-color:color-mix(in oklab, oklch(71.5% 0.143 215.221) 18%, transparent)}
+.dark .bg-cyan-200{background-color:color-mix(in oklab, oklch(71.5% 0.143 215.221) 26%, transparent)}
+.dark .text-cyan-500,.dark .text-cyan-600,.dark .text-cyan-700,.dark .text-cyan-800,.dark .text-cyan-900{color:oklch(86.5% 0.127 207.078)}
+.dark .border-cyan-200,.dark .border-cyan-300{border-color:color-mix(in oklab, oklch(71.5% 0.143 215.221) 32%, transparent)}
+.dark .bg-sky-50{background-color:color-mix(in oklab, oklch(68.5% 0.169 237.323) 10%, transparent)}
+.dark .bg-sky-100{background-color:color-mix(in oklab, oklch(68.5% 0.169 237.323) 18%, transparent)}
+.dark .bg-sky-200{background-color:color-mix(in oklab, oklch(68.5% 0.169 237.323) 26%, transparent)}
+.dark .text-sky-500,.dark .text-sky-600,.dark .text-sky-700,.dark .text-sky-800,.dark .text-sky-900{color:oklch(82.8% 0.111 230.318)}
+.dark .border-sky-200,.dark .border-sky-300{border-color:color-mix(in oklab, oklch(68.5% 0.169 237.323) 32%, transparent)}
+.dark .bg-blue-50{background-color:color-mix(in oklab, oklch(62.3% 0.214 259.815) 10%, transparent)}
+.dark .bg-blue-100{background-color:color-mix(in oklab, oklch(62.3% 0.214 259.815) 18%, transparent)}
+.dark .bg-blue-200{background-color:color-mix(in oklab, oklch(62.3% 0.214 259.815) 26%, transparent)}
+.dark .text-blue-500,.dark .text-blue-600,.dark .text-blue-700,.dark .text-blue-800,.dark .text-blue-900{color:oklch(80.9% 0.105 251.813)}
+.dark .border-blue-200,.dark .border-blue-300{border-color:color-mix(in oklab, oklch(62.3% 0.214 259.815) 32%, transparent)}
+.dark .bg-indigo-50{background-color:color-mix(in oklab, oklch(58.5% 0.233 277.117) 10%, transparent)}
+.dark .bg-indigo-100{background-color:color-mix(in oklab, oklch(58.5% 0.233 277.117) 18%, transparent)}
+.dark .bg-indigo-200{background-color:color-mix(in oklab, oklch(58.5% 0.233 277.117) 26%, transparent)}
+.dark .text-indigo-500,.dark .text-indigo-600,.dark .text-indigo-700,.dark .text-indigo-800,.dark .text-indigo-900{color:oklch(78.5% 0.115 274.713)}
+.dark .border-indigo-200,.dark .border-indigo-300{border-color:color-mix(in oklab, oklch(58.5% 0.233 277.117) 32%, transparent)}
+.dark .bg-violet-50{background-color:color-mix(in oklab, oklch(60.6% 0.25 292.717) 10%, transparent)}
+.dark .bg-violet-100{background-color:color-mix(in oklab, oklch(60.6% 0.25 292.717) 18%, transparent)}
+.dark .bg-violet-200{background-color:color-mix(in oklab, oklch(60.6% 0.25 292.717) 26%, transparent)}
+.dark .text-violet-500,.dark .text-violet-600,.dark .text-violet-700,.dark .text-violet-800,.dark .text-violet-900{color:oklch(81.1% 0.111 293.571)}
+.dark .border-violet-200,.dark .border-violet-300{border-color:color-mix(in oklab, oklch(60.6% 0.25 292.717) 32%, transparent)}
+.dark .bg-purple-50{background-color:color-mix(in oklab, oklch(62.7% 0.265 303.9) 10%, transparent)}
+.dark .bg-purple-100{background-color:color-mix(in oklab, oklch(62.7% 0.265 303.9) 18%, transparent)}
+.dark .bg-purple-200{background-color:color-mix(in oklab, oklch(62.7% 0.265 303.9) 26%, transparent)}
+.dark .text-purple-500,.dark .text-purple-600,.dark .text-purple-700,.dark .text-purple-800,.dark .text-purple-900{color:oklch(82.7% 0.119 306.383)}
+.dark .border-purple-200,.dark .border-purple-300{border-color:color-mix(in oklab, oklch(62.7% 0.265 303.9) 32%, transparent)}
+.dark .bg-pink-50{background-color:color-mix(in oklab, oklch(65.6% 0.241 354.308) 10%, transparent)}
+.dark .bg-pink-100{background-color:color-mix(in oklab, oklch(65.6% 0.241 354.308) 18%, transparent)}
+.dark .bg-pink-200{background-color:color-mix(in oklab, oklch(65.6% 0.241 354.308) 26%, transparent)}
+.dark .text-pink-500,.dark .text-pink-600,.dark .text-pink-700,.dark .text-pink-800,.dark .text-pink-900{color:oklch(82.3% 0.12 346.018)}
+.dark .border-pink-200,.dark .border-pink-300{border-color:color-mix(in oklab, oklch(65.6% 0.241 354.308) 32%, transparent)}
+.dark .bg-rose-50{background-color:color-mix(in oklab, oklch(64.5% 0.246 16.439) 10%, transparent)}
+.dark .bg-rose-100{background-color:color-mix(in oklab, oklch(64.5% 0.246 16.439) 18%, transparent)}
+.dark .bg-rose-200{background-color:color-mix(in oklab, oklch(64.5% 0.246 16.439) 26%, transparent)}
+.dark .text-rose-500,.dark .text-rose-600,.dark .text-rose-700,.dark .text-rose-800,.dark .text-rose-900{color:oklch(81% 0.117 11.638)}
+.dark .border-rose-200,.dark .border-rose-300{border-color:color-mix(in oklab, oklch(64.5% 0.246 16.439) 32%, transparent)}
+
+/* Print: force light surfaces even when dark mode is active (QR/tag sheets) */
+@media print {
+  html.dark, html.dark body { background: #fff !important; }
+  html.dark .bg-white, html.dark .bg-card, html.dark .bg-background,
+  html.dark .bg-slate-50, html.dark .bg-slate-100, html.dark .bg-gray-50, html.dark .bg-gray-100 { background-color: #fff !important; }
+  html.dark .text-black, html.dark .text-foreground, html.dark .text-gray-900,
+  html.dark .text-slate-900, html.dark .text-gray-800, html.dark .text-slate-800 { color: #000 !important; }
+  html.dark .border-gray-200, html.dark .border-slate-200, html.dark .border-gray-300,
+  html.dark .border-border { border-color: #e5e7eb !important; }
+}
+
 @layer base {
   * {
     @apply border-border;

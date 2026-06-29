@@ -7,8 +7,9 @@ import {
   CheckSquare, Truck, Eye, MapPin,
   BookTemplate, Wrench, Users, Settings, Store, CalendarCheck, Inbox, Palette, Scissors,
   BarChart2, ShoppingCart, FileText, PackageOpen, Layers, HelpCircle, ClipboardList, Sparkles, FlaskConical,
-  PanelLeft, PanelLeftClose, Scale, BookOpen,
+  PanelLeft, PanelLeftClose, Scale, BookOpen, Moon, Sun,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { useAuth, useFeature, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
@@ -97,9 +98,9 @@ function SidebarFooter() {
 function UserMenu() {
   const { user, logout } = useAuth();
   const { t } = useLang();
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   if (!user) return null;
-
-  const isAdmin = user.role === "admin";
 
   return (
     <DropdownMenu>
@@ -129,6 +130,15 @@ function UserMenu() {
             </DropdownMenuItem>
           </Link>
         )}
+
+        <DropdownMenuItem
+          className="cursor-pointer"
+          onClick={(e) => { e.preventDefault(); setTheme(isDark ? "light" : "dark"); }}
+        >
+          {isDark ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+          {isDark ? t("themeLight") : t("themeDark")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
 
         <DropdownMenuItem
           className="text-destructive focus:text-destructive cursor-pointer"

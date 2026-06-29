@@ -5,7 +5,7 @@ import type { Lang } from "@/i18n/translations";
 import {
   HelpCircle, MapPin, Package2, ScanLine, AlertTriangle, Truck,
   History, Building2, FileText, ClipboardList, ArrowLeftRight, PackageCheck, Scale,
-  LayoutGrid,
+  LayoutGrid, Moon,
 } from "lucide-react";
 
 // IMPORTANT: keep this page in sync with the app's features. Whenever a feature
@@ -58,6 +58,9 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: History, title: "History", paras: [
           "Every change is recorded in History with who did it and when — your audit trail.",
         ]},
+        { icon: Moon, title: "Dark mode", paras: [
+          "Open the account menu in the top-right (where your name shows) and pick Dark mode to switch the whole app to a dark theme — tap again for Light mode. Your choice is remembered on this device.",
+        ]},
       ],
     },
     standard: {
@@ -88,6 +91,9 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
         { icon: History, title: "History", paras: [
           "Every receive, consume, count, move and order is recorded in History with who and why.",
+        ]},
+        { icon: Moon, title: "Dark mode", paras: [
+          "Open the account menu in the top-right (where your name shows) and pick Dark mode to switch the whole app to a dark theme — tap again for Light mode. Your choice is remembered on this device.",
         ]},
       ],
     },
@@ -133,6 +139,9 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         { icon: History, title: "Zgodovina", paras: [
           "Vsaka sprememba je zabeležena v Zgodovini — kdo jo je naredil in kdaj.",
         ]},
+        { icon: Moon, title: "Temni način", paras: [
+          "Odpri meni računa zgoraj desno (kjer je tvoje ime) in izberi Temni način, da celotno aplikacijo preklopiš na temno temo — znova pritisni za Svetli način. Izbira se zapomni na tej napravi.",
+        ]},
       ],
     },
     standard: {
@@ -163,6 +172,9 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
         { icon: History, title: "Zgodovina", paras: [
           "Vsak prevzem, poraba, popis, premik in naročilo so zabeleženi v Zgodovini — kdo in zakaj.",
+        ]},
+        { icon: Moon, title: "Temni način", paras: [
+          "Odpri meni računa zgoraj desno (kjer je tvoje ime) in izberi Temni način, da celotno aplikacijo preklopiš na temno temo — znova pritisni za Svetli način. Izbira se zapomni na tej napravi.",
         ]},
       ],
     },
