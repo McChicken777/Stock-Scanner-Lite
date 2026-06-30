@@ -546,8 +546,8 @@ function AdminBottomNav() {
                 "flex flex-col items-center justify-center h-full space-y-1 transition-colors",
                 tab.active ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
               )}>
-                <tab.icon className="h-6 w-6" strokeWidth={tab.active ? 2.5 : 2} />
-                <span className="text-[10px] font-medium tracking-wide uppercase">{tab.label}</span>
+                <tab.icon className="h-6 w-6 shrink-0" strokeWidth={tab.active ? 2.5 : 2} />
+                <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{tab.label}</span>
               </div>
             </Link>
           ))}
@@ -565,7 +565,7 @@ function AdminBottomNav() {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-medium tracking-wide uppercase">{t("navSettings")}</span>
+              <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{t("navSettings")}</span>
             </div>
           </button>
         </div>
@@ -810,7 +810,7 @@ function SupervisorBottomNav() {
                 isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
               )}>
                 <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+                <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{item.label}</span>
               </div>
             </Link>
           );
@@ -857,7 +857,7 @@ function InventoryBottomNav() {
                 isActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
               )}>
                 <item.icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+                <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{item.label}</span>
               </div>
             </Link>
           );
@@ -894,7 +894,7 @@ function WorkOrdersBottomNav() {
                 realActive ? "text-primary" : "text-secondary-foreground/60 hover:text-secondary-foreground"
               )}>
                 <item.icon className="h-6 w-6" strokeWidth={realActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+                <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{item.label}</span>
               </div>
             </Link>
           );
@@ -968,7 +968,7 @@ function WorkerBottomNav() {
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-medium tracking-wide uppercase">{item.label}</span>
+                <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{item.label}</span>
               </div>
             </Link>
           );
@@ -1014,7 +1014,7 @@ function LiteWorkerBottomNav() {
               tab.active ? "text-primary" : "text-secondary-foreground/70",
             )}>
               <tab.icon className="h-6 w-6" strokeWidth={tab.active ? 2.5 : 2} />
-              <span className="text-[10px] font-medium tracking-wide uppercase">{tab.label}</span>
+              <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{tab.label}</span>
             </div>
           </Link>
         ))}
