@@ -53,6 +53,14 @@ export default function QuotesPage() {
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
 
+  const { data: company } = useQuery<{ currency: string }>({
+    queryKey: ["/api/company"],
+    queryFn: async () => (await fetch("/api/company", { credentials: "include" })).json(),
+  });
+  const currency = company?.currency ?? "EUR";
+  const fmtMoney = (amount: number | string) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(amount));
+
   const { data: quotes = [], isLoading } = useQuery<QuoteRow[]>({
     queryKey: ["/api/quotes", fromDate, toDate],
     queryFn: async () => {
@@ -169,7 +177,7 @@ export default function QuotesPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">{format(new Date(q.createdAt), "dd MMM yyyy")}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono font-black text-lg">${Number(q.total).toFixed(2)}</p>
+                    <p className="font-mono font-black text-lg">{fmtMoney(q.total)}</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>
