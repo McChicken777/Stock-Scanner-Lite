@@ -324,6 +324,7 @@ function AdminDesktopSidebar() {
 
             <SidebarSection label={t("navBusiness")} />
             <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
+            <SideNavItem href="/quotes" icon={FileText} label={t("navQuotes")} active={location.startsWith("/quotes")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
             <SideNavItem href="/admin/catalog" icon={BookOpen} label={t("navCatalog")} active={location.startsWith("/admin/catalog")} />
             <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />

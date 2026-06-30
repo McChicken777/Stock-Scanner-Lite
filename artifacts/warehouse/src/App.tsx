@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
@@ -10,70 +10,73 @@ import { LangProvider } from "@/contexts/lang";
 import { SetupWizard } from "@/pages/setup-wizard";
 import { FabriflowMark } from "@/components/fabriflow-logo";
 
-// Inventory Pages
-import Dashboard from "@/pages/dashboard";
-import ScanPage from "@/pages/scan";
-import LocationsPage from "@/pages/locations";
-import LocationPage from "@/pages/location";
-import ItemActionPage from "@/pages/item-action";
-import HelpPage from "@/pages/help";
-import InventoryHomePage from "@/pages/inventory-home";
-import LocationsPrintSheetPage from "@/pages/locations-print-sheet";
-import ProductsPage from "@/pages/products";
-import ProductFormPage from "@/pages/product-form";
-import HistoryPage from "@/pages/history";
-import AdminUsersPage from "@/pages/admin-users";
-import AdminCompanyPage from "@/pages/admin-company";
-import AdminRolesPage from "@/pages/admin-roles";
-import AdminProceduresPage from "@/pages/admin-procedures";
-import AdminProcedureInputsPage from "@/pages/admin-procedure-inputs";
-
-import AdminSuppliersPage from "@/pages/admin-suppliers";
-import OwnerPanelPage from "@/pages/owner-panel";
-import TasksDashboardPage from "@/pages/tasks-dashboard";
-import OrdersPage from "@/pages/orders";
-import ValuationPage from "@/pages/valuation";
+// Eager pages — the shell + first screens that must never flash a loader.
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
-import AdminZonesPage from "@/pages/admin-zones";
-import SupervisorPage from "@/pages/supervisor";
-import AttendancePage from "@/pages/attendance";
-import AttendanceLivePage from "@/pages/attendance-live";
-import AttendanceReportPage from "@/pages/attendance-report";
-import AdminLeaveInboxPage from "@/pages/admin-leave-inbox";
+
+// Lazy pages — each becomes its own chunk loaded on demand, so the browser no
+// longer parses every page up front. Page modules use `export default`, so the
+// bare `import()` resolves to the right component.
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const ScanPage = lazy(() => import("@/pages/scan"));
+const LocationsPage = lazy(() => import("@/pages/locations"));
+const LocationPage = lazy(() => import("@/pages/location"));
+const ItemActionPage = lazy(() => import("@/pages/item-action"));
+const HelpPage = lazy(() => import("@/pages/help"));
+const InventoryHomePage = lazy(() => import("@/pages/inventory-home"));
+const LocationsPrintSheetPage = lazy(() => import("@/pages/locations-print-sheet"));
+const ProductsPage = lazy(() => import("@/pages/products"));
+const ProductFormPage = lazy(() => import("@/pages/product-form"));
+const HistoryPage = lazy(() => import("@/pages/history"));
+const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
+const AdminCompanyPage = lazy(() => import("@/pages/admin-company"));
+const AdminRolesPage = lazy(() => import("@/pages/admin-roles"));
+const AdminProceduresPage = lazy(() => import("@/pages/admin-procedures"));
+const AdminProcedureInputsPage = lazy(() => import("@/pages/admin-procedure-inputs"));
+const AdminSuppliersPage = lazy(() => import("@/pages/admin-suppliers"));
+const OwnerPanelPage = lazy(() => import("@/pages/owner-panel"));
+const TasksDashboardPage = lazy(() => import("@/pages/tasks-dashboard"));
+const OrdersPage = lazy(() => import("@/pages/orders"));
+const ValuationPage = lazy(() => import("@/pages/valuation"));
+const AdminZonesPage = lazy(() => import("@/pages/admin-zones"));
+const SupervisorPage = lazy(() => import("@/pages/supervisor"));
+const AttendancePage = lazy(() => import("@/pages/attendance"));
+const AttendanceLivePage = lazy(() => import("@/pages/attendance-live"));
+const AttendanceReportPage = lazy(() => import("@/pages/attendance-report"));
+const AdminLeaveInboxPage = lazy(() => import("@/pages/admin-leave-inbox"));
 
 // Work Order Pages
-import WorkProjectsPage from "@/pages/work/projects";
-import WorkProjectDetailPage from "@/pages/work/project-detail";
-import WorkProjectFormPage from "@/pages/work/project-form";
-import WorkTemplatesPage from "@/pages/work/templates";
-import TemplateOutlinePage from "@/pages/work/template-outline";
-import WorkInboundPage from "@/pages/work/inbound";
-import WorkPrintTagPage from "@/pages/work/print-tag";
-import ReorderQueuePage from "@/pages/work/reorder-queue";
-import PurchaseOrdersPage from "@/pages/work/purchase-orders";
-import PaintQueuePage from "@/pages/work/paint-queue";
-import CuttingQueuePage from "@/pages/work/cutting-queue";
-import MaterialsPage from "@/pages/work/materials";
-import StocktakePage from "@/pages/work/stocktake";
-import AdminStationsPage from "@/pages/admin-stations";
-import QueuesPage from "@/pages/work/queues";
-import StationQueuePage from "@/pages/work/station-queue";
-import CustomersPage from "@/pages/customers";
-import CustomerDetailPage from "@/pages/customer-detail";
-import QuotesPage from "@/pages/quotes";
-import QuoteFormPage from "@/pages/quote-form";
-import QuoteDetailPage from "@/pages/quote-detail";
-import AnalyticsPage from "@/pages/analytics";
-import KioskPage from "@/pages/kiosk";
-import AdminAiWizardPage from "@/pages/admin-ai-wizard";
-import JoinPage from "@/pages/join";
-import StockImportPage from "@/pages/stock-import";
-import SourcingPage from "@/pages/sourcing";
-import SourcingDetailPage from "@/pages/sourcing-detail";
-import RfqQuotePage from "@/pages/rfq-quote";
-import AdminCatalogPage from "@/pages/admin-catalog";
-import QuotePublicPage from "@/pages/quote-public";
+const WorkProjectsPage = lazy(() => import("@/pages/work/projects"));
+const WorkProjectDetailPage = lazy(() => import("@/pages/work/project-detail"));
+const WorkProjectFormPage = lazy(() => import("@/pages/work/project-form"));
+const WorkTemplatesPage = lazy(() => import("@/pages/work/templates"));
+const TemplateOutlinePage = lazy(() => import("@/pages/work/template-outline"));
+const WorkInboundPage = lazy(() => import("@/pages/work/inbound"));
+const WorkPrintTagPage = lazy(() => import("@/pages/work/print-tag"));
+const ReorderQueuePage = lazy(() => import("@/pages/work/reorder-queue"));
+const PurchaseOrdersPage = lazy(() => import("@/pages/work/purchase-orders"));
+const PaintQueuePage = lazy(() => import("@/pages/work/paint-queue"));
+const CuttingQueuePage = lazy(() => import("@/pages/work/cutting-queue"));
+const MaterialsPage = lazy(() => import("@/pages/work/materials"));
+const StocktakePage = lazy(() => import("@/pages/work/stocktake"));
+const AdminStationsPage = lazy(() => import("@/pages/admin-stations"));
+const QueuesPage = lazy(() => import("@/pages/work/queues"));
+const StationQueuePage = lazy(() => import("@/pages/work/station-queue"));
+const CustomersPage = lazy(() => import("@/pages/customers"));
+const CustomerDetailPage = lazy(() => import("@/pages/customer-detail"));
+const QuotesPage = lazy(() => import("@/pages/quotes"));
+const QuoteFormPage = lazy(() => import("@/pages/quote-form"));
+const QuoteDetailPage = lazy(() => import("@/pages/quote-detail"));
+const AnalyticsPage = lazy(() => import("@/pages/analytics"));
+const KioskPage = lazy(() => import("@/pages/kiosk"));
+const AdminAiWizardPage = lazy(() => import("@/pages/admin-ai-wizard"));
+const JoinPage = lazy(() => import("@/pages/join"));
+const StockImportPage = lazy(() => import("@/pages/stock-import"));
+const SourcingPage = lazy(() => import("@/pages/sourcing"));
+const SourcingDetailPage = lazy(() => import("@/pages/sourcing-detail"));
+const RfqQuotePage = lazy(() => import("@/pages/rfq-quote"));
+const AdminCatalogPage = lazy(() => import("@/pages/admin-catalog"));
+const QuotePublicPage = lazy(() => import("@/pages/quote-public"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +86,16 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Suspense fallback while a lazy-loaded page chunk downloads. Centered spinner so
+// in-app navigation shows a brief loader in the content area (the shell stays put).
+function PageLoader() {
+  return (
+    <div className="min-h-[60dvh] flex items-center justify-center">
+      <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 function WorkerRoutes() {
   return (
@@ -200,7 +213,9 @@ function ProtectedRoutes() {
   if (user.role === "owner") {
     return (
       <AppLayout>
-        <OwnerPanelPage />
+        <Suspense fallback={<PageLoader />}>
+          <OwnerPanelPage />
+        </Suspense>
       </AppLayout>
     );
   }
@@ -210,7 +225,9 @@ function ProtectedRoutes() {
   if (user.role === "worker" && !user.isSupervisor) {
     return (
       <AppLayout>
-        {atLeast("standard") ? <WorkerRoutes /> : <LiteWorkerRoutes />}
+        <Suspense fallback={<PageLoader />}>
+          {atLeast("standard") ? <WorkerRoutes /> : <LiteWorkerRoutes />}
+        </Suspense>
       </AppLayout>
     );
   }
@@ -221,6 +238,7 @@ function ProtectedRoutes() {
         <SetupWizard onComplete={dismissWizard} onDismiss={dismissWizard} />
       )}
     <AppLayout>
+      <Suspense fallback={<PageLoader />}>
       {!atLeast("standard") ? <LiteAdminRoutes /> : (
       <Switch>
         {/* Admin home — Standard/Pro goes to Jobs */}
@@ -297,6 +315,7 @@ function ProtectedRoutes() {
         <Route component={NotFound} />
       </Switch>
       )}
+      </Suspense>
     </AppLayout>
     </>
   );
@@ -364,13 +383,15 @@ function App() {
           <AuthProvider>
             {!splashDone && <SplashScreen onDone={() => setSplashDone(true)} />}
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Switch>
-                <Route path="/kiosk" component={KioskPage} />
-                <Route path="/join/:token" component={JoinPage} />
-                <Route path="/rfq/:token" component={RfqQuotePage} />
-                <Route path="/q/:token" component={QuotePublicPage} />
-                <Route component={ProtectedRoutes} />
-              </Switch>
+              <Suspense fallback={<div className="min-h-[100dvh] flex items-center justify-center bg-background"><div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" /></div>}>
+                <Switch>
+                  <Route path="/kiosk" component={KioskPage} />
+                  <Route path="/join/:token" component={JoinPage} />
+                  <Route path="/rfq/:token" component={RfqQuotePage} />
+                  <Route path="/q/:token" component={QuotePublicPage} />
+                  <Route component={ProtectedRoutes} />
+                </Switch>
+              </Suspense>
             </WouterRouter>
             <Toaster />
           </AuthProvider>

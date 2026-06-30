@@ -42,6 +42,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split the big, rarely-changing libraries into a stable vendor chunk so
+        // they stay cached across app deploys (per-page chunks come from React.lazy).
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "data-vendor": ["@tanstack/react-query"],
+          "ui-vendor": ["lucide-react", "date-fns"],
+        },
+      },
+    },
   },
   server: {
     port,
