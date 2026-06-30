@@ -345,7 +345,7 @@ export default function ProductsPage() {
   const ProductCard = ({ product }: { product: ProductWithStock }) => (
     <div
       className={`bg-card rounded-xl p-4 border-2 shadow-sm relative overflow-hidden ${
-        product.isLowStock ? "border-destructive/40" : "border-border"
+        !lite && product.isLowStock ? "border-destructive/40" : "border-border"
       }`}
     >
       <div className="flex justify-between items-start mb-3">

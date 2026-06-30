@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 
 interface ProductStock {
   productId: number;
@@ -40,9 +40,15 @@ export default function ItemActionPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { atLeast } = usePlan();
   const qc = useQueryClient();
 
-  const [action, setAction] = useState<Action>("receive");
+  // LITE is presence-only: no on-hand counts, and the only quantity action is Move
+  // (a relocation, not a count change). Standard/Pro keeps Receive/Consume/Count too.
+  const lite = !atLeast("standard");
+  const actions = lite ? ACTIONS.filter((a) => a.value === "move") : ACTIONS;
+
+  const [action, setAction] = useState<Action>(lite ? "move" : "receive");
   const [locationId, setLocationId] = useState("");
   const [toLocationId, setToLocationId] = useState("");
   const [qty, setQty] = useState("");
@@ -136,8 +142,8 @@ export default function ItemActionPage() {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Stock summary */}
-        {isLoading ? (
+        {/* Stock summary — hidden in LITE (presence-only, no on-hand counts) */}
+        {!lite && (isLoading ? (
           <Skeleton className="h-20 w-full rounded-xl" />
         ) : stock ? (
           <div className="grid grid-cols-3 gap-2">
@@ -154,11 +160,11 @@ export default function ItemActionPage() {
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Free</p>
             </div>
           </div>
-        ) : null}
+        ) : null)}
 
-        {/* Action picker */}
-        <div className="flex gap-1 bg-muted p-1 rounded-xl">
-          {ACTIONS.map((a) => {
+        {/* Action picker — LITE shows Move only */}
+        <div className={`flex gap-1 bg-muted p-1 rounded-xl ${lite ? "hidden" : ""}`}>
+          {actions.map((a) => {
             const Icon = a.icon;
             return (
               <button
@@ -185,7 +191,7 @@ export default function ItemActionPage() {
             <option value="">Select a location…</option>
             {locations.map((l) => <option key={l.id} value={l.id}>{l.id}</option>)}
           </select>
-          {locationId && (
+          {locationId && !lite && (
             <p className="text-xs text-muted-foreground mt-1">
               Currently <span className="font-bold">{current}</span> here
               {action === "count" && " — Count sets the new total at this location"}
@@ -242,7 +248,11 @@ export default function ItemActionPage() {
                   className="w-full flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-sm hover:border-primary transition-colors"
                 >
                   <span className="font-medium">{l.locationId}</span>
-                  <span className="font-mono font-bold tabular-nums">{l.quantity}</span>
+                  {lite ? (
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+                  ) : (
+                    <span className="font-mono font-bold tabular-nums">{l.quantity}</span>
+                  )}
                 </button>
               ))}
             </div>

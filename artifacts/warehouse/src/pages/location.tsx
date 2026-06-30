@@ -192,9 +192,12 @@ function StockItem({
   };
 
   const isLow = optimisticQty < bufferStock;
+  // LITE is presence-only: the on-hand count is hidden and unreliable, so we don't
+  // derive "low stock" visuals from it. Workers flag low based on the shelf instead.
+  const showLow = !lite && isLow;
 
   return (
-    <Card className={`border-2 ${isLow ? 'border-destructive/30 bg-destructive/5' : 'border-border'} overflow-hidden`}>
+    <Card className={`border-2 ${showLow ? 'border-destructive/30 bg-destructive/5' : 'border-border'} overflow-hidden`}>
       <CardContent className="p-0">
         <div className="p-4 border-b border-border/50 bg-background/50 flex justify-between items-start gap-3">
           <div className="min-w-0">
@@ -219,7 +222,7 @@ function StockItem({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {isLow && flagState !== "prompt" && (
+            {showLow && flagState !== "prompt" && (
               <span className="text-xs font-bold text-destructive uppercase tracking-wider">
                 {t("locationLowStock")}
               </span>
@@ -279,7 +282,7 @@ function StockItem({
                 className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors ${
                   flagState === "done"
                     ? "text-green-500"
-                    : isLow
+                    : showLow
                     ? "text-orange-500 hover:bg-orange-100 active:bg-orange-200"
                     : "text-muted-foreground/50 hover:text-orange-400 hover:bg-muted active:bg-muted"
                 }`}
@@ -298,9 +301,9 @@ function StockItem({
 
         {lite ? (
         <div className="flex h-20 items-center justify-between gap-3 px-4 bg-background">
-          <div className="flex items-baseline gap-2 font-mono">
-            <span className="text-4xl font-black">{optimisticQty}</span>
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">{t("locationInStock")}</span>
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-base font-bold uppercase tracking-wide text-foreground">{t("locationInStock")}</span>
           </div>
           {isAdmin && (
             <span className="text-xs text-muted-foreground text-right max-w-[55%] leading-snug">

@@ -469,15 +469,17 @@ export default function Dashboard() {
               <div key={entry.id} className="flex gap-3 relative before:absolute before:left-[11px] before:top-6 before:bottom-[-16px] before:w-[2px] before:bg-muted last:before:hidden">
                 <div className="mt-1">
                   <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold z-10 relative">
-                    {entry.delta > 0 ? "+" : ""}
+                    {atLeast("standard") ? (entry.delta > 0 ? "+" : "") : <span className="h-2 w-2 rounded-full bg-primary" />}
                   </div>
                 </div>
                 <div className="flex-1 pb-1">
                   <div className="flex justify-between items-start">
                     <p className="text-sm font-semibold">{entry.productName}</p>
-                    <span className={`text-sm font-bold ${entry.delta > 0 ? "text-green-600" : "text-destructive"}`}>
-                      {entry.delta > 0 ? "+" : ""}{entry.delta}
-                    </span>
+                    {atLeast("standard") && (
+                      <span className={`text-sm font-bold ${entry.delta > 0 ? "text-green-600" : "text-destructive"}`}>
+                        {entry.delta > 0 ? "+" : ""}{entry.delta}
+                      </span>
+                    )}
                   </div>
                   <div className="flex justify-between items-center mt-0.5 text-xs text-muted-foreground">
                     <span>{t("dashLoc")}: {entry.locationName || entry.locationId}</span>

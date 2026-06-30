@@ -5,11 +5,17 @@ import { ArrowUpRight, ArrowDownRight, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useLang } from "@/contexts/lang";
+import { usePlan } from "@/contexts/auth";
 
 export default function HistoryPage() {
   const { data: history, isLoading } = useListHistory();
   const { t } = useLang();
+  const { atLeast } = usePlan();
   const [search, setSearch] = useState("");
+
+  // LITE is presence-only: history reads as a movement/event log (icon + action +
+  // location + who + when), not a quantity ledger — so we hide the delta and prev→new.
+  const lite = !atLeast("standard");
 
   const filteredHistory = history?.filter(entry =>
     entry.productName.toLowerCase().includes(search.toLowerCase()) ||
@@ -60,13 +66,15 @@ export default function HistoryPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start mb-1">
                     <p className="font-bold truncate pr-2 text-foreground">{entry.productName}</p>
-                    <span className={`font-mono font-bold whitespace-nowrap ${
-                      isAdd ? 'text-green-600 dark:text-green-400' :
-                      isRemove ? 'text-red-600 dark:text-red-400' :
-                      'text-muted-foreground'
-                    }`}>
-                      {entry.delta > 0 ? "+" : ""}{entry.delta}
-                    </span>
+                    {!lite && (
+                      <span className={`font-mono font-bold whitespace-nowrap ${
+                        isAdd ? 'text-green-600 dark:text-green-400' :
+                        isRemove ? 'text-red-600 dark:text-red-400' :
+                        'text-muted-foreground'
+                      }`}>
+                        {entry.delta > 0 ? "+" : ""}{entry.delta}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex justify-between items-end text-xs text-muted-foreground">
@@ -76,7 +84,7 @@ export default function HistoryPage() {
                           {t("dashLoc")}: {entry.locationName || entry.locationId}
                         </Link>
                       </p>
-                      <p className="font-mono">{entry.previousQuantity} → {entry.newQuantity}</p>
+                      {!lite && <p className="font-mono">{entry.previousQuantity} → {entry.newQuantity}</p>}
                       {(entry.reason || entry.changedBy) && (
                         <p className="flex items-center gap-1.5 flex-wrap">
                           {entry.reason && (

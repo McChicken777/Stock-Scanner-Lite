@@ -177,7 +177,7 @@ export default function QuotesPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">{format(new Date(q.createdAt), "dd MMM yyyy")}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-mono font-black text-lg">{fmtMoney(q.total)}</p>
+                    <p className="font-black text-lg tabular-nums">{fmtMoney(q.total)}</p>
                   </div>
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                 </div>

@@ -255,18 +255,18 @@ export default function QuoteDetailPage() {
                   {Number(it.quantity)} × {fmt(it.unitPrice)}
                 </p>
               </div>
-              <p className="font-mono font-bold text-sm">{fmt(it.lineTotal)}</p>
+              <p className="tabular-nums font-bold text-sm">{fmt(it.lineTotal)}</p>
             </div>
           ))}
         </div>
 
         {/* Totals */}
         <div className="bg-muted/30 border-2 border-border rounded-xl p-3 space-y-1.5 text-sm">
-          <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="font-mono">{fmt(quote.subtotal)}</span></div>
-          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")} ({Number(quote.discount)}%)</span><span className="font-mono">-{fmt(Number(quote.subtotal) * Number(quote.discount) / 100)}</span></div>}
-          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="font-mono">{fmt(quote.taxAmount)}</span></div>}
+          <div className="flex justify-between"><span>{t("quoteSubtotal")}</span><span className="tabular-nums">{fmt(quote.subtotal)}</span></div>
+          {Number(quote.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteDiscount")} ({Number(quote.discount)}%)</span><span className="tabular-nums">-{fmt(Number(quote.subtotal) * Number(quote.discount) / 100)}</span></div>}
+          {Number(quote.taxRate) > 0 && <div className="flex justify-between text-muted-foreground"><span>{t("quoteTax")} ({Number(quote.taxRate)}%)</span><span className="tabular-nums">{fmt(quote.taxAmount)}</span></div>}
           <div className="border-t-2 border-border pt-2 flex justify-between text-lg font-black">
-            <span>{t("quoteTotal")}</span><span className="font-mono">{fmt(quote.total)}</span>
+            <span>{t("quoteTotal")}</span><span className="tabular-nums">{fmt(quote.total)}</span>
           </div>
         </div>
 
@@ -346,7 +346,7 @@ export default function QuoteDetailPage() {
                     >
                       <span className="font-semibold text-left">v{r.revisionNumber} · {r.note ?? t("quoteRevisionEdited")}</span>
                       <span className="text-muted-foreground flex items-center gap-2">
-                        {snapTotal != null && <span className="font-mono">{fmt(snapTotal)}</span>}
+                        {snapTotal != null && <span className="tabular-nums">{fmt(snapTotal)}</span>}
                         {format(new Date(r.createdAt), "dd MMM HH:mm")}
                         <span className="text-[10px]">{isOpen ? "▲" : "▼"}</span>
                       </span>
@@ -355,7 +355,7 @@ export default function QuoteDetailPage() {
                       <div className="bg-muted/40 border-t border-border px-3 py-2 space-y-1">
                         {r.snapshot?.items?.length ? (
                           r.snapshot.items.map((it, i) => (
-                            <div key={i} className="flex justify-between text-[11px] font-mono">
+                            <div key={i} className="flex justify-between text-[11px] tabular-nums">
                               <span className="truncate pr-2">{it.name} × {it.quantity}</span>
                               <span>{fmt(it.lineTotal)}</span>
                             </div>

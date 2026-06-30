@@ -565,7 +565,7 @@ function AdminBottomNav() {
                   </span>
                 )}
               </div>
-              <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{t("navSettings")}</span>
+              <span className="w-full px-0.5 text-center text-[10px] font-medium tracking-tight uppercase leading-[1.1] line-clamp-2">{t("navMore")}</span>
             </div>
           </button>
         </div>
@@ -574,7 +574,7 @@ function AdminBottomNav() {
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-0 max-h-[85dvh] flex flex-col">
           <SheetHeader className="pb-2 flex-shrink-0">
-            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("navSettings")}</SheetTitle>
+            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("navMore")}</SheetTitle>
           </SheetHeader>
 
           <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
