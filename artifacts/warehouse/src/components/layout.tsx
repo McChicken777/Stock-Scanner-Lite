@@ -317,14 +317,12 @@ function AdminDesktopSidebar() {
             <SidebarSection label={t("navInventory")} />
             <SideNavItem href="/locations" icon={MapPin} label={t("locationsTitle")} active={location === "/locations" || location.startsWith("/locations/")} />
             <SideNavItem href="/products" icon={Package2} label={t("navProductsStock")} active={location.startsWith("/products")} badge={attention?.lowStock ?? 0} />
-            <SideNavItem href="/history" icon={History} label={t("navHistory")} active={location.startsWith("/history")} />
 
             <SidebarSection label={t("navPeople")} />
             <SideNavItem href="/admin/users" icon={Users} label={t("navManageUsers")} active={location.startsWith("/admin/users")} />
 
             <SidebarSection label={t("navBusiness")} />
-            <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers")} />
-            <SideNavItem href="/quotes" icon={FileText} label={t("navQuotes")} active={location.startsWith("/quotes")} />
+            <SideNavItem href="/customers" icon={Store} label={t("navCustomers")} active={location.startsWith("/customers") || location.startsWith("/quotes")} />
             <SideNavItem href="/admin/suppliers" icon={Truck} label={t("navSuppliers")} active={location.startsWith("/admin/suppliers")} />
             <SideNavItem href="/admin/catalog" icon={BookOpen} label={t("navCatalog")} active={location.startsWith("/admin/catalog")} />
             <SideNavItem href="/sourcing" icon={Scale} label={t("navSourcing")} active={location.startsWith("/sourcing")} badge={attention?.openRfqsWithResponses ?? 0} pulse />
@@ -660,22 +658,6 @@ function AdminBottomNav() {
                       <p className="text-xs text-muted-foreground">{t("descLeaveRequests")}</p>
                     </div>
                     <AttentionBadge count={attention?.leaveRequests ?? 0} />
-                  </div>
-                </Link>
-              </>
-            )}
-
-            {/* Inventory section — Lite only (History; Locations is a bottom tab) */}
-            {!atLeast("standard") && (
-              <>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navInventory")}</p>
-                <Link href="/history" onClick={() => setSettingsOpen(false)}>
-                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                    <History className="h-5 w-5 text-muted-foreground shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold">{t("navHistory")}</p>
-                      <p className="text-xs text-muted-foreground">{t("descHistory")}</p>
-                    </div>
                   </div>
                 </Link>
               </>
