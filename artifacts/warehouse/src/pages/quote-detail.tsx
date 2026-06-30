@@ -307,6 +307,14 @@ export default function QuoteDetailPage() {
           </div>
         )}
 
+        {/* Lite: online approval link not available yet — give the admin a clear next step */}
+        {!atLeast("standard") && quote.status === "sent" && (
+          <div className="bg-muted/50 border border-border rounded-xl p-3 flex items-start gap-2">
+            <Link2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-xs text-muted-foreground">{t("quoteApprovalSoon")}</p>
+          </div>
+        )}
+
         {quote.workProjectId && (
           <Link href={`/work/projects/${quote.workProjectId}`}>
             <div className="bg-purple-50 border-2 border-purple-300 rounded-xl p-3 flex items-center gap-2 hover:bg-purple-100 cursor-pointer">

@@ -110,8 +110,46 @@ function LiteWorkerRoutes() {
     <Switch>
       <Route path="/scan" component={ScanPage} />
       <Route path="/location/:id" component={LocationPage} />
+      <Route path="/help" component={HelpPage} />
       <Route path="/"><Redirect to="/scan" /></Route>
       <Route component={() => <Redirect to="/scan" />} />
+    </Switch>
+  );
+}
+
+// Lite admins/supervisors only get the inventory + sales routes. Every Standard/Pro
+// URL (analytics, work orders, tasks, attendance, …) is unmounted here so typing it
+// redirects to the dashboard instead of loading a dead-end paywall/empty page.
+function LiteAdminRoutes() {
+  return (
+    <Switch>
+      <Route path="/"><Redirect to="/dashboard" /></Route>
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/inventory" component={InventoryHomePage} />
+      <Route path="/locations/print-sheet" component={LocationsPrintSheetPage} />
+      <Route path="/scan" component={ScanPage} />
+      <Route path="/locations" component={LocationsPage} />
+      <Route path="/location/:id" component={LocationPage} />
+      <Route path="/item/:productId" component={ItemActionPage} />
+      <Route path="/products" component={ProductsPage} />
+      <Route path="/products/new" component={ProductFormPage} />
+      <Route path="/products/:id/edit" component={ProductFormPage} />
+      <Route path="/history" component={HistoryPage} />
+      <Route path="/help" component={HelpPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/company" component={AdminCompanyPage} />
+      <Route path="/admin/suppliers" component={AdminSuppliersPage} />
+      <Route path="/sourcing" component={SourcingPage} />
+      <Route path="/sourcing/:id" component={SourcingDetailPage} />
+      <Route path="/admin/stock-import" component={StockImportPage} />
+      <Route path="/admin/catalog" component={AdminCatalogPage} />
+      <Route path="/customers" component={CustomersPage} />
+      <Route path="/customers/:id" component={CustomerDetailPage} />
+      <Route path="/quotes" component={QuotesPage} />
+      <Route path="/quotes/new" component={QuoteFormPage} />
+      <Route path="/quotes/:id/edit" component={QuoteFormPage} />
+      <Route path="/quotes/:id" component={QuoteDetailPage} />
+      <Route component={() => <Redirect to="/dashboard" />} />
     </Switch>
   );
 }
@@ -128,13 +166,16 @@ function ProtectedRoutes() {
   const { data: stationTypes } = useQuery<{ id: number }[]>({
     queryKey: ["/api/stations/types"],
     queryFn: () => fetch("/api/stations/types", { credentials: "include" }).then((r) => r.json()),
-    enabled: !!user && user.role === "admin" && !wizardDismissed,
+    enabled: !!user && user.role === "admin" && !wizardDismissed && atLeast("standard"),
     staleTime: 60_000,
   });
 
+  // The setup wizard configures production stations/roles — Standard/Pro concepts.
+  // Lite has no manufacturing flow, so it must never see the wizard.
   const showWizard =
     !wizardDismissed &&
     user?.role === "admin" &&
+    atLeast("standard") &&
     Array.isArray(stationTypes) &&
     stationTypes.length === 0;
 
@@ -180,9 +221,10 @@ function ProtectedRoutes() {
         <SetupWizard onComplete={dismissWizard} onDismiss={dismissWizard} />
       )}
     <AppLayout>
+      {!atLeast("standard") ? <LiteAdminRoutes /> : (
       <Switch>
-        {/* Admin home — Lite goes to Inventory home, Standard/Pro goes to Jobs */}
-        <Route path="/"><Redirect to={atLeast("standard") ? "/work/projects" : "/dashboard"} /></Route>
+        {/* Admin home — Standard/Pro goes to Jobs */}
+        <Route path="/"><Redirect to="/work/projects" /></Route>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/inventory" component={InventoryHomePage} />
         <Route path="/locations/print-sheet" component={LocationsPrintSheetPage} />
@@ -254,6 +296,7 @@ function ProtectedRoutes() {
 
         <Route component={NotFound} />
       </Switch>
+      )}
     </AppLayout>
     </>
   );

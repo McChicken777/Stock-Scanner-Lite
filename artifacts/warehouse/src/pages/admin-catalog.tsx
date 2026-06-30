@@ -52,6 +52,7 @@ const T = {
     uncategorised: "Uncategorised",
     noCategories: "No categories yet — create one to organise your catalog.",
     noItems: "No items in this category.",
+    noItemsDesc: "Your catalog holds the products and services you sell. Add items here, then drop them into quotes in one tap. Add them one by one or import a CSV.",
     name: "Name",
     price: "Unit price",
     desc: "Description (optional)",
@@ -76,6 +77,7 @@ const T = {
     uncategorised: "Nekategorizirano",
     noCategories: "Še ni kategorij — ustvarite eno za organizacijo kataloga.",
     noItems: "V tej kategoriji ni artiklov.",
+    noItemsDesc: "Katalog vsebuje izdelke in storitve, ki jih prodajate. Tukaj dodajte artikle in jih nato z enim dotikom dodajte v ponudbe. Dodajte jih posamično ali uvozite CSV.",
     name: "Naziv",
     price: "Cena (enota)",
     desc: "Opis (neobvezno)",
@@ -845,7 +847,8 @@ export default function AdminCatalogPage() {
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Tag className="h-8 w-8 opacity-30 mx-auto mb-2" />
-              <p className="text-sm">{L.noItems}</p>
+              <p className="text-sm font-medium text-foreground">{L.noItems}</p>
+              <p className="text-xs max-w-sm mx-auto mt-1.5">{L.noItemsDesc}</p>
             </div>
           ) : (
             <div className="space-y-1">

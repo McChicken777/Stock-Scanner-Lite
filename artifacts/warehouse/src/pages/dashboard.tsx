@@ -97,7 +97,7 @@ export default function Dashboard() {
       return res.json();
     },
     refetchInterval: 10000,
-    enabled: isAdmin,
+    enabled: isAdmin && atLeast("standard"),
   });
 
   const { data: live = [] } = useQuery<AttendanceLiveRow[]>({
@@ -108,7 +108,7 @@ export default function Dashboard() {
       return res.json();
     },
     refetchInterval: 15000,
-    enabled: isAdmin,
+    enabled: isAdmin && atLeast("standard"),
   });
 
   const { data: pendingLeave = [] } = useQuery<PendingLeave[]>({
@@ -118,7 +118,7 @@ export default function Dashboard() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: isAdmin,
+    enabled: isAdmin && atLeast("standard"),
   });
 
   const { data: projects = [] } = useQuery<WorkProject[]>({
@@ -128,7 +128,7 @@ export default function Dashboard() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: isAdmin,
+    enabled: isAdmin && atLeast("standard"),
   });
   const openProjects = projects.filter((p) => p.status !== "completed" && p.status !== "cancelled");
 
@@ -215,12 +215,16 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-2 mb-3">
+            <div className={`grid ${atLeast("standard") ? "grid-cols-4" : "grid-cols-3"} gap-2 mb-3`}>
               {[
                 { key: "draft", label: t("statusDraft"), color: "text-slate-700" },
                 { key: "sent", label: t("statusSent"), color: "text-blue-700" },
                 { key: "approved", label: t("statusApproved"), color: "text-green-700" },
-                { key: "converted", label: t("statusConverted"), color: "text-purple-700" },
+                // "Converted" means a quote became a work order — a Standard/Pro flow
+                // Lite cannot perform, so it's hidden to avoid a confusing dead-end.
+                ...(atLeast("standard")
+                  ? [{ key: "converted", label: t("statusConverted"), color: "text-purple-700" }]
+                  : []),
               ].map((s) => (
                 <div key={s.key} className="bg-background border border-border rounded-lg p-2 text-center">
                   <p className={`text-xl font-black font-mono ${s.color}`}>{quoteCounts[s.key] ?? 0}</p>

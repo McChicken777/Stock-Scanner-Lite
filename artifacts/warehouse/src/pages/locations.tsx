@@ -435,8 +435,16 @@ export default function LocationsPage() {
         {isLoading ? (
           [1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
         ) : filteredLocations?.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            {t("locationsNone")}
+          <div className="flex flex-col items-center text-center py-12 gap-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <MapPin className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <p className="text-muted-foreground">{t("locationsNone")}</p>
+            {!search && (
+              <Button className="font-bold" onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" /> {t("locationsAddFirst")}
+              </Button>
+            )}
           </div>
         ) : (
           filteredLocations?.map((location) => (

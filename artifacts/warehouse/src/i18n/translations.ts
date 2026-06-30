@@ -242,7 +242,7 @@ const KEYS = [
   "tutorialGotIt", "tutorialNext", "tutorialSkip",
 
   // ── Bottom nav / section switcher ─────────────────────────────────────────
-  "navInventory", "navDashboard", "navScan", "navHistory", "navOrders", "navHelp", "navQuotes",
+  "navInventory", "navDashboard", "navScan", "navHistory", "descHistory", "navOrders", "navHelp", "navQuotes",
 
   // ── Suppliers ─────────────────────────────────────────────────────────────
   "suppliersAdd", "suppliersNamePlaceholder", "suppliersUpdate",
@@ -270,7 +270,7 @@ const KEYS = [
 
   // ── Locations ─────────────────────────────────────────────────────────────
   "locationsTitle", "locationsCreateDialog", "locationsIdLabel", "locationsDescLabel",
-  "locationsSave", "locationsSearchPlaceholder", "locationsNone",
+  "locationsSave", "locationsSearchPlaceholder", "locationsNone", "locationsAddFirst",
   "locationsDeleteQ", "locationsDeleteDesc",
 
   // ── Location (single) ─────────────────────────────────────────────────────
@@ -353,7 +353,7 @@ const KEYS = [
 
   // ── Scan ──────────────────────────────────────────────────────────────────
   "scanTitle", "scanDesc", "scanManualEntry", "scanManualDesc", "scanLocationId",
-  "scanOpenLocation", "scanBackToCamera", "scanCameraError",
+  "scanOpenLocation", "scanBackToCamera", "scanCameraError", "scanWorkerHint",
 
   // ── Work order deletion ───────────────────────────────────────────────────
   "jobsDeleteOrder", "jobsDeleteOrderDesc",
@@ -404,7 +404,7 @@ const KEYS = [
   "locationCurrently", "locationNoChanges",
 
   // ── Audit pass: quote-detail / dashboard / history ──────────────────────────
-  "quoteIssuedBy", "quoteCustomerLink", "quoteCustomerLinkHelp", "quoteLinkCopied", "quoteCopy",
+  "quoteIssuedBy", "quoteCustomerLink", "quoteCustomerLinkHelp", "quoteApprovalSoon", "quoteLinkCopied", "quoteCopy",
   "dashRetryLater", "dashTotal", "dashLeaveRequests", "dashPendingApproval", "dashLoc",
   "attStatusIn", "attStatusOut", "attStatusSick", "attStatusVac", "attStatusAbsent",
   "historyBy",
@@ -479,7 +479,7 @@ const en: Dict = {
   navLeaveRequests: "Leave Requests",
   navProductsStock: "Products & Stock",
   navSuppliers: "Suppliers",
-  navSourcing: "Sourcing",
+  navSourcing: "Supplier Quotes",
   navCatalog: "Catalog",
   descSourcing: "Get & compare supplier quotes",
   navCompanyPlan: "Company & Plan",
@@ -1023,6 +1023,7 @@ const en: Dict = {
   navDashboard: "Dashboard",
   navScan: "Scan",
   navHistory: "History",
+  descHistory: "Audit trail of every stock change",
   navOrders: "Orders",
   navHelp: "Help",
   navQuotes: "Quotes",
@@ -1089,6 +1090,7 @@ const en: Dict = {
   locationsSave: "Save Location",
   locationsSearchPlaceholder: "Search locations…",
   locationsNone: "No locations found",
+  locationsAddFirst: "Add your first location",
   locationsDeleteQ: "Delete Location?",
   locationsDeleteDesc: "This will permanently delete this location. This cannot be undone. You can only delete empty locations.",
 
@@ -1306,6 +1308,7 @@ const en: Dict = {
   // ── Scan ──────────────────────────────────────────────────────────────────
   scanTitle: "Scan Location QR",
   scanDesc: "Point camera at a location label",
+  scanWorkerHint: "Scan the QR code on a shelf or bin to view or update its stock.",
   scanManualEntry: "Manual Entry",
   scanManualDesc: "Enter the location ID found on the label",
   scanLocationId: "Location ID",
@@ -1430,6 +1433,7 @@ const en: Dict = {
   quoteIssuedBy: "Issued by",
   quoteCustomerLink: "Customer link",
   quoteCustomerLinkHelp: "Share this link with your customer to view and accept the quote online.",
+  quoteApprovalSoon: "Online approval links are coming soon — for now, follow up with your customer by phone or email.",
   quoteLinkCopied: "Link copied!",
   quoteCopy: "Copy",
   dashRetryLater: "Please try again later",
@@ -1592,7 +1596,7 @@ const sl: Dict = {
   navLeaveRequests: "Vloge za dopust",
   navProductsStock: "Izdelki in zaloga",
   navSuppliers: "Dobavitelji",
-  navSourcing: "Nabava",
+  navSourcing: "Ponudbe dobaviteljev",
   navCatalog: "Katalog",
   descSourcing: "Pridobite in primerjajte ponudbe",
   navCompanyPlan: "Podjetje in paket",
@@ -2136,6 +2140,7 @@ const sl: Dict = {
   navDashboard: "Nadzorna plošča",
   navScan: "Skeniraj",
   navHistory: "Zgodovina",
+  descHistory: "Dnevnik vseh sprememb zaloge",
   navOrders: "Naročila",
   navHelp: "Pomoč",
   navQuotes: "Ponudbe",
@@ -2202,6 +2207,7 @@ const sl: Dict = {
   locationsSave: "Shrani lokacijo",
   locationsSearchPlaceholder: "Iskanje lokacij…",
   locationsNone: "Ni najdenih lokacij",
+  locationsAddFirst: "Dodajte prvo lokacijo",
   locationsDeleteQ: "Izbrisati lokacijo?",
   locationsDeleteDesc: "To bo trajno izbrisalo to lokacijo. Tega dejanja ni mogoče razveljaviti. Brisati je mogoče samo prazne lokacije.",
 
@@ -2419,6 +2425,7 @@ const sl: Dict = {
   // ── Scan ──────────────────────────────────────────────────────────────────
   scanTitle: "Skeniraj QR lokacije",
   scanDesc: "Usmeri kamero na oznako lokacije",
+  scanWorkerHint: "Skenirajte QR kodo na polici ali zaboju za ogled ali posodobitev zaloge.",
   scanManualEntry: "Ročni vnos",
   scanManualDesc: "Vnesite ID lokacije z oznake",
   scanLocationId: "ID lokacije",
@@ -2543,6 +2550,7 @@ const sl: Dict = {
   quoteIssuedBy: "Izdal",
   quoteCustomerLink: "Povezava za stranko",
   quoteCustomerLinkHelp: "Delite to povezavo s stranko za ogled in potrditev ponudbe na spletu.",
+  quoteApprovalSoon: "Spletne povezave za potrditev bodo kmalu na voljo — za zdaj se s stranko dogovorite po telefonu ali e-pošti.",
   quoteLinkCopied: "Povezava kopirana!",
   quoteCopy: "Kopiraj",
   dashRetryLater: "Poskusite znova pozneje",

@@ -110,6 +110,7 @@ export default function ScanPage() {
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight">{t("scanManualEntry")}</h1>
           <p className="text-muted-foreground mt-1">{t("scanManualDesc")}</p>
+          <p className="text-muted-foreground/80 text-sm mt-2">{t("scanWorkerHint")}</p>
         </div>
 
         {error && (
@@ -171,21 +172,21 @@ export default function ScanPage() {
           className="absolute inset-0 w-full h-full object-cover"
         />
 
-        {/* White overlay with viewfinder cutout via box-shadow */}
+        {/* Overlay with rounded viewfinder cutout via box-shadow */}
         <div className="absolute inset-0 flex items-center justify-center z-10">
           <div
-            className="relative w-72 h-72"
+            className="relative w-72 h-72 rounded-[2rem] border-2 border-primary/40 ring-1 ring-inset ring-white/10"
             style={{ boxShadow: "0 0 0 9999px var(--color-background, white)" }}
           >
             {/* Corner brackets */}
-            <div className="absolute top-0 left-0 w-9 h-9 border-t-[3px] border-l-[3px] border-primary rounded-tl-xl" />
-            <div className="absolute top-0 right-0 w-9 h-9 border-t-[3px] border-r-[3px] border-primary rounded-tr-xl" />
-            <div className="absolute bottom-0 left-0 w-9 h-9 border-b-[3px] border-l-[3px] border-primary rounded-bl-xl" />
-            <div className="absolute bottom-0 right-0 w-9 h-9 border-b-[3px] border-r-[3px] border-primary rounded-br-xl" />
+            <div className="absolute -top-px -left-px w-10 h-10 border-t-[3px] border-l-[3px] border-primary rounded-tl-[2rem]" />
+            <div className="absolute -top-px -right-px w-10 h-10 border-t-[3px] border-r-[3px] border-primary rounded-tr-[2rem]" />
+            <div className="absolute -bottom-px -left-px w-10 h-10 border-b-[3px] border-l-[3px] border-primary rounded-bl-[2rem]" />
+            <div className="absolute -bottom-px -right-px w-10 h-10 border-b-[3px] border-r-[3px] border-primary rounded-br-[2rem]" />
 
             {/* Animated scan line */}
             <div
-              className="absolute left-4 right-4 h-[2px] rounded-full bg-gradient-to-r from-transparent via-primary to-transparent"
+              className="absolute left-5 right-5 h-[2px] rounded-full bg-gradient-to-r from-transparent via-primary to-transparent"
               style={{ animation: "scan-line 1.8s ease-in-out infinite alternate" }}
             />
           </div>
@@ -202,6 +203,7 @@ export default function ScanPage() {
 
         {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 right-0 z-20 flex flex-col items-center p-6 pb-10">
+          <p className="text-muted-foreground text-sm text-center max-w-xs mb-4">{t("scanWorkerHint")}</p>
           <button
             onClick={() => setManualMode(true)}
             className="flex items-center justify-center gap-2 w-full max-w-xs h-14 rounded-2xl bg-secondary text-secondary-foreground font-bold text-sm uppercase tracking-wider active:scale-95 transition-transform"

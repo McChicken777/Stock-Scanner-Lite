@@ -48,8 +48,8 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "To add many items at once, import a CSV. The importer shows a column-mapping preview so you can tell it which column holds the name, price, and description before anything is saved — no more prices landing in the wrong field.",
           "Use the checkboxes on each row to select multiple items, then bulk-delete them in one click or use Raise / Drop to move all their prices by a percentage (handy at the start of each year). Made a mistake? The Undo button at the top of the items list reverses your recent catalog changes — adds, edits, single or bulk deletes, price changes, category changes and CSV imports — several steps back.",
         ]},
-        { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
-          "When you're not sure who's cheapest, open Sourcing and send one quote request to several suppliers at once. They fill in prices on a no-login link (their SKUs are pre-filled), and the app lays every response side by side — highlighting the cheapest total and the fastest delivery.",
+        { icon: Scale, title: "Supplier Quotes — compare supplier prices", paras: [
+          "When you're not sure who's cheapest, open Supplier Quotes and send one request to several suppliers at once. They fill in prices on a no-login link (their SKUs are pre-filled), and the app lays every response side by side — highlighting the cheapest total and the fastest delivery.",
           "Pick the winner and it becomes a purchase order in one tap. Every quote is remembered, so the \"Predicted cheapest supplier\" card can estimate the best supplier for what you're low on — order straight away, or send a fresh request to confirm.",
         ]},
         { icon: Building2, title: "Company settings", paras: [
@@ -82,8 +82,8 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Flag items that are running low (from a bin, or the shortage form). The Suppliers tab's \"Needs reorder\" groups flagged items by supplier; order by emailed purchase order or the supplier's web-store cart, then mark them ordered/arrived.",
           "Set each supplier's order method and order-email language; configure your sending email in Company settings.",
         ]},
-        { icon: Scale, title: "Sourcing — compare supplier quotes", paras: [
-          "Open Sourcing to send one quote request to several suppliers at once. They enter prices on a no-login link (SKUs pre-filled), and the app compares every response — flagging the cheapest total and the fastest delivery; the winner becomes a purchase order in one tap.",
+        { icon: Scale, title: "Supplier Quotes — compare supplier prices", paras: [
+          "Open Supplier Quotes to send one request to several suppliers at once. They enter prices on a no-login link (SKUs pre-filled), and the app compares every response — flagging the cheapest total and the fastest delivery; the winner becomes a purchase order in one tap.",
           "Every quote is stored, so the \"Predicted cheapest supplier\" card estimates the best supplier for your current shortages — order straight away from known prices, or send a fresh request to confirm.",
         ]},
         { icon: ArrowLeftRight, title: "Work orders & production", paras: [
@@ -129,8 +129,8 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Za množični uvoz uvozi CSV datoteko. Predogled preslikave stolpcev ti omogoča, da vsakemu stolpcu določiš vlogo (Ime / Cena / Opis), preden karkoli shraniš — cene nikoli ne pristanejo v napačnem polju.",
           "Z izbirnimi polji izberi več izdelkov in jih množično izbriši ali z gumboma Dvigni / Znižaj premakni vse cene za odstotek naenkrat (praktično ob začetku vsakega leta). Si se zmotil? Gumb Razveljavi na vrhu seznama izdelkov razveljavi zadnje spremembe kataloga — dodajanja, urejanja, posamične ali množične izbrise, spremembe cen, spremembe kategorij in uvoze CSV — več korakov nazaj.",
         ]},
-        { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
-          "Ko nisi prepričan, kdo je najcenejši, odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (njihove šifre so že izpolnjene), aplikacija pa vse odgovore postavi enega ob drugega — označi najnižji skupni znesek in najhitrejšo dobavo.",
+        { icon: Scale, title: "Ponudbe dobaviteljev — primerjava cen", paras: [
+          "Ko nisi prepričan, kdo je najcenejši, odpri Ponudbe dobaviteljev in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (njihove šifre so že izpolnjene), aplikacija pa vse odgovore postavi enega ob drugega — označi najnižji skupni znesek in najhitrejšo dobavo.",
           "Izberi zmagovalca in z enim dotikom nastane naročilnica. Vsaka ponudba se shrani, zato lahko kartica »Predvideni najcenejši dobavitelj« oceni najboljšega dobavitelja za izdelke, ki ti zmanjkujejo — naroči takoj ali pošlji novo povpraševanje za potrditev.",
         ]},
         { icon: Building2, title: "Nastavitve podjetja", paras: [
@@ -163,8 +163,8 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
           "Označi izdelke, ki jih zmanjkuje (na lokaciji ali prek obrazca). Razdelek »Za naročilo« v Dobaviteljih združi označene izdelke po dobaviteljih; naroči po e-pošti ali prek spletne košarice in označi kot naročeno/prispelo.",
           "Pri vsakem dobavitelju nastavi način naročanja in jezik e-pošte; pošiljateljsko e-pošto nastavi v Podjetje in paket.",
         ]},
-        { icon: Scale, title: "Nabava — primerjava ponudb dobaviteljev", paras: [
-          "Odpri Nabavo in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (šifre so že izpolnjene), aplikacija pa primerja vse odgovore — označi najnižji skupni znesek in najhitrejšo dobavo; zmagovalec z enim dotikom postane naročilnica.",
+        { icon: Scale, title: "Ponudbe dobaviteljev — primerjava cen", paras: [
+          "Odpri Ponudbe dobaviteljev in pošlji eno povpraševanje več dobaviteljem hkrati. Cene vpišejo prek povezave brez prijave (šifre so že izpolnjene), aplikacija pa primerja vse odgovore — označi najnižji skupni znesek in najhitrejšo dobavo; zmagovalec z enim dotikom postane naročilnica.",
           "Vsaka ponudba se shrani, zato kartica »Predvideni najcenejši dobavitelj« oceni najboljšega dobavitelja za trenutne primanjkljaje — naroči takoj po znanih cenah ali pošlji novo povpraševanje za potrditev.",
         ]},
         { icon: ArrowLeftRight, title: "Delovni nalogi in proizvodnja", paras: [

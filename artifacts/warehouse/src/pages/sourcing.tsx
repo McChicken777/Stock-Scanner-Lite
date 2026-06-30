@@ -34,7 +34,7 @@ interface PriceHistoryResp { latestPerSupplier: PriceHint[]; history: PriceHint[
 
 const T = {
   en: {
-    title: "Sourcing", subtitle: "Ask suppliers for prices, compare, and order the best.",
+    title: "Supplier Quotes", subtitle: "Ask suppliers for prices, compare, and order the best.",
     newReq: "New request", noReqs: "No sourcing requests yet.",
     open: "Open", ordered: "Ordered", cancelled: "Cancelled",
     items: "items", responded: "responded", of: "of",
@@ -56,7 +56,7 @@ const T = {
     sendQuotes: "Send quotes",
   },
   sl: {
-    title: "Nabava", subtitle: "Vprašajte dobavitelje za cene, primerjajte in naročite najboljše.",
+    title: "Ponudbe dobaviteljev", subtitle: "Vprašajte dobavitelje za cene, primerjajte in naročite najboljše.",
     newReq: "Novo povpraševanje", noReqs: "Še ni povpraševanj.",
     open: "Odprto", ordered: "Naročeno", cancelled: "Preklicano",
     items: "izdelkov", responded: "odgovorili", of: "od",

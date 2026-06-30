@@ -93,6 +93,13 @@ export default function QuoteFormPage() {
     queryFn: async () => (await fetch("/api/customers", { credentials: "include" })).json(),
   });
 
+  // On a fresh account with no customers, manual entry is the only viable path —
+  // default to it so the form isn't stuck on an empty "Pick Customer" dropdown.
+  useEffect(() => {
+    if (editingId || initialCustomerId != null) return;
+    if (customers.length === 0) setCustomerMode("manual");
+  }, [customers.length, editingId, initialCustomerId]);
+
   const { data: catalogItems = [] } = useQuery<{ id: number; name: string; description: string | null; unitPrice: number | null; categoryId: number | null }[]>({
     queryKey: ["/api/catalog/items"],
     queryFn: async () => (await fetch("/api/catalog/items", { credentials: "include" })).json(),

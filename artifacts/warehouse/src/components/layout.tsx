@@ -516,8 +516,12 @@ function AdminBottomNav() {
 
   const isProductsActive = location.startsWith("/products");
   const isSuppliersActive = location.startsWith("/admin/suppliers");
+  const isLocationsActive =
+    location === "/locations" ||
+    location.startsWith("/locations/") ||
+    location.startsWith("/location/");
 
-  // Lite: Dashboard · Products · Suppliers · Settings
+  // Lite: Dashboard · Locations · Products · Settings (Suppliers lives in Settings)
   // Standard/Pro: Jobs · Customers · Purchasing · Settings
   const tabs = atLeast("standard")
     ? [
@@ -527,8 +531,8 @@ function AdminBottomNav() {
       ]
     : [
         { key: "dashboard", href: "/dashboard", icon: LayoutDashboard, label: t("navDashboard"), active: location === "/dashboard" || location === "/" },
+        { key: "locations", href: "/locations", icon: MapPin, label: t("locationsTitle"), active: isLocationsActive },
         { key: "products", href: "/products", icon: Package2, label: t("navProductsStock"), active: isProductsActive },
-        { key: "suppliers", href: "/admin/suppliers", icon: Truck, label: t("navSuppliers"), active: isSuppliersActive },
       ];
 
   return (
@@ -660,9 +664,25 @@ function AdminBottomNav() {
               </>
             )}
 
+            {/* Inventory section — Lite only (History; Locations is a bottom tab) */}
+            {!atLeast("standard") && (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navInventory")}</p>
+                <Link href="/history" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <History className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navHistory")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descHistory")}</p>
+                    </div>
+                  </div>
+                </Link>
+              </>
+            )}
+
             {/* Business section */}
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1 py-1 pt-3">{t("navBusiness")}</p>
-            {/* Lite: Products & Suppliers are bottom tabs — surface Customers & Quotes here instead */}
+            {/* Lite: Products & Locations are bottom tabs — surface Customers, Quotes & Suppliers here instead */}
             {!atLeast("standard") ? (
               <>
                 <Link href="/customers" onClick={() => setSettingsOpen(false)}>
@@ -680,6 +700,15 @@ function AdminBottomNav() {
                     <div>
                       <p className="text-sm font-semibold">{t("navQuotes")}</p>
                       <p className="text-xs text-muted-foreground">{t("descQuotes")}</p>
+                    </div>
+                  </div>
+                </Link>
+                <Link href="/admin/suppliers" onClick={() => setSettingsOpen(false)}>
+                  <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                    <Truck className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold">{t("navSuppliers")}</p>
+                      <p className="text-xs text-muted-foreground">{t("descSuppliers")}</p>
                     </div>
                   </div>
                 </Link>
@@ -707,6 +736,16 @@ function AdminBottomNav() {
                 </Link>
               </>
             )}
+            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{t("navCompanyPlan")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descCompanyPlan")}</p>
+                </div>
+              </div>
+            </Link>
+            {/* Sourcing (Supplier Quotes) is infrequent — keep it after Company/Plan */}
             <Link href="/sourcing" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Scale className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -717,12 +756,11 @@ function AdminBottomNav() {
                 <AttentionBadge count={attention?.openRfqsWithResponses ?? 0} />
               </div>
             </Link>
-            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
+            <Link href="/help" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                <HelpCircle className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold">{t("navCompanyPlan")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descCompanyPlan")}</p>
+                  <p className="text-sm font-semibold">{t("navHelp")}</p>
                 </div>
               </div>
             </Link>
@@ -955,6 +993,35 @@ function TutorialHelpButton() {
   );
 }
 
+// ─── Lite Worker Bottom Nav ───────────────────────────────────────────────────
+// Lite workers can only scan & flag stock. Give them a minimal two-tab bar so they
+// always have a way to reach Help instead of being stranded on a bare camera.
+function LiteWorkerBottomNav() {
+  const [location] = useLocation();
+  const { t } = useLang();
+  const tabs = [
+    { key: "scan", href: "/scan", icon: ScanLine, label: t("navScan"), active: location.startsWith("/scan") || location.startsWith("/location/") },
+    { key: "help", href: "/help", icon: HelpCircle, label: t("navHelp"), active: location.startsWith("/help") },
+  ];
+  return (
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-secondary border-t border-secondary-border">
+      <div className="flex h-16 w-full max-w-md mx-auto">
+        {tabs.map((tab) => (
+          <Link key={tab.key} href={tab.href} className="flex-1">
+            <div className={cn(
+              "flex flex-col items-center justify-center gap-1 h-full transition-colors",
+              tab.active ? "text-primary" : "text-secondary-foreground/70",
+            )}>
+              <tab.icon className="h-6 w-6" strokeWidth={tab.active ? 2.5 : 2} />
+              <span className="text-[10px] font-medium tracking-wide uppercase">{tab.label}</span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── App Layout ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -982,7 +1049,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   function BottomNav() {
     if (isOwner) return null;
-    if (liteWorker) return null; // Lite worker: scan-only, no tabs
+    if (liteWorker) return <LiteWorkerBottomNav />; // Lite worker: Scan + Help
     if (isAdmin) return <AdminBottomNav />;
     if (isSupervisor) return <SupervisorBottomNav />;
     if (isWorker) return <WorkerBottomNav />;
@@ -1052,7 +1119,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <div className={cn(
         "min-h-[100dvh] overflow-x-hidden",
         hasSidebar && (collapsed ? "md:ml-16" : "md:ml-64"),
-        !isOwner && !liteWorker && "pb-16 md:pb-0",
+        !isOwner && "pb-16 md:pb-0",
       )}>
         <main className="w-full max-w-md mx-auto md:max-w-none bg-background border-x border-border/50 md:border-x-0 relative overflow-x-hidden">
           {/* Top bar */}
