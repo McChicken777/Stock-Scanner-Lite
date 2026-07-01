@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { usePlan } from "@/contexts/auth";
+import { useAuth, usePlan } from "@/contexts/auth";
 import { useLang } from "@/contexts/lang";
 import type { Lang } from "@/i18n/translations";
 import {
@@ -16,7 +16,7 @@ type Icon = React.ComponentType<{ className?: string }>;
 interface Step { icon: Icon; title: string; paras: string[] }
 interface Guide { intro: string; steps: Step[] }
 
-const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
+const CONTENT: Record<Lang, { lite: Guide; standard: Guide; worker: Guide }> = {
   en: {
     lite: {
       intro: "The short version: set up your bins → add your products and who supplies them → scan a bin and flag what's low → order it from the Suppliers tab.",
@@ -94,6 +94,25 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
         { icon: Moon, title: "Dark mode", paras: [
           "Open the account menu in the top-right (where your name shows) and pick Dark mode to switch the whole app to a dark theme — tap again for Light mode. Your choice is remembered on this device.",
+        ]},
+      ],
+    },
+    worker: {
+      intro: "This is your scanning tool. Out on the floor your job is simple: open a shelf, see what's on it, and flag anything running low so the office can reorder it. No counting, no paperwork.",
+      steps: [
+        { icon: ScanLine, title: "Scan a shelf to open it", paras: [
+          "Point your camera at the QR label on a shelf or bin — it opens straight away and lists everything kept there.",
+          "No label to hand? Tap Manual entry and type the code printed on the shelf (e.g. A1-01-02).",
+        ]},
+        { icon: AlertTriangle, title: "Flag what's running low", paras: [
+          "When something is running low or has run out, tap its flag button, enter how many are needed, and confirm.",
+          "That quantity matters — it's exactly what the office sees on their reorder list, so the right amount gets bought. They handle the ordering; you just flag.",
+        ]},
+        { icon: Package2, title: "That's all you track", paras: [
+          "You don't type in stock counts. The app only cares about presence — is it here, and is it running low. Flagging what needs buying is the whole job.",
+        ]},
+        { icon: HelpCircle, title: "Language, theme & sign out", paras: [
+          "Use the language button at the top to switch languages. Open your name in the top-right corner to turn on dark mode or to sign out.",
         ]},
       ],
     },
@@ -178,6 +197,25 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide }> = {
         ]},
       ],
     },
+    worker: {
+      intro: "To je tvoje orodje za skeniranje. V skladišču je tvoje delo preprosto: odpri polico, poglej, kaj je na njej, in označi, česa zmanjkuje, da lahko pisarna naroči. Brez štetja, brez papirologije.",
+      steps: [
+        { icon: ScanLine, title: "Skeniraj polico, da jo odpreš", paras: [
+          "Usmeri kamero v QR nalepko na polici ali zaboju — takoj se odpre in prikaže vse izdelke na njej.",
+          "Nimaš nalepke pri roki? Pritisni Ročni vnos in vpiši kodo s police (npr. A1-01-02).",
+        ]},
+        { icon: AlertTriangle, title: "Označi, česa zmanjkuje", paras: [
+          "Ko česa zmanjkuje ali je zmanjkalo, pritisni gumb zastavice, vnesi, koliko je potrebno, in potrdi.",
+          "Ta količina je pomembna — točno to pisarna vidi na seznamu za naročilo, da kupijo pravo količino. Naročanje uredijo oni; ti samo označiš.",
+        ]},
+        { icon: Package2, title: "To je vse, kar spremljaš", paras: [
+          "Ne vnašaš količin zaloge. Aplikacijo zanima samo prisotnost — ali je tukaj in ali ga zmanjkuje. Označevanje, kaj je treba kupiti, je celotno delo.",
+        ]},
+        { icon: HelpCircle, title: "Jezik, tema in odjava", paras: [
+          "Z gumbom za jezik na vrhu preklopiš jezik. Odpri svoje ime v zgornjem desnem kotu za temni način ali odjavo.",
+        ]},
+      ],
+    },
   },
 };
 
@@ -204,9 +242,14 @@ function StepRow({ n, step, last }: { n: number; step: Step; last: boolean }) {
 }
 
 export default function HelpPage() {
+  const { user } = useAuth();
   const { atLeast } = usePlan();
   const { t, lang } = useLang();
-  const guide = atLeast("standard") ? CONTENT[lang].standard : CONTENT[lang].lite;
+  // Lite workers only scan & flag — give them a guide about that, not the admin features.
+  const isLiteWorker = user?.role === "worker" && !user?.isSupervisor && !atLeast("standard");
+  const guide = isLiteWorker
+    ? CONTENT[lang].worker
+    : atLeast("standard") ? CONTENT[lang].standard : CONTENT[lang].lite;
 
   return (
     <div className="flex flex-col min-h-full pb-24">

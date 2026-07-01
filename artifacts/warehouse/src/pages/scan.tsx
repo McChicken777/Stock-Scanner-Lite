@@ -6,6 +6,8 @@ import { Scan, Keyboard, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FabriflowMark } from "@/components/fabriflow-logo";
+import { LangToggle, UserMenu } from "@/components/layout";
 
 export default function ScanPage() {
   const [, setLocation] = useLocation();
@@ -192,8 +194,23 @@ export default function ScanPage() {
           </div>
         </div>
 
+        {/* App chrome — the AppLayout top bar is hidden behind this fixed overlay,
+            and Scan is the worker's home, so surface logo, language and account here. */}
+        <div className="relative z-30 flex items-center justify-between px-4 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 rounded-md bg-primary flex items-center justify-center">
+              <FabriflowMark className="h-3.5 w-3.5 text-primary-foreground" />
+            </div>
+            <span className="font-bold text-sm">Fabriflow</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <LangToggle />
+            <UserMenu />
+          </div>
+        </div>
+
         {/* Header — sits above the overlay */}
-        <div className="relative z-20 px-5 pt-12 pb-4">
+        <div className="relative z-20 px-5 pt-4 pb-4">
           <h1 className="text-foreground font-bold text-xl flex items-center gap-2">
             <Scan className="h-5 w-5 text-primary" />
             {t("scanTitle")}

@@ -95,7 +95,7 @@ function SidebarFooter() {
 
 // ─── User Menu ────────────────────────────────────────────────────────────────
 
-function UserMenu() {
+export function UserMenu() {
   const { user, logout } = useAuth();
   const { t } = useLang();
   const { resolvedTheme, setTheme } = useTheme();
@@ -153,7 +153,7 @@ function UserMenu() {
 
 // ─── Language Picker ─────────────────────────────────────────────────────────
 
-function LangToggle() {
+export function LangToggle() {
   const { lang, setLang, t } = useLang();
   const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0];
   return (
