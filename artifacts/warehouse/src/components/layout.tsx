@@ -26,11 +26,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
 // ─── Sidebar collapse (icon-only rail) ─────────────────────────────────────────
 
@@ -569,11 +569,11 @@ function AdminBottomNav() {
         </div>
       </div>
 
-      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <SheetContent side="bottom" className="max-w-md mx-auto rounded-t-2xl pb-0 max-h-[85dvh] flex flex-col">
-          <SheetHeader className="pb-2 flex-shrink-0">
-            <SheetTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("navMore")}</SheetTitle>
-          </SheetHeader>
+      <Drawer open={settingsOpen} onOpenChange={setSettingsOpen} shouldScaleBackground={false}>
+        <DrawerContent aria-describedby={undefined} className="max-w-md mx-auto max-h-[85dvh] px-4 pb-0">
+          <DrawerHeader className="pb-2 flex-shrink-0 px-1 text-left">
+            <DrawerTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("navMore")}</DrawerTitle>
+          </DrawerHeader>
 
           <div className="space-y-1 mt-2 overflow-y-auto flex-1 pb-8 overscroll-contain">
             {/* Work section — Standard+ only */}
@@ -758,8 +758,8 @@ function AdminBottomNav() {
               </button>
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
     </>
   );
 }
