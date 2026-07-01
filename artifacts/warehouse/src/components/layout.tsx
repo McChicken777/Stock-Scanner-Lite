@@ -719,16 +719,8 @@ function AdminBottomNav() {
                 </Link>
               </>
             )}
-            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
-              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
-                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">{t("navCompanyPlan")}</p>
-                  <p className="text-xs text-muted-foreground">{t("descCompanyPlan")}</p>
-                </div>
-              </div>
-            </Link>
-            {/* Sourcing (Supplier Quotes) is infrequent — keep it after Company/Plan */}
+            {/* Supplier Quotes (Sourcing) follows Suppliers so the flow reads
+                Customers → Quotes → Suppliers → Supplier Quotes → Company/Plan */}
             <Link href="/sourcing" onClick={() => setSettingsOpen(false)}>
               <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
                 <Scale className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -737,6 +729,15 @@ function AdminBottomNav() {
                   <p className="text-xs text-muted-foreground">{t("descSourcing")}</p>
                 </div>
                 <AttentionBadge count={attention?.openRfqsWithResponses ?? 0} />
+              </div>
+            </Link>
+            <Link href="/admin/company" onClick={() => setSettingsOpen(false)}>
+              <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-muted transition-colors cursor-pointer">
+                <Building2 className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold">{t("navCompanyPlan")}</p>
+                  <p className="text-xs text-muted-foreground">{t("descCompanyPlan")}</p>
+                </div>
               </div>
             </Link>
             <Link href="/help" onClick={() => setSettingsOpen(false)}>
