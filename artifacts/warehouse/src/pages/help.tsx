@@ -108,9 +108,6 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide; worker: Guide }> = {
           "When something is running low or has run out, tap its flag button, enter how many are needed, and confirm.",
           "That quantity matters — it's exactly what the office sees on their reorder list, so the right amount gets bought. They handle the ordering; you just flag.",
         ]},
-        { icon: Package2, title: "That's all you track", paras: [
-          "You don't type in stock counts. The app only cares about presence — is it here, and is it running low. Flagging what needs buying is the whole job.",
-        ]},
         { icon: HelpCircle, title: "Language, theme & sign out", paras: [
           "Use the language button at the top to switch languages. Open your name in the top-right corner to turn on dark mode or to sign out.",
         ]},
@@ -207,9 +204,6 @@ const CONTENT: Record<Lang, { lite: Guide; standard: Guide; worker: Guide }> = {
         { icon: AlertTriangle, title: "Označi, česa zmanjkuje", paras: [
           "Ko česa zmanjkuje ali je zmanjkalo, pritisni gumb zastavice, vnesi, koliko je potrebno, in potrdi.",
           "Ta količina je pomembna — točno to pisarna vidi na seznamu za naročilo, da kupijo pravo količino. Naročanje uredijo oni; ti samo označiš.",
-        ]},
-        { icon: Package2, title: "To je vse, kar spremljaš", paras: [
-          "Ne vnašaš količin zaloge. Aplikacijo zanima samo prisotnost — ali je tukaj in ali ga zmanjkuje. Označevanje, kaj je treba kupiti, je celotno delo.",
         ]},
         { icon: HelpCircle, title: "Jezik, tema in odjava", paras: [
           "Z gumbom za jezik na vrhu preklopiš jezik. Odpri svoje ime v zgornjem desnem kotu za temni način ali odjavo.",
